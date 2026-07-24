@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Generated extractor output + build artefacts (regenerate; never commit)
+blender_tool/exports/
+blender_tool/dist/
+*.lemesh/
+*.lescatter/
+
+# Proprietary Oodle DLL and game data must NEVER be committed
+*.dll
+game_data/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
