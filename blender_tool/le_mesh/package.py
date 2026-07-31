@@ -31,7 +31,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 FORMAT = "lemesh"
-VERSION = 1
+# v2 adds `draws[].lod.level` / `.is_lod_child` (the mesh-list LOD chain). Purely
+# additive: a v1 package reads as all-level-0, which `select_lod_draws` passes
+# through unchanged, so v1 packages import exactly as before.
+VERSION = 2
 
 _DTYPE_TO_ARRAYCODE = {"float32": "f", "uint32": "I", "int32": "i"}
 
@@ -104,7 +107,12 @@ def write_package(out_dir: Path, *, source: dict, objects, materials: list,
             "sort_priority": d.sort_priority,
             "permutation": d.permutation,
             "lod": {
+                # `level` is what a consumer selects on: 0 = highest detail. The
+                # coarser levels are extra draws over LATER slices of the SAME
+                # index buffer, so importing every draw stacks the levels.
+                "level": d.lod_level,
                 "is_lod_parent": d.is_lod_parent,
+                "is_lod_child": d.is_lod_child,
                 "primset_idx": d.lod_primset_idx,
                 "children_start": d.lod_children_start,
                 "children_count": d.lod_children_count,

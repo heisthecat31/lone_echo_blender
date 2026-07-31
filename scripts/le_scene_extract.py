@@ -57,7 +57,7 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
 # ---------------------------------------------------------------------------
 
 PACKAGE_FORMAT = "le_scatter"
-PACKAGE_VERSION = 2
+PACKAGE_VERSION = 3
 
 
 @dataclass
@@ -98,6 +98,13 @@ class SceneInstance:
     translation: tuple               # (x, y, z)   f32
     rotation: tuple                  # (x, y, z, w) unit quat
     scale: tuple                     # (sx, sy, sz) f32
+    # v3 LOD binding (see le_mesh.static_lod). `lod_group` is the LOD-group /
+    # node id, `lod_level` this instance's level within it, `lod_group_levels`
+    # how many levels that group has (so a consumer can clamp without a group
+    # table). Defaults describe a group of one level -- i.e. no LOD.
+    lod_group: int = -1
+    lod_level: int = 0
+    lod_group_levels: int = 1
 
 
 def _pack_f32(flat) -> bytes:
@@ -106,6 +113,15 @@ def _pack_f32(flat) -> bytes:
 
 def _pack_u32(flat) -> bytes:
     return struct.pack(f"<{len(flat)}I", *flat)
+
+
+def _levels_histogram(instances: list[SceneInstance]) -> dict:
+    """{"<level>": instance count} — a cheap manifest-level sanity readout."""
+    hist: dict = {}
+    for inst in instances:
+        key = str(int(inst.lod_level))
+        hist[key] = hist.get(key, 0) + 1
+    return dict(sorted(hist.items(), key=lambda kv: int(kv[0])))
 
 
 def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
@@ -166,6 +182,17 @@ def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
             inst.scale[0], inst.scale[1], inst.scale[2])
     (out_dir / "blobs" / "instances.bin").write_bytes(bytes(inst_buf))
 
+    # v3: instance_lod.bin -- N records PARALLEL to instances.bin, 12 B each, LE:
+    #   lod_group:u32 (0xFFFFFFFF == none), lod_level:u32, lod_group_levels:u32
+    # Kept in its own blob so the 44-B instances.bin contract stays byte-identical
+    # and v1/v2 readers keep working.
+    lod_buf = bytearray()
+    for inst in instances:
+        lod_buf += struct.pack("<3I", inst.lod_group & 0xFFFFFFFF,
+                               int(inst.lod_level), max(1, int(inst.lod_group_levels)))
+    (out_dir / "blobs" / "instance_lod.bin").write_bytes(bytes(lod_buf))
+
+    lod_groups = {i.lod_group for i in instances if i.lod_group >= 0}
     manifest = {
         "format": PACKAGE_FORMAT,
         "version": PACKAGE_VERSION,
@@ -175,6 +202,13 @@ def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
         "num_instances": len(instances),
         "meshes": mesh_entries,
         "instances_blob": "blobs/instances.bin",
+        "lod": {
+            "blob": "blobs/instance_lod.bin",
+            "record": "lod_group:u32,lod_level:u32,lod_group_levels:u32",
+            "num_groups": len(lod_groups),
+            "max_level": max((i.lod_level for i in instances), default=0),
+            "levels_histogram": _levels_histogram(instances),
+        },
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1),
                                            encoding="utf-8")
@@ -239,6 +273,8 @@ class ExtractStats:
     total_indices: int = 0
     num_instances_emitted: int = 0
     capped_to: int | None = None
+    lod_groups: int = 0
+    lod_max_level: int = 0
     notes: list = field(default_factory=list)
 
 
@@ -294,7 +330,25 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
     progress(f"master {name_hash:016x}: num_meshes={d.num_meshes} "
              f"num_instances={d.num_instances} ido={ido} gpudatasize={gpudatasize}")
 
-    cand, mstart = _find_meshlist(blob, gpudatasize, d.num_meshes)
+    # LOD system (SGStaticInstanceLODData). Non-fatal: a master whose LOD block
+    # fails to validate still extracts, just without per-instance LOD levels.
+    from le_mesh.static_lod import decode_static_lod
+    try:
+        lod = decode_static_lod(blob, d.num_meshes, d.num_instances)
+    except ValueError as exc:
+        lod = None
+        stats.notes.append(f"lod-decode failed: {exc}")
+        progress(f"LOD: DECODE FAILED ({exc}) -- extracting without LOD levels")
+    else:
+        for w in lod.warnings:
+            stats.notes.append(f"lod-warn: {w}")
+        stats.lod_groups = lod.num_groups
+        stats.lod_max_level = lod.max_level
+        progress(f"LOD: {lod.num_groups} groups, levels 0..{lod.max_level}, "
+                 f"{len(lod.nodes)} nodes, {len(lod.nodelookup)} lod entries")
+
+    cand, mstart = _find_meshlist(blob, gpudatasize, d.num_meshes,
+                                  hint=(lod.meshlist_offset if lod else 369032))
     if cand is None:
         raise ValueError("could not locate inline CGMeshListData stream")
     meshes_t = cand["meshes"]
@@ -473,9 +527,15 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
         m = d.mesh_for_instance(i)
         if m not in selected:
             continue
+        if lod is not None and i < len(lod.level_of_instance):
+            g, lv = lod.group_of_instance[i], lod.level_of_instance[i]
+            gl = lod.group_num_levels.get(g, 1)
+        else:
+            g, lv, gl = -1, 0, 1
         scene_instances.append(SceneInstance(
             mesh_index=m, translation=t.translation,
-            rotation=t.rotation, scale=t.scale))
+            rotation=t.rotation, scale=t.scale,
+            lod_group=g, lod_level=lv, lod_group_levels=gl))
     stats.num_instances_emitted = len(scene_instances)
     stats.meshes_emitted = len(scene_meshes)
 
@@ -506,6 +566,7 @@ def main() -> None:
           f"nonf32_pos={stats.nonf32_position} dangling={stats.dangling}")
     print(f"  totals: verts={stats.total_verts} indices={stats.total_indices} "
           f"instances={stats.num_instances_emitted}")
+    print(f"  lod: groups={stats.lod_groups} levels=0..{stats.lod_max_level}")
     for note in stats.notes[:12]:
         print(f"  note: {note}")
     if len(stats.notes) > 12:

@@ -23,3 +23,6 @@ game_data/
 .DS_Store
 .idea/
 .vscode/
+
+# Local private literals for scripts/scrub_gate.py (never commit)
+.scrub_private

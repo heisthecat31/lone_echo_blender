@@ -40,29 +40,45 @@ INPUTNAME_ROLE: dict[str, tuple[str, str]] = {
     "bebfd787fd5cf889": ("layer3_blend_mask", "confirmed"),
     "174d6978fb021e30": ("layer0_flowmap_map", "confirmed"),
     "d4a049adf6a9b30c": ("layer1_flowmap_map", "confirmed"),
-    # tentative (DDS-format inferred)
-    "e342db88d8e9d701": ("layer0_normal_map_alt", "tentative"),
-    "96ac91cb13fe5be7": ("layer1_glass_normal", "tentative"),
-    "33d1823268b0a40c": ("layer0_rgba_surface", "tentative"),
-    "e348dd9cd3fdc817": ("layer0_diffuse_map", "tentative"),
-    "96a697df18ea44f1": ("layer1_glass_diffuse", "tentative"),
-    "5359456ffb9a1dae": ("layer1_glass_rgba", "tentative"),
-    "39d68102257d6d24": ("layer0_emissive_rgba", "tentative"),
-    "228838c1c7770d21": ("layer1_glass_mask", "tentative"),
-    "d000069cc9204803": ("layer0_linear_map", "tentative"),
-    "8ed4ab4792aaf806": ("layer1_mask_b", "tentative"),
+    # ⛔ These ten were labelled "tentative (DDS-format inferred)" before 0.2.0 and
+    # were INVENTED names — none of them hashed to its own key. Every one below is
+    # now the exact recovered preimage: `material_scalars.symbol64(name)` reproduces
+    # the key it is filed under (locked by tests/test_transparency.py).
+    # Two of the fakes were wrong about MEANING, not just spelling:
+    #   * there is NO glass-specific role — "layer1_glass_*" is just layer 1
+    #   * "layer1_mask_b" (wired to Roughness) is really layer1_alpha_map = OPACITY
+    # See docs/MATERIALS.md.
+    "e342db88d8e9d701": ("layer0_composite_normals", "confirmed"),
+    "96ac91cb13fe5be7": ("layer1_composite_normals", "confirmed"),
+    "33d1823268b0a40c": ("layer0_composite_specular", "confirmed"),
+    "e348dd9cd3fdc817": ("layer0_composite_diffuse", "confirmed"),
+    "96a697df18ea44f1": ("layer1_composite_diffuse", "confirmed"),
+    "5359456ffb9a1dae": ("layer1_composite_specular", "confirmed"),
+    "39d68102257d6d24": ("layer0_back_lighting_map", "confirmed"),
+    "228838c1c7770d21": ("layer1_composite_components", "confirmed"),
+    "d000069cc9204803": ("layer0_composite_components", "confirmed"),
+    "8ed4ab4792aaf806": ("layer1_alpha_map", "confirmed"),
 }
 
 # --- Principled channel priorities (first present wins) ----------------------
+# ⚠ Re-derived after the fabricated-name correction above. The old lists routed by
+# the invented names and so mis-assigned three channels: the two `*_composite_specular`
+# maps were treated as BASE COLOUR (they are specular/roughness data),
+# `layer1_alpha_map` was treated as ROUGHNESS (it is opacity), and
+# `layer0_back_lighting_map` was treated as EMISSION (it is translucency).
 BASE_COLOR_ROLES = [
-    "layer0_specular_map", "layer0_albedo_map", "layer0_diffuse_map",
-    "layer0_rgba_surface", "layer1_glass_diffuse", "layer1_glass_rgba",
+    "layer0_specular_map", "layer0_albedo_map",
+    "layer0_composite_diffuse", "layer1_composite_diffuse",
 ]
-NORMAL_ROLES = ["layer0_normal_map", "layer0_normal_map_alt", "layer1_glass_normal"]
-ROUGHNESS_ROLES = ["layer0_linear_map", "layer1_mask_b"]
-OPACITY_ROLES = ["layer0_opacity_map", "layer1_opacity_map", "layer1_glass_mask", "layer1_mask_b"]
-EMISSION_ROLES = ["layer0_emissive_map", "layer1_emissive_map", "layer2_emissive_map",
-                  "layer0_emissive_rgba"]
+NORMAL_ROLES = ["layer0_normal_map", "layer0_composite_normals",
+                "layer1_composite_normals"]
+ROUGHNESS_ROLES = ["layer0_composite_components", "layer1_composite_components",
+                   "layer0_composite_specular", "layer1_composite_specular"]
+OPACITY_ROLES = ["layer0_opacity_map", "layer1_opacity_map", "layer1_alpha_map"]
+EMISSION_ROLES = ["layer0_emissive_map", "layer1_emissive_map", "layer2_emissive_map"]
+# Translucency/back-lighting, NOT emission — kept out of EMISSION_ROLES on purpose.
+# No Principled channel is a faithful target; carried for audit only.
+TRANSLUCENCY_ROLES = ["layer0_back_lighting_map"]
 
 # --- DXGI format -> colorspace ----------------------------------------------
 # Standard DXGI enum values. sRGB set is authoritative for base color / emission;
@@ -75,7 +91,8 @@ BC5_DXGI = frozenset({83})
 def colorspace_for(dxgi: int | None, role_key: str) -> str:
     """Blender Image colorspace: 'sRGB' or 'Non-Color'."""
     if role_key in NORMAL_ROLES or "mask" in role_key or "opacity" in role_key \
-            or "linear" in role_key or "flowmap" in role_key:
+            or "alpha" in role_key or "components" in role_key \
+            or "specular" in role_key or "flowmap" in role_key:
         return "Non-Color"
     if dxgi is not None and dxgi in SRGB_DXGI:
         return "sRGB"

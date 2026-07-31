@@ -36,6 +36,31 @@ A `.lemesh` package is a **directory**:
 - **`skeleton.json`** (optional) holds the joint hierarchy and rest pose used to
   build an armature and to name skin vertex groups.
 
+### Per-draw LOD (version 2)
+
+Each entry of an object's `draws` array carries a `lod` block:
+
+| Field | Meaning |
+| --- | --- |
+| `level` | **This is what a consumer selects on.** `0` = highest detail. |
+| `is_lod_parent` | `true` when this draw is a level-0 root that owns coarser draws. |
+| `is_lod_child` | `true` when this draw is a coarser level of another draw. |
+| `primset_idx`, `children_start`, `children_count` | The raw on-disk chain fields, carried verbatim as audit metadata. |
+
+A mesh's coarser LOD levels are **extra draws covering later slices of the same
+index buffer**, so emitting every draw stacks the levels on top of each other. The
+add-on selects one level (default `0`) with `package_reader.select_lod_draws`,
+clamped per mesh: a mesh whose chain stops at level 1 still emits its level 1 when
+level 3 is requested. This chain is populated in only 11 of 1,240 shipped
+mesh-lists, so for most packages selection is a no-op. See [LOD.md](LOD.md).
+
+### Versions
+
+- **Version 2** adds `draws[].lod.level` and `.is_lod_child`. Purely additive: a
+  version-1 package reads as all-level-0, which the selector passes through
+  unchanged, so version-1 packages import exactly as before.
+- **Version 1** has no `level` key.
+
 ---
 
 ## `.lescatter` — a whole scatter level
@@ -58,13 +83,14 @@ Top-level fields:
 | Field | Meaning |
 | --- | --- |
 | `format` | Always `"le_scatter"`. This is the only field validated on load. |
-| `version` | `1` or `2` (both load; see [Versions](#versions)). |
+| `version` | `1`, `2` or `3` (all load; see [Versions](#versions-1)). |
 | `master` | The level's identifier (hex string). |
 | `axis` | `"native"` — geometry is stored in native game space. |
 | `num_meshes` | Number of unique meshes. |
 | `num_instances` | Number of placed instances. |
 | `meshes` | Array of per-mesh entries (below). |
 | `instances_blob` | Relative path to the instance table (`blobs/instances.bin`). |
+| `lod` | (**Version 3**) the per-instance LOD binding (below). |
 
 ### Per-mesh entry
 
@@ -114,14 +140,52 @@ little-endian:
 Each record places one instance of the mesh named by `mesh_index` at the given
 translation, rotation, and (possibly non-uniform) scale.
 
+### `lod` and `blobs/instance_lod.bin` (version 3)
+
+**Every LOD level of a prop is a separate mesh with its own instances**, so placing
+all N instances stacks every level of every prop on top of each other — 61.3 % of
+one shipped level's 21,394 instances are lower-LOD duplicates. Version 3 carries the
+grouping so an importer can select one level.
+
+The `lod` manifest block:
+
+| Field | Meaning |
+| --- | --- |
+| `blob` | Relative path to the LOD table (`blobs/instance_lod.bin`). |
+| `record` | The record layout, as a string, for self-description. |
+| `num_groups` | Number of distinct LOD groups (one per placed prop). |
+| `max_level` | Coarsest level present anywhere in the level. |
+| `levels_histogram` | `{"<level>": instance count}` — a cheap sanity readout. |
+
+`blobs/instance_lod.bin` is **N records parallel to `instances.bin`** (same order,
+same count), each **12 bytes**, little-endian:
+
+| Offset | Field | Type |
+| --- | --- | --- |
+| 0 | `lod_group` | `uint32` (`0xFFFFFFFF` = this instance has no LOD group) |
+| 4 | `lod_level` | `uint32` (`0` = highest detail) |
+| 8 | `lod_group_levels` | `uint32` (how many levels this instance's group has, ≥ 1) |
+
+It is a separate blob precisely so the 44-byte `instances.bin` contract stays
+byte-identical and version-1/2 readers keep working.
+
+`lod_group_levels` is carried per instance so a consumer can **clamp without a
+group table**: a two-level prop asked for LOD 3 still contributes its LOD 1 rather
+than vanishing. See [LOD.md](LOD.md).
+
 ### Versions
 
+- **Version 3** adds the `lod` block and `blobs/instance_lod.bin`.
 - **Version 2** carries a `draws` list on every mesh (full multi-material support).
 - **Version 1** has no `draws` key. The reader treats such a mesh as a single draw
   spanning its whole index buffer with the mesh's top-level `(matidx, shdidx)`, so
   version-1 packages continue to load unchanged.
 
-Only the `format` field is validated when a package is opened; both versions are
+A version-1 or version-2 package has no `lod` block; the reader then reports one
+level for every instance, so LOD filtering degrades to "keep everything" and such
+packages import exactly as they did before.
+
+Only the `format` field is validated when a package is opened; all versions are
 accepted.
 
 ---

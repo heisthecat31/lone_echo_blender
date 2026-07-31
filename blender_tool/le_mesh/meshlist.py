@@ -103,6 +103,7 @@ class Draw:
     lod_children_start: int
     lod_children_count: int
     material_key: str = ""   # resolved by the extractor (shaderset/material hash)
+    lod_level: int = 0       # 0 = highest detail; filled in by `assign_lod_levels`
 
     @property
     def is_triangles(self) -> bool:
@@ -110,13 +111,21 @@ class Draw:
 
     @property
     def is_lod_parent(self) -> bool:
-        # M3 (LOD): lodprimsetidx / lodchildrenstart / lodchildrencount and
-        # CGMeshListData.lodchildindices exist in the format but are INERT/empty
-        # in every retail sample examined, so LOD grouping is a documented NO-OP:
-        # each mesh record is imported as its own object. This predicate stays as
-        # audit metadata (surfaced as the `le_lod_parent` custom property); if a
-        # future sample populates the chain, group children here.
-        return self.lod_primset_idx != 0xFFFFFFFF or self.lod_children_count != 0
+        """This draw is an LOD-0 ROOT: it owns `lod_children_count` coarser draws.
+
+        ⚠ `lod_children_count != 0` is the ONLY reliable root predicate.
+        `lod_children_start` is a RUNNING CURSOR into `CGMeshListData.lodchildindices`
+        that stays non-zero on child draws too (corpus: 142 draws carry a non-zero
+        start but only 51 are roots), and `lod_primset_idx` marks CHILDREN, not
+        parents — an earlier revision OR-ed all three and so called every child a
+        parent.
+        """
+        return self.lod_children_count != 0
+
+    @property
+    def is_lod_child(self) -> bool:
+        """This draw is a coarser LOD of another draw in the same mesh."""
+        return self.lod_primset_idx != 0xFFFFFFFF
 
 
 @dataclass
@@ -180,15 +189,61 @@ def _read_draws(primary: bytes, rp_table: Table, rp_idx: int, rp_count: int) -> 
     return draws
 
 
+def _draws_with_lod(primary, rp_table, rp_idx, rp_count, lod_children):
+    draws = _read_draws(primary, rp_table, rp_idx, rp_count)
+    assign_lod_levels(draws, lod_children, rp_idx)
+    return draws
+
+
+def assign_lod_levels(draws: list, lodchildindices: list, rp_base: int) -> None:
+    """Stamp `Draw.lod_level` for ONE mesh's draws, in place.
+
+    The mesh-list LOD chain is an INDEX-RANGE LOD *within a single mesh*: the
+    coarser levels are extra `CGRenderParams` covering later slices of the SAME
+    index buffer, not separate meshes (that is the static-scatter system — see
+    `le_mesh.static_lod`). A root draw (`lod_children_count != 0`) is level 0 and
+    `CGMeshListData.lodchildindices[start : start+count]` lists its children as
+    MESH-LOCAL renderparam indices, in level order.
+
+    Stream-confirmed on `4a405738bee7a74b` / `001e3b0be3b357af`: mesh 0 has one
+    root (`rp0`, indices [0, 17262), 5,754 tris) whose two children `[1, 2]` are
+    `rp1` [17262, 28824) 3,854 tris and `rp2` [28824, 34518) 1,898 tris — three
+    disjoint, monotonically shrinking slices of one 34,518-index buffer.
+
+    Draws that are neither roots nor children keep level 0 (a plain material
+    split), so a mesh with no LOD chain is untouched.
+    """
+    for d in draws:
+        d.lod_level = 0
+    by_local = {d.renderparam_index - rp_base: d for d in draws}
+    for d in draws:
+        if not d.is_lod_parent:
+            continue
+        start = d.lod_children_start
+        for level, k in enumerate(range(start, start + d.lod_children_count), start=1):
+            if k >= len(lodchildindices):
+                continue
+            child = by_local.get(lodchildindices[k])
+            if child is not None:
+                child.lod_level = level
+
+
 def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,
                   meshes: Table, renderparams: Table,
                   vertexbuffers: Table, indexbuffers: Table,
+                  lodchildindices: Table | None = None,
                   ) -> list[MeshObject]:
     """Decode every CGMeshData in a mesh-list into a MeshObject with full attrs.
 
     `gpu_base` is the absolute offset of this resource's paired GPU slice inside
-    the decompressed `gpu` buffer.
+    the decompressed `gpu` buffer. `lodchildindices` (the mesh-list's own
+    `CTable<u32>`) enables per-draw LOD levels; omit it and every draw reads as
+    level 0. It is empty in all but 11 of the corpus's 1,240 mesh-lists.
     """
+    lod_children: list = []
+    if lodchildindices is not None and lodchildindices.count:
+        lod_children = list(struct.unpack_from(
+            f"<{lodchildindices.count}I", primary, lodchildindices.data_off))
     objects: list[MeshObject] = []
     for mi in range(meshes.count):
         m = meshes.data_off + mi * MESH_STRIDE
@@ -209,7 +264,7 @@ def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,
                 mi, name_hash, flags, vb_index, ib_index,
                 aabb[0:3], aabb[3:6], lightmap_index, lm_slice_index, outline_mode,
                 0, 0, [], {}, 0, [], 0,
-                _read_draws(primary, renderparams, rp_idx, rp_count)))
+                _draws_with_lod(primary, renderparams, rp_idx, rp_count, lod_children)))
             continue
 
         vb_off = vertexbuffers.data_off + vb_index * 0x130
@@ -244,6 +299,6 @@ def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,
             index_count=ib_num,
             indices=indices,
             index_size=ib_size,
-            draws=_read_draws(primary, renderparams, rp_idx, rp_count),
+            draws=_draws_with_lod(primary, renderparams, rp_idx, rp_count, lod_children),
         ))
     return objects

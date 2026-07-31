@@ -8,9 +8,11 @@ Modules:
   meshlist       CGMeshListData -> MeshObject model (attrs, draws, flags, LOD, AABB)
   materials      shaderset/material -> texture-role -> Principled BSDF spec
   package        the .lemesh package contract (writer + stdlib reader)
+  static_lod     SGStaticInstanceLODData -> per-instance LOD group/level
+  lights         SGLightParams -> decoded lights + Blender unit conversion
 """
 
-from . import vertex_format, meshlist, materials, package  # noqa: F401
+from . import vertex_format, meshlist, materials, package, static_lod  # noqa: F401
 
-__all__ = ["vertex_format", "meshlist", "materials", "package"]
-__version__ = "0.1.0"
+__all__ = ["vertex_format", "meshlist", "materials", "package", "static_lod"]
+__version__ = "0.2.0"

@@ -20,7 +20,7 @@ from pathlib import Path
 bl_info = {
     "name": "Lone Echo Importer (.lemesh / .lescatter)",
     "author": "Dualgame",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (4, 1, 0),
     "location": "File > Import > Lone Echo (.lemesh) / Lone Echo Scatter (.lescatter)",
     "description": "Import Lone Echo / NRadEngine meshes and whole scatter levels "
@@ -29,7 +29,9 @@ bl_info = {
 }
 
 import bpy   # type: ignore  # noqa: E402
-from bpy.props import BoolProperty, StringProperty   # type: ignore  # noqa: E402
+from bpy.props import (   # type: ignore  # noqa: E402
+    BoolProperty, EnumProperty, StringProperty,
+)
 from bpy_extras.io_utils import ImportHelper          # type: ignore  # noqa: E402
 
 from . import (package_reader, mesh_builder, material_builder, scene_reader,   # noqa: E402
@@ -375,6 +377,20 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
         name="scene.json", default="", subtype="FILE_PATH",
         description="Explicit scene.json path (blank = auto-detect beside the "
                     "package/manifest)")   # type: ignore
+    lod_level: EnumProperty(
+        name="LOD Level",
+        description="Which level of a mesh's LOD chain to emit. Coarser levels are "
+                    "extra draws over LATER slices of the SAME index buffer, so "
+                    "'All levels' stacks them. Clamped per mesh, and a no-op for the "
+                    "vast majority of mesh-lists, which carry no chain",
+        items=[
+            ("0", "LOD 0 (highest detail)", "Emit each mesh's most detailed level"),
+            ("1", "LOD 1", "One step coarser where available"),
+            ("2", "LOD 2", "Two steps coarser where available"),
+            ("3", "LOD 3", "Three steps coarser where available"),
+            ("-1", "All levels (stacked)", "Emit every draw — levels overlap"),
+        ],
+        default="0")   # type: ignore
     skip_unresolved: BoolProperty(
         name="Skip Unresolved Placements", default=False,
         description="Skip eAuto/eJoint/eRefPoint placements whose world could not be "
@@ -383,7 +399,7 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
 
     def draw(self, context):
         layout = self.layout
-        for prop in ("import_materials", "import_shadow_only", "flip_v",
+        for prop in ("lod_level", "import_materials", "import_shadow_only", "flip_v",
                      "y_up_to_z_up", "import_armature"):
             layout.prop(self, prop)
         layout.separator()
@@ -400,6 +416,7 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
             "flip_v": self.flip_v,
             "y_up_to_z_up": self.y_up_to_z_up,
             "import_armature": self.import_armature,
+            "lod_level": int(self.lod_level),
             "apply_scene_placement": self.apply_scene_placement,
             "scene_json_path": self.scene_json_path,
             "skip_unresolved": self.skip_unresolved,

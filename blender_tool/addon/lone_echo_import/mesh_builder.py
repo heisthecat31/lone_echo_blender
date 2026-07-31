@@ -10,6 +10,8 @@ import math
 
 import bpy   # type: ignore
 
+from .package_reader import select_lod_draws
+
 
 def _positions(pkg, obj):
     flat, comps = pkg.attribute(obj, "position")
@@ -19,7 +21,8 @@ def _positions(pkg, obj):
     return verts, len(verts)
 
 
-def _faces_and_material_indices(pkg, obj, mat_slot_of_key, reverse_winding=False):
+def _faces_and_material_indices(pkg, obj, mat_slot_of_key, reverse_winding=False,
+                                lod_level=0):
     """Build triangle faces from draws; return (faces, per_face_material_index).
 
     `reverse_winding` (diagnostic; default off) swaps b<->c per triangle. The
@@ -27,6 +30,9 @@ def _faces_and_material_indices(pkg, obj, mat_slot_of_key, reverse_winding=False
     default pure-rotation axis transform, so reversal is NOT needed and only
     exists so tests/blender_axis_probe.py can render the inside-out counter-
     example. See AXIS_CALIBRATION.md.
+
+    `lod_level` picks one level of the mesh's LOD chain (see `select_lod_draws`);
+    pass a negative value to emit every level.
     """
     indices = pkg.indices(obj)
     faces = []
@@ -34,7 +40,7 @@ def _faces_and_material_indices(pkg, obj, mat_slot_of_key, reverse_winding=False
     if indices is None:
         return faces, face_mat
     n_verts = obj["vertex_count"]
-    for draw in obj.get("draws", []):
+    for draw in select_lod_draws(obj.get("draws", []), lod_level):
         if not draw.get("is_triangles"):
             continue
         slot = mat_slot_of_key.get(draw.get("material_key", ""), 0)
@@ -148,7 +154,8 @@ def build_object(pkg, obj, get_material, opts) -> "bpy.types.Object":
 
     faces, face_mat = _faces_and_material_indices(
         pkg, obj, mat_slot_of_key,
-        reverse_winding=opts.get("reverse_winding", False))
+        reverse_winding=opts.get("reverse_winding", False),
+        lod_level=opts.get("lod_level", 0))
 
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
@@ -234,6 +241,9 @@ def build_object(pkg, obj, get_material, opts) -> "bpy.types.Object":
     ob["le_shadow_only"] = obj.get("shadow_only", False)
     ob["le_mesh_index"] = _int_prop(obj.get("mesh_index", -1))
     ob["le_lightmap_index"] = _int_prop(obj.get("lightmap_index", 0))
-    lod_parent = any(d.get("lod", {}).get("is_lod_parent") for d in obj.get("draws", []))
-    ob["le_lod_parent"] = lod_parent
+    draws = obj.get("draws", [])
+    ob["le_lod_parent"] = any(d.get("lod", {}).get("is_lod_parent") for d in draws)
+    ob["le_lod_levels"] = max(
+        (int(d.get("lod", {}).get("level", 0) or 0) for d in draws), default=0) + 1
+    ob["le_lod_level"] = opts.get("lod_level", 0)
     return ob

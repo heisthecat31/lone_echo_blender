@@ -25,13 +25,26 @@ PINNED PACKAGE CONTRACT (`<name>.lescatter/`):
          "uv0":"blobs/m<m>_uv0.bin",          # optional
          "indices":"blobs/m<m>_idx.bin",      # uint32 x nindices, LE
          "proxy":bool }, ... ],
-      "instances_blob":"blobs/instances.bin"  # N records, GLOBAL order i=0..N-1,
-    }                                         # 44 B each, LE:
+      "instances_blob":"blobs/instances.bin",  # N records, GLOBAL order i=0..N-1,
+                                               # 44 B each, LE:
     #   mesh_index:u32, tx,ty,tz:f32, qx,qy,qz,qw:f32 (xyzw), sx,sy,sz:f32
+      "lod": {                                 # v3, optional
+         "blob":"blobs/instance_lod.bin",      # N records PARALLEL to instances.bin,
+                                               # 12 B each, LE:
+    #      lod_group:u32 (0xFFFFFFFF == none), lod_level:u32, lod_group_levels:u32
+         "num_groups":int, "max_level":int, "levels_histogram":{"0":n, ...} }
+    }
     #
     # v1 packages (version 1, no per-mesh "draws" key) still load unchanged; the
     # reader normalizes them to a single whole-buffer draw via `ScatterPackage.draws`.
-    # Only `format` is validated on load (both versions are accepted).
+    # v1/v2 have no "lod" block -- `read_instance_lod` then reports one level for
+    # every instance, so `filter_by_lod` is a no-op and old packages behave as before.
+    # Only `format` is validated on load (all versions are accepted).
+    #
+    # WHY LOD MATTERS HERE: every LOD level of a prop is a separate mesh with its
+    # own instances in the same master, so importing all N instances stacks all
+    # levels on top of each other (61.3 % of station_front's 21,394 instances are
+    # lower-LOD duplicates). See `le_mesh.static_lod`.
 
 Geometry blobs are in NATIVE GAME SPACE (Y-up) and are NOT axis-converted here —
 the addon builds each unique mesh datablock once in native space and applies the
@@ -56,6 +69,15 @@ INSTANCE_STRUCT = "<I3f4f3f"
 INSTANCE_STRIDE = struct.calcsize(INSTANCE_STRUCT)   # 44
 assert INSTANCE_STRIDE == 44, INSTANCE_STRIDE
 
+# instance_lod.bin record (v3): lod_group u32 | lod_level u32 | lod_group_levels u32
+INSTANCE_LOD_STRUCT = "<3I"
+INSTANCE_LOD_STRIDE = struct.calcsize(INSTANCE_LOD_STRUCT)   # 12
+assert INSTANCE_LOD_STRIDE == 12, INSTANCE_LOD_STRIDE
+
+LOD_NONE = 0xFFFFFFFF   # `lod_group` sentinel: this instance has no LOD group
+LOD_ALL = -1            # keep every instance (all levels stacked)
+LOD_COARSEST = -2       # keep each group's last level
+
 
 # ---------------------------------------------------------------------------
 # Package parsing (pure stdlib; array-based blob loads)
@@ -68,6 +90,14 @@ class InstanceRecord:
     translation: tuple    # (tx, ty, tz)  game-space
     rotation: tuple       # (qx, qy, qz, qw)  xyzw, unit quaternion
     scale: tuple          # (sx, sy, sz)
+
+
+@dataclass
+class InstanceLod:
+    """v3 LOD binding for one instance (see `le_mesh.static_lod`)."""
+    group: int            # LOD-group / node id, or -1 when ungrouped
+    level: int            # 0 = highest detail
+    group_levels: int     # how many levels this instance's group has (>= 1)
 
 
 class ScatterPackage:
@@ -134,6 +164,16 @@ class ScatterPackage:
         rel = mesh.get("indices")
         return self._uints(rel) if rel else array("I")
 
+    @property
+    def lod(self):
+        """The v3 `lod` manifest block, or `{}` for v1/v2 packages."""
+        return self.manifest.get("lod") or {}
+
+    @property
+    def max_lod_level(self):
+        """Coarsest LOD level present, or 0 when the package carries no LOD."""
+        return int(self.lod.get("max_level", 0))
+
     @staticmethod
     def draws(mesh):
         """Normalized draw list for a mesh entry (v2 native, v1 back-compat).
@@ -167,6 +207,49 @@ def read_instances(pkg: ScatterPackage) -> list:
             rotation=(v[4], v[5], v[6], v[7]),
             scale=(v[8], v[9], v[10])))
     return recs
+
+
+def read_instance_lod(pkg: ScatterPackage) -> list:
+    """Parse the v3 `lod` blob into `InstanceLod` records, parallel to instances.
+
+    A v1/v2 package (or a v3 one whose blob is missing/short) yields
+    `InstanceLod(-1, 0, 1)` for every instance — one level each — so downstream
+    filtering degrades to "keep everything" instead of failing.
+    """
+    n = pkg.num_instances
+    rel = pkg.lod.get("blob")
+    if not rel or not (pkg.dir / rel).exists():
+        return [InstanceLod(-1, 0, 1) for _ in range(n)]
+    data = (pkg.dir / rel).read_bytes()
+    if len(data) < n * INSTANCE_LOD_STRIDE:
+        return [InstanceLod(-1, 0, 1) for _ in range(n)]
+    out = []
+    for i in range(n):
+        g, lv, gl = struct.unpack_from(INSTANCE_LOD_STRUCT, data, i * INSTANCE_LOD_STRIDE)
+        out.append(InstanceLod(-1 if g == LOD_NONE else g, lv, max(1, gl)))
+    return out
+
+
+def filter_by_lod(instances, lods, level):
+    """Keep the instances that belong to LOD `level`, clamped per group.
+
+    * `level >= 0` — that level, but never past a group's coarsest one, so a
+      2-level prop asked for LOD 3 still contributes its LOD 1 rather than
+      vanishing.
+    * `LOD_ALL` (-1) — every instance (all levels stacked; the v1/v2 behaviour).
+    * `LOD_COARSEST` (-2) — each group's last level.
+
+    `instances` and `lods` must be parallel (same order, same length). Returns a
+    new list of the kept `InstanceRecord`s.
+    """
+    if level == LOD_ALL:
+        return list(instances)
+    kept = []
+    for inst, lod in zip(instances, lods):
+        want = lod.group_levels - 1 if level == LOD_COARSEST else min(level, lod.group_levels - 1)
+        if lod.level == want:
+            kept.append(inst)
+    return kept
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,11 @@ the Workbench engine (MATERIAL color -> distinct color per mesh binding). Prints
 `SCATTER_RENDER: PASS|FAIL` sentinel plus a per-instance world-position dump so the
 placement is verifiable from the log alone.
 
+Pass `lod=N` after `--` to choose the LOD level to place (default `0` = highest
+detail; `-1` = every level stacked, the pre-LOD behaviour; `-2` = coarsest). Every
+LOD level of a prop is a separate mesh with its own instances, so `lod=-1` renders
+all of them on top of each other.
+
 Pass `engine=eevee` after `--` to render with Blender 5.1 EEVEE
 (`BLENDER_EEVEE_NEXT`) instead, so the addon's normal/roughness/opacity/emission
 material channels contribute. Workbench stays the default; if EEVEE is
@@ -61,6 +66,7 @@ def main():
         pkg_path, bpy.context,
         {"flip_v": True, "y_up_to_z_up": True, "import_proxy": False,
          "max_instances": max_instances,
+         "lod_level": int(opts.get("lod", "0")),
          "materials_json": opts.get("materials")})
     print("SCATTER_SUMMARY:", summary)
 

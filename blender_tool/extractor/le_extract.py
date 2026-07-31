@@ -7,10 +7,10 @@ the game Oodle DLL:
     python.exe blender_tool/extractor/le_extract.py --archive 0703fd2acd5803e9 --all
     python.exe blender_tool/extractor/le_extract.py --archive 0703fd2acd5803e9 --list
 
-Reuses the PROVEN decode stack from lone_echo_research/scripts (le_oodle,
-le_archive_decode, le_meshlist_decode) to reach
-decompressed primary/GPU subresource slices, then hands the bytes to the
-pure-stdlib le_mesh core to decode every vertex attribute and write the package.
+Reuses the decode stack in this repo's `scripts/` (le_oodle, le_archive_decode,
+le_meshlist_decode) to reach decompressed primary/GPU subresource slices, then
+hands the bytes to the pure-stdlib le_mesh core to decode every vertex attribute
+and write the package.
 
 Milestones:
   M1 (this stage): full-attribute geometry + draws + flags + LOD metadata.   [DONE]
@@ -23,15 +23,16 @@ Milestones:
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import sys
 from pathlib import Path
 
-# --- path wiring: this file is lone_echo_research/blender_tool/extractor/… ---
+# --- path wiring: this file is <repo>/blender_tool/extractor/… ---
 THIS = Path(__file__).resolve()
 BLENDER_TOOL = THIS.parents[1]
-LE_ROOT = THIS.parents[2]                 # lone_echo_research
-SCRIPTS = LE_ROOT / "scripts"
+REPO_ROOT = THIS.parents[2]
+SCRIPTS = REPO_ROOT / "scripts"
 for p in (str(BLENDER_TOOL), str(SCRIPTS)):
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -56,13 +57,14 @@ from le_mesh import material_scalars as msc                  # noqa: E402
 from le_mesh import package as pkg                           # noqa: E402
 import le_textures                                           # noqa: E402
 
-# scan inputs (relative to the lone_echo_research root)
-BINDING_TSV = LE_ROOT / "generic_rebuilds" / "scene_binding_parse.tsv"
-SCAN_TSV = LE_ROOT / "generic_rebuilds" / "combined_shader_scan.tsv"
-TEX_MANIFESTS = [
-    LE_ROOT / "generic_rebuilds" / "texture_manifest.tsv",
-    LE_ROOT / "generic_rebuilds" / "texture_manifest.tsv",
-]
+# Optional precomputed scan inputs. Only the default (`--direct-materials` off)
+# material path reads them; they live under `LONE_ECHO_SCAN_ROOT` if you have
+# generated them, and are absent by default.
+SCAN_ROOT = Path(os.environ.get("LONE_ECHO_SCAN_ROOT",
+                                str(REPO_ROOT / "generic_rebuilds")))
+BINDING_TSV = SCAN_ROOT / "scene_binding_parse.tsv"
+SCAN_TSV = SCAN_ROOT / "combined_shader_scan.tsv"
+TEX_MANIFESTS = [SCAN_ROOT / "texture_manifest.tsv"]
 
 
 def _compressed_stub(path: Path) -> bool:
@@ -193,6 +195,10 @@ class Archive:
             self.primary, self.gpu, gpu_pos,
             meshes=tbl("meshes"), renderparams=tbl("renderparams"),
             vertexbuffers=tbl("vertexbuffers"), indexbuffers=tbl("indexbuffers"),
+            # populated in only 11 of the corpus's 1,240 mesh-lists, but where it
+            # IS populated the coarser LODs are extra draws over later slices of
+            # the same index buffer — import them all and the levels overlap.
+            lodchildindices=tbl("lodchildindices"),
         )
 
 

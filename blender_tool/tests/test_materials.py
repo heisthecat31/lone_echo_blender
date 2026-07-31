@@ -177,3 +177,40 @@ def test_roles_from_input_rows():
     assert roles["layer0_albedo_map"] == "texalb"
     assert roles["layer0_normal_map"] == "texnrm"
     assert roles["unknown_s18"] == "texunk"
+
+
+def test_every_role_name_hashes_to_its_own_key():
+    """Every INPUTNAME_ROLE entry must be a real recovered preimage.
+
+    Ten entries here were once INVENTED labels marked "tentative" — none hashed to
+    its key, and the fakes changed rendering behaviour (a non-existent
+    `layer1_glass_*` family; `layer1_alpha_map`, which is OPACITY, wired to
+    Roughness). This is the guard that stops that recurring: a role name is either
+    the exact CSymbol64 preimage of its key or it does not belong in the table.
+    """
+    bad = [(h, role) for h, (role, _conf) in mat.INPUTNAME_ROLE.items()
+           if "%016x" % msc.symbol64(role) != h]
+    assert not bad, f"role names that are not their key's preimage: {bad}"
+
+    # and no entry may still be labelled tentative
+    tentative = [r for r, c in mat.INPUTNAME_ROLE.values() if c != "confirmed"]
+    assert not tentative, f"unverified role names: {tentative}"
+
+
+def test_channel_role_lists_reference_known_roles():
+    """A channel list may not route to a role the table does not define."""
+    known = {role for role, _ in mat.INPUTNAME_ROLE.values()}
+    for name in ("BASE_COLOR_ROLES", "NORMAL_ROLES", "ROUGHNESS_ROLES",
+                 "OPACITY_ROLES", "EMISSION_ROLES", "TRANSLUCENCY_ROLES"):
+        unknown = [r for r in getattr(mat, name) if r not in known]
+        assert not unknown, f"{name} routes to undefined roles: {unknown}"
+
+    # the three mis-assignments the fabricated names caused must not come back
+    assert "layer1_alpha_map" not in mat.ROUGHNESS_ROLES      # it is opacity
+    assert "layer1_alpha_map" in mat.OPACITY_ROLES
+    assert "layer0_back_lighting_map" not in mat.EMISSION_ROLES   # it is translucency
+    # the two *_composite_specular maps were routed to BASE COLOUR under their
+    # fabricated names ("layer0_rgba_surface" / "layer1_glass_rgba"); they are
+    # specular/roughness data. (`layer0_specular_map` is a separate, correctly-named
+    # pre-existing entry and is deliberately left where it was.)
+    assert not any(r.endswith("_composite_specular") for r in mat.BASE_COLOR_ROLES)

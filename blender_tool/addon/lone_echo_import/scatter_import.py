@@ -20,7 +20,9 @@ import json
 from pathlib import Path
 
 import bpy   # type: ignore
-from bpy.props import BoolProperty, IntProperty, StringProperty   # type: ignore
+from bpy.props import (   # type: ignore
+    BoolProperty, EnumProperty, IntProperty, StringProperty,
+)
 from bpy_extras.io_utils import ImportHelper                       # type: ignore
 
 from . import scatter_reader
@@ -139,12 +141,15 @@ def build_scatter_mesh(pkg, mesh_entry, get_material, opts) -> "bpy.types.Mesh":
     return mesh
 
 
-def _place_instances(context, coll, pkg, mesh_datablocks, records, opts) -> dict:
+def _place_instances(context, coll, pkg, mesh_datablocks, records, opts,
+                     lods=None) -> dict:
     """Link one object per instance sharing its mesh datablock, at `B @ T @ R @ S`.
 
     `B` (the Y-up->Z-up basis) is computed once and passed into
     `compose_instance_matrix`, so every instance uses the exact same tested math.
     `max_instances` caps how many are placed for a fast first render (0/None = all).
+    `lods` (indexed by GLOBAL instance index) tags each object with its LOD group
+    and level as custom properties; pass None to skip the tagging.
     """
     from mathutils import Matrix   # type: ignore
 
@@ -167,6 +172,11 @@ def _place_instances(context, coll, pkg, mesh_datablocks, records, opts) -> dict
         ob.matrix_world = Matrix(rows)
         ob["le_instance_index"] = rec.index
         ob["le_mesh_index"] = rec.mesh_index
+        lod = lods[rec.index] if lods and rec.index < len(lods) else None
+        if lod is not None:
+            ob["le_lod_group"] = lod.group
+            ob["le_lod_level"] = lod.level
+            ob["le_lod_group_levels"] = lod.group_levels
         coll.objects.link(ob)
         placed += 1
     return {"placed": placed, "skipped_missing_mesh": skipped_missing}
@@ -248,7 +258,15 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
         n_tris += len(db.polygons)
 
     records = scatter_reader.read_instances(pkg)
-    place = _place_instances(context, coll, pkg, mesh_datablocks, records, opts)
+    lods = scatter_reader.read_instance_lod(pkg)
+    # LOD selection. Every LOD level of a prop is a separate mesh with its own
+    # instances, so without this every level is placed at once and they overlap.
+    # `lod_level` defaults to 0 (highest detail); pass LOD_ALL for the old
+    # all-levels-stacked behaviour.
+    lod_level = opts.get("lod_level", 0)
+    selected = scatter_reader.filter_by_lod(records, lods, lod_level)
+    place = _place_instances(context, coll, pkg, mesh_datablocks, selected, opts,
+                             lods=lods)
 
     return {
         "collection": coll_name,
@@ -257,8 +275,12 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
         "meshes_built": len(mesh_datablocks),
         "meshes_skipped_proxy": skipped_proxy,
         "instances_total": pkg.num_instances,
+        "instances_selected": len(selected),
         "instances_placed": place["placed"],
         "instances_skipped_missing_mesh": place["skipped_missing_mesh"],
+        "lod_level": lod_level,
+        "lod_max_level": pkg.max_lod_level,
+        "lod_groups": int(pkg.lod.get("num_groups", 0)),
         "triangles_unique": n_tris,
         "materials": len(mat_cache),
     }
@@ -282,10 +304,27 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
     max_instances: IntProperty(name="Max Instances", default=0, min=0,
                                description="Cap placed instances for a fast preview "
                                            "(0 = place all)")   # type: ignore
+    lod_level: EnumProperty(
+        name="LOD Level",
+        description="Which level of detail to place. Every LOD level of a prop is a "
+                    "separate mesh with its own instances, so 'All levels' stacks them "
+                    "on top of each other. A level is clamped per group, so props with "
+                    "fewer levels still contribute their coarsest one",
+        items=[
+            ("0", "LOD 0 (highest detail)", "Place each prop's most detailed level"),
+            ("1", "LOD 1", "One step coarser where available"),
+            ("2", "LOD 2", "Two steps coarser where available"),
+            ("3", "LOD 3", "Three steps coarser where available"),
+            ("4", "LOD 4", "Four steps coarser where available"),
+            ("-2", "Coarsest", "Each prop's cheapest level"),
+            ("-1", "All levels (stacked)", "Place every instance — levels overlap"),
+        ],
+        default="0")   # type: ignore
 
     def draw(self, context):
         layout = self.layout
-        for prop in ("flip_v", "y_up_to_z_up", "import_proxy", "max_instances"):
+        for prop in ("lod_level", "flip_v", "y_up_to_z_up", "import_proxy",
+                     "max_instances"):
             layout.prop(self, prop)
 
     def execute(self, context):
@@ -294,6 +333,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             "y_up_to_z_up": self.y_up_to_z_up,
             "import_proxy": self.import_proxy,
             "max_instances": self.max_instances,
+            "lod_level": int(self.lod_level),
         }
         try:
             summary = import_lescatter(self.filepath, context, opts)
@@ -302,7 +342,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             return {"CANCELLED"}
         self.report({"INFO"},
                     "Scatter: placed {instances_placed}/{instances_total} instances "
-                    "over {meshes_built} meshes ({triangles_unique} unique tris)".format(**summary))
+                    "over {meshes_built} meshes ({triangles_unique} unique tris), "
+                    "LOD {lod_level} of 0..{lod_max_level}".format(**summary))
         return {"FINISHED"}
 
 

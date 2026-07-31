@@ -6,13 +6,13 @@ or rare, decoding their (undocumented) bit layout is not
 worth it and `vertex_format.py` keeps them `packed_unresolved`. If they ARE
 common on renderable usages, that is the signal to invest in a full decode.
 
-MUST run under Windows Python (Oodle DLL):
+MUST run under Windows Python (the Oodle runtime is a Windows binary):
 
     python.exe blender_tool/tests/probe_vertex_types.py
     python.exe blender_tool/tests/probe_vertex_types.py <archive_hash> [<archive_hash> ...]
 
 Bounded on purpose: processes one archive at a time and caps meshlists per
-archive (WSL has OOM-crashed on multi-GB loads — never load many at once).
+archive (multi-GB loads have exhausted memory — never load many at once).
 """
 
 from __future__ import annotations
@@ -21,11 +21,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# --- path wiring: blender_tool/tests/ -> blender_tool + lone_echo_research/scripts
+# --- path wiring: blender_tool/tests/ -> blender_tool + <repo>/scripts ---
 THIS = Path(__file__).resolve()
 BLENDER_TOOL = THIS.parents[1]
-LE_ROOT = THIS.parents[2]
-SCRIPTS = LE_ROOT / "scripts"
+REPO_ROOT = THIS.parents[2]
+SCRIPTS = REPO_ROOT / "scripts"
 for p in (str(BLENDER_TOOL), str(SCRIPTS)):
     if p not in sys.path:
         sys.path.insert(0, p)

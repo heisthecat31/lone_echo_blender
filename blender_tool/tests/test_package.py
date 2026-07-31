@@ -30,7 +30,7 @@ def test_package_roundtrip(tmp_path):
                             objects=objs, materials=[material])
 
     m = pkg.read_manifest(out)
-    assert m["format"] == "lemesh" and m["version"] == 1
+    assert m["format"] == "lemesh" and m["version"] == 2
     assert len(m["objects"]) == 1
     mo = m["objects"][0]
     assert mo["vertex_count"] == 4
@@ -55,7 +55,9 @@ def test_material_role_classification():
         "layer0_normal_map": "bbbb",
         "layer0_opacity_map": "cccc",
         "layer0_emissive_map": "dddd",
-        "layer0_linear_map": "eeee",
+        # was "layer0_linear_map" -- a FABRICATED name; the real preimage of
+        # d000069cc9204803 is layer0_composite_components (see le_mesh/materials.py)
+        "layer0_composite_components": "eeee",
     }
     dxgi = {"aaaa": 72, "bbbb": 83, "cccc": 80, "dddd": 72, "eeee": 71}
     ch = mat.classify_roles(role_textures, dxgi)
@@ -69,7 +71,7 @@ def test_material_role_classification():
     assert ch["emission"]["texture"] == "dddd"
     assert ch["emission"]["colorspace"] == "sRGB"
     assert ch["roughness"]["texture"] == "eeee"
-    assert ch["roughness"]["colorspace"] == "Non-Color"   # linear BC1
+    assert ch["roughness"]["colorspace"] == "Non-Color"   # packed data map
 
 
 def test_dxgi_fallback_for_unknown_slots():
