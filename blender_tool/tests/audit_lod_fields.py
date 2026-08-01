@@ -37,6 +37,15 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+# Windows consoles default to cp1252 and argparse echoes this module's docstring
+# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
+# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
+        pass
+
 THIS = Path(__file__).resolve()
 REPO_ROOT = THIS.parents[2]
 for p in (str(REPO_ROOT / "scripts"), str(REPO_ROOT / "blender_tool")):
@@ -48,7 +57,7 @@ for p in (str(REPO_ROOT / "scripts"), str(REPO_ROOT / "blender_tool")):
 # keep it. Not shipped — it is derived from game data.
 MANIFEST_TSV = Path(os.environ.get(
     "LONE_ECHO_ARCHIVE_MANIFEST",
-    str(Path(os.environ.get("LONE_ECHO_SCAN_ROOT", str(REPO_ROOT / "generic_rebuilds")))
+    str(Path(os.environ.get("LONE_ECHO_SCAN_ROOT", str(REPO_ROOT / "scan_inputs")))
         / "archive_mesh_manifest.tsv")))
 NO_LOD_PRIMSET = 0xFFFFFFFF     # CGRenderParams.lodprimsetidx "unset" sentinel
 

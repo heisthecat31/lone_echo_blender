@@ -20,7 +20,7 @@ from pathlib import Path
 bl_info = {
     "name": "Lone Echo Importer (.lemesh / .lescatter)",
     "author": "Dualgame",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 1, 0),
     "location": "File > Import > Lone Echo (.lemesh) / Lone Echo Scatter (.lescatter)",
     "description": "Import Lone Echo / NRadEngine meshes and whole scatter levels "
@@ -35,11 +35,18 @@ from bpy.props import (   # type: ignore  # noqa: E402
 from bpy_extras.io_utils import ImportHelper          # type: ignore  # noqa: E402
 
 from . import (package_reader, mesh_builder, material_builder, scene_reader,   # noqa: E402
-               scatter_reader, scatter_import)
+               scatter_reader, scatter_import, light_import)
 
 # Re-export the scatter import entry point so headless callers can use
 # `lone_echo_import.import_lescatter(pkg, context, opts)` alongside import_lemesh.
 import_lescatter = scatter_import.import_lescatter
+
+# Scene lights. OFF BY DEFAULT and, when on, defaults to the eEnableDiffuse
+# subset only: most shipped Lone Echo lights are SPECULAR-ONLY (49 of 118 set
+# eEnableDiffuse; 15 of 47 on station_front) and sit on top of a BAKED lightmap,
+# so importing them all double-lights the scene -- measured at 7.06x brighter on
+# identical receivers. See light_import.py's header and docs/LIGHTING.md.
+import_lights = light_import.import_lights
 
 
 def _load_skeleton(pkg_path: Path):
@@ -207,7 +214,7 @@ def _apply_placements(context, source_coll, placements, scene, opts) -> dict:
 
     The imported meshes carry the axis correction A on their OBJECT matrices
     (mesh_builder sets `ob.matrix_basis = A @ ...`; A = +90deg X when
-    `y_up_to_z_up`, per AXIS_CALIBRATION.md). A placement's `world_xf` is a
+    `y_up_to_z_up`; see docs/FORMATS.md). A placement's `world_xf` is a
     RAD-engine-space transform, so to stay correct in Blender it is CONJUGATED by A
     and set on a collection-instance empty:
 
@@ -443,7 +450,8 @@ def _menu(self, context):
     self.layout.operator(IMPORT_OT_lemesh.bl_idname, text="Lone Echo (.lemesh)")
 
 
-_CLASSES = (IMPORT_OT_lemesh, scatter_import.IMPORT_OT_lescatter)
+_CLASSES = (IMPORT_OT_lemesh, scatter_import.IMPORT_OT_lescatter,
+            light_import.IMPORT_OT_lelights)
 
 
 def register():
@@ -451,9 +459,11 @@ def register():
         bpy.utils.register_class(c)
     bpy.types.TOPBAR_MT_file_import.append(_menu)
     bpy.types.TOPBAR_MT_file_import.append(scatter_import.menu_func)
+    bpy.types.TOPBAR_MT_file_import.append(light_import.menu_func)
 
 
 def unregister():
+    bpy.types.TOPBAR_MT_file_import.remove(light_import.menu_func)
     bpy.types.TOPBAR_MT_file_import.remove(scatter_import.menu_func)
     bpy.types.TOPBAR_MT_file_import.remove(_menu)
     for c in _CLASSES:

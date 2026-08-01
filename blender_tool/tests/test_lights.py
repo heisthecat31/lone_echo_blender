@@ -119,6 +119,22 @@ REC2 = _pack_light(
     attenmethod=1.0,
 )
 
+# A directional light (`ePrimaryDirLight`), so the SUN unit path — irradiance,
+# no distance term — is exercised too. Enabled and diffuse-enabled.
+_Q_SUN = (math.sin(-math.pi / 8), 0.0, 0.0, math.cos(math.pi / 8))
+REC_SUN = _pack_light(
+    options=(L.eEnableDiffuse | L.eEnableSpecular | L.eLightOpaques
+             | L.eLightEnabled | L.ePrimaryDirLight),
+    lighttype=L.eDirectionalLight,
+    pos=(0.0, 300.0, 0.0),
+    primarycolor=(10.0, 8.0, 6.0),
+    attenuation=(1.0, 250.5, 500.0, 500.0),
+    orientation=_Q_SUN,
+    attenmethod=2.0,
+)
+
+ALL_RECS = (REC0, REC2, REC_SUN)
+
 
 def _approx(a, b, tol=1e-4):
     assert abs(a - b) <= tol, f"{a} != {b} (tol {tol})"
@@ -328,7 +344,214 @@ def test_to_blender_shape():
     assert b["type"] == "SPOT"
     assert set(b) >= {"location", "direction", "color", "energy", "spot_size",
                       "spot_blend", "shadow_soft_size", "cutoff_distance",
-                      "physical_falloff", "affects_diffuse", "affects_specular"}
+                      "physical_falloff", "affects_diffuse", "affects_specular",
+                      "matrix", "not_derivable"}
     assert b["shadow_soft_size"] == 0.0, "no source radius exists on disk"
     assert b["enabled"] is False
     assert len(b["color"]) == 3 and max(b["color"]) <= 1.0 + 1e-6
+
+
+# ---------------------------------------------------------------------------
+# SUN: irradiance, not watts
+# ---------------------------------------------------------------------------
+
+def test_sun_energy_is_irradiance_with_no_distance_term():
+    r = L.decode_light(REC_SUN, index=2)
+    assert r.lighttype == L.eDirectionalLight
+    assert L.BLENDER_TYPE[r.lighttype] == "SUN"
+    # the engine applies no attenuation to a directional light
+    _approx(L.blender_energy(r), max(r.primarycolor), 1e-5)
+    for d in (1.0, 50.0, 5000.0):
+        assert L.engine_irradiance(r, d) == tuple(r.primarycolor)
+    color, peak = L.normalized_color(r.primarycolor)
+    _approx(peak, 10.0, 1e-5)
+    _approx(color[0], 1.0, 1e-6)
+    _approx(color[1], 0.8, 1e-6)
+    _approx(color[2], 0.6, 1e-6)
+
+
+# ---------------------------------------------------------------------------
+# encode: the exact inverse of decode (fixtures without an archive)
+# ---------------------------------------------------------------------------
+
+def test_encode_light_is_byte_exact_on_every_fixture():
+    """Re-encoding a record must reproduce its 352 bytes exactly — the strongest
+    available check that no field is mis-sized or mis-placed. The three unnamed
+    pad words at 0xA4/0xCC/0x154 are zero on every shipped record inspected, so
+    the encoder writing zeros there is not a divergence."""
+    for rec in ALL_RECS:
+        r = L.decode_light(rec)
+        assert L.encode_light(r) == rec
+    for off in L.PAD_OFFSETS:
+        for rec in ALL_RECS:
+            assert struct.unpack_from("<I", rec, off)[0] == 0, off
+
+
+def test_decode_encode_roundtrip_preserves_every_field():
+    for rec in ALL_RECS:
+        a = L.decode_light(rec, 7)
+        b = L.decode_light(L.encode_light(a), 7)
+        assert a == b
+
+
+def test_encode_rejects_a_bad_scenemask_length():
+    r = L.decode_light(REC0)
+    object.__setattr__(r, "scenemask", b"\x00" * 8)
+    try:
+        L.encode_light(r)
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError on a short scenemask")
+
+
+def _fields_of(src, *, option_names=False):
+    """The decoded record as the plain field dict a sidecar carries."""
+    d = {
+        "index": src.index,
+        "pos": list(src.pos), "primarycolor": list(src.primarycolor),
+        "secondarycolor": list(src.secondarycolor),
+        "attenuation": list(src.attenuation), "orientation": list(src.orientation),
+        "direction": list(src.direction), "penumbra": list(src.penumbra),
+        "fovy": src.fovy, "nearp": src.nearp, "farp": src.farp,
+        "filtersize": src.filtersize, "falloff": src.falloff,
+        "attenmethod": src.attenmethod, "bias": src.bias,
+        "shadowfadestart": src.shadowfadestart, "shadowfadeend": src.shadowfadeend,
+        "shadowthrottledist": src.shadowthrottledist, "fade": src.fade,
+        "shadowresolution": src.shadowresolution,
+        "shadowoffsetscale": src.shadowoffsetscale,
+        "lightoffsetstart": src.lightoffsetstart,
+        "lightoffsetdist": src.lightoffsetdist,
+        "lightshaft": {**src.lightshaft,
+                       "goboassetid": f"{src.lightshaft['goboassetid']:016x}"},
+        "airlightminradius": src.airlightminradius, "lightmask": src.lightmask,
+        "visindex": src.visindex, "qualitylevel": src.qualitylevel,
+        "quantizer": f"{src.quantizer:016x}", "signal": list(src.signal),
+        "shadowangularfade": list(src.shadowangularfade),
+        "name": f"{src.name:016x}", "scenemask": src.scenemask.hex(),
+        "shadowqualitylevel": src.shadowqualitylevel,
+        "cachedjointidx": src.cachedjointidx, "jointoffsetidx": src.jointoffsetidx,
+    }
+    if option_names:                       # the v1 sidecar form
+        d["options"] = src.option_names
+        d["type"] = src.type_name
+    else:
+        d["options_raw"] = src.options
+        d["lighttype"] = src.lighttype
+    return d
+
+
+def test_record_from_fields_rebuilds_a_record_from_a_plain_dict():
+    """The archive-free fixture path: a decoded field dict -> LightRecord, via
+    encode/decode so the result is exactly what a real decode would give."""
+    src = L.decode_light(REC2, 2)
+    d = _fields_of(src)
+    assert L.record_from_fields(d) == src
+    assert L.encode_light(L.record_from_fields(d)) == REC2
+
+
+def test_record_from_fields_accepts_option_names_and_a_type_name():
+    """The v1 sidecar form: `options` as a NAME LIST, `type` as a name."""
+    src = L.decode_light(REC0, 0)
+    r = L.record_from_fields(_fields_of(src, option_names=True))
+    assert r.options == src.options and r.lighttype == src.lighttype
+
+
+# ---------------------------------------------------------------------------
+# the object matrix — same basis as the meshes, lamp-forward flip
+# ---------------------------------------------------------------------------
+
+def test_blender_matrix_forward_is_the_records_direction():
+    """A Blender lamp emits along local -Z; the engine's forward is local +Z. So
+    `M[:3,:3] @ (0,0,-1)` must equal the axis-converted stored `direction`."""
+    for rec in ALL_RECS:
+        r = L.decode_light(rec)
+        M = L.blender_matrix_rows(r)
+        fwd = tuple(-M[i][2] for i in range(3))
+        want = L.blender_direction(r)
+        for i in range(3):
+            _approx(fwd[i], want[i], 2e-6)
+
+
+def test_blender_matrix_is_a_pure_rotation_and_places_the_light_at_A_pos():
+    for rec in ALL_RECS:
+        r = L.decode_light(rec)
+        M = L.blender_matrix_rows(r)
+        det = (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+               - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+               + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]))
+        _approx(det, 1.0, 1e-5)
+        assert (M[0][3], M[1][3], M[2][3]) == L.blender_position(r)
+        assert M[3] == (0.0, 0.0, 0.0, 1.0)
+
+
+def test_blender_matrix_uses_the_shared_basis():
+    """With `y_up_to_z_up=False` the matrix is the raw game transform, and the
+    difference between the two is exactly `basis_matrix()`."""
+    r = L.decode_light(REC2)
+    M = L.blender_matrix_rows(r, y_up_to_z_up=True)
+    N = L.blender_matrix_rows(r, y_up_to_z_up=False)
+    B = basis_matrix()
+    for i in range(3):
+        for j in range(4):
+            expect = sum(B[i][k] * N[k][j] for k in range(3))
+            _approx(M[i][j], expect, 1e-9)
+
+
+# ---------------------------------------------------------------------------
+# import policy + the not-derivable list
+# ---------------------------------------------------------------------------
+
+def test_select_lights_defaults_to_the_diffuse_subset():
+    recs = [L.decode_light(b, i) for i, b in enumerate(ALL_RECS)]
+    # REC0: enabled + diffuse. REC2: DISABLED. REC_SUN: enabled + diffuse.
+    kept, stats = L.select_lights(recs)
+    assert stats["total"] == 3
+    assert stats["skipped_disabled"] == 1
+    assert [r.index for r in kept] == [0, 2]
+    assert stats["kept"] == 2 and stats["specular_only_kept"] == 0
+
+
+def test_select_lights_all_keeps_specular_only_and_counts_them():
+    r = L.decode_light(REC0, 0)
+    object.__setattr__(r, "options", (r.options & ~L.eEnableDiffuse) | L.eEnableSpecular)
+    kept, stats = L.select_lights([r], L.LIGHT_SET_ALL)
+    assert stats["kept"] == 1 and stats["specular_only_kept"] == 1
+    kept2, stats2 = L.select_lights([r], L.LIGHT_SET_DIFFUSE)
+    assert kept2 == [] and stats2["skipped_specular_only"] == 1
+
+
+def test_select_lights_rejects_an_unknown_set():
+    try:
+        L.select_lights([], "everything")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError on an unknown light_set")
+
+
+def test_not_derivable_carries_the_unconvertible_fields():
+    """Nothing here may be turned into a Blender value — `filtersize` is a
+    shadow-map PCF width, not a light radius, and there is no source-size field
+    on disk at all."""
+    r = L.decode_light(REC2, 2)
+    nd = L.not_derivable(r)
+    for k in ("filtersize_pcf", "cone_falloff_exponent", "faderangeoffset_runtime",
+              "lightmask", "scenemask", "visindex", "qualitylevel",
+              "attenuation_w", "affects_diffuse", "affects_specular"):
+        assert k in nd, k
+    assert nd["filtersize_pcf"] == r.filtersize
+    assert L.to_blender(r)["shadow_soft_size"] == 0.0
+
+
+def test_range_offset_divergence_is_quantified_not_hidden():
+    """Blender has no range-offset term: at half range an imported inverse-square
+    light is 4/3 as bright as the game (the game is 25 % dimmer)."""
+    r = L.decode_light(REC0)
+    object.__setattr__(r, "attenmethod", 2.0)
+    game_over_blender, blender_over_game = L.range_offset_divergence(r, 0.5)
+    _approx(game_over_blender, 0.75, 1e-9)
+    _approx(blender_over_game, 4.0 / 3.0, 1e-9)
+    # a linear (attenmethod 1) light is 2x at half range
+    object.__setattr__(r, "attenmethod", 1.0)
+    _approx(L.range_offset_divergence(r, 0.5)[1], 2.0, 1e-9)
+    # a directional light has no distance term at all
+    assert L.range_offset_divergence(L.decode_light(REC_SUN), 0.5) == (1.0, 1.0)

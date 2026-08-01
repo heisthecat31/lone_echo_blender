@@ -10,6 +10,7 @@ import math
 
 import bpy   # type: ignore
 
+from . import material_builder
 from .package_reader import select_lod_draws
 
 
@@ -29,7 +30,7 @@ def _faces_and_material_indices(pkg, obj, mat_slot_of_key, reverse_winding=False
     on-disk winding already agrees with the stored outward normals under the
     default pure-rotation axis transform, so reversal is NOT needed and only
     exists so tests/blender_axis_probe.py can render the inside-out counter-
-    example. See AXIS_CALIBRATION.md.
+    example. See docs/FORMATS.md for the axis convention.
 
     `lod_level` picks one level of the mesh's LOD chain (see `select_lod_draws`);
     pass a negative value to emit every level.
@@ -67,8 +68,8 @@ def _axis_matrix(opts):
     a PURE rotation (determinant +1): it stands the mesh upright, does NOT mirror
     it, and preserves the winding<->normal relationship already on disk (so faces
     stay front-facing / outward in Blender). Applied to the object matrix only,
-    so the decoded vertex blobs remain byte-faithful to disk. Evidence and the
-    rejected alternatives are documented in AXIS_CALIBRATION.md.
+    so the decoded vertex blobs remain byte-faithful to disk. The convention and
+    the rejected alternatives are documented in docs/FORMATS.md.
 
     Diagnostic-only toggle (default off; used by tests/blender_axis_probe.py to
     render the rejected counter-examples):
@@ -161,9 +162,21 @@ def build_object(pkg, obj, get_material, opts) -> "bpy.types.Object":
     mesh.from_pydata(verts, [], faces)
     mesh.update()
 
-    # material slots
+    # material slots.
+    # `eDiffuseVertexColor` (CGMeshData 0x2000) is a per-MESH flag while materials are
+    # shared per material-key, so the per-vertex albedo tint cannot live in the shared
+    # material -- meshes without the flag would be tinted too. Flagged meshes get a
+    # lazily-created `<mat>__vcol` variant instead (material_builder.vertex_color_variant),
+    # which splices Color Attribute("color0") -> Mix(MULTIPLY) -> Base Color. Engine
+    # side: `diffusealbedo = composite_diffuse.xyz * albedovertex.xyz`.
+    # ⚠ Gated and unexercised: no checked-in test or fixture reaches this path.
+    want_vcol = (material_builder.wants_vertex_color_diffuse(obj)
+                 and opts.get("vertex_color_diffuse", True))
     for k in ordered_keys:
-        mesh.materials.append(get_material(k))
+        m = get_material(k)
+        if want_vcol:
+            m = material_builder.vertex_color_variant(m, "color0")
+        mesh.materials.append(m)
     if face_mat:
         mesh.polygons.foreach_set("material_index", face_mat)
 
@@ -241,9 +254,17 @@ def build_object(pkg, obj, get_material, opts) -> "bpy.types.Object":
     ob["le_shadow_only"] = obj.get("shadow_only", False)
     ob["le_mesh_index"] = _int_prop(obj.get("mesh_index", -1))
     ob["le_lightmap_index"] = _int_prop(obj.get("lightmap_index", 0))
+    # The PAGE, not just the table row. `lm_slice_index` is the ONLY thing that
+    # selects which of the 13 lightmap pages this mesh samples; the SG5 colour
+    # slices are `page*5 .. page*5+4`, page-major. It was previously read from the
+    # manifest and discarded, so anything wiring lightmaps AFTER import silently
+    # fell back to page 0.
+    ob["le_lm_slice_index"] = _int_prop(obj.get("lm_slice_index", 0xFFFFFFFF))
+    ob["le_lightmap_numlobes"] = _int_prop(obj.get("numlobes", 0))
     draws = obj.get("draws", [])
     ob["le_lod_parent"] = any(d.get("lod", {}).get("is_lod_parent") for d in draws)
     ob["le_lod_levels"] = max(
         (int(d.get("lod", {}).get("level", 0) or 0) for d in draws), default=0) + 1
     ob["le_lod_level"] = opts.get("lod_level", 0)
+    ob["le_vertex_color_diffuse"] = bool(want_vcol)
     return ob

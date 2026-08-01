@@ -9,8 +9,7 @@ are build artefacts that must never ship).
 The Stage-2 add-on is fully self-contained (only `bpy`/`mathutils`/stdlib +
 intra-package imports), so this zip is all an end user needs to import a `.lemesh`
 mesh package or a `.lescatter` level package. The Stage-1 extractor is NOT packaged
-here — it depends on the research repo's Oodle/decode stack and the local game
-corpus.
+here — it needs the Oodle runtime and your own copy of the game data.
 
     python3 blender_tool/build_addon_zip.py            # -> dist/lone_echo_import-<v>.zip
     python3 blender_tool/build_addon_zip.py --out /tmp/x.zip
@@ -22,6 +21,16 @@ import argparse
 import ast
 import zipfile
 from pathlib import Path
+import sys
+
+# Windows consoles default to cp1252 and argparse echoes this module's docstring
+# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
+# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
+        pass
 
 HERE = Path(__file__).resolve().parent
 PKG_DIR = HERE / "addon" / "lone_echo_import"

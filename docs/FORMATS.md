@@ -36,6 +36,22 @@ A `.lemesh` package is a **directory**:
 - **`skeleton.json`** (optional) holds the joint hierarchy and rest pose used to
   build an armature and to name skin vertex groups.
 
+### Lightmap fields on an object
+
+Each object entry carries three fields the baked lightmap needs. They are decoded
+and written but nothing consumes them automatically yet — see
+[LIGHTING.md](LIGHTING.md).
+
+| Field | Meaning |
+| --- | --- |
+| `lightmap_index` | Row index into the lightmap resource the object's scene binds. `0xffffffff` = not lightmapped. It is a **direct** row index, not an index over the populated rows only. |
+| `lm_slice_index` | The lightmap **page**, i.e. the texture-array slice of the AO/occlusion maps. The colour array holds five SG lobes per page, so its slices are `page*5 .. page*5+4`, page-major. |
+| `numlobes` | The bake's spherical-gaussian lobe count. Reads `4` on every shipped mesh measured (1221 of 1221), while the colour array carries 5 slices per page — that mismatch is unresolved. |
+
+`numlobes` is additive: an older package simply has no such key and reads as `0`.
+The importer copies all three onto the object as `le_lightmap_index`,
+`le_lm_slice_index` and `le_lightmap_numlobes`.
+
 ### Per-draw LOD (version 2)
 
 Each entry of an object's `draws` array carries a `lod` block:

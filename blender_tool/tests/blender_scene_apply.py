@@ -93,7 +93,7 @@ def _write_scene(dirpath: Path) -> Path:
             {"actornodeid": "C", "world_xf": _ident_rowmajor(0.0, 0.0, 0.0),
              "parent_type": 1, "parent_type_name": "eAuto", "scale": 1.0,
              "start_visible": True, "resolved": False,
-             "reason": "eAuto = runtime-selected parent, needs-disasm"},
+             "reason": "eAuto = runtime-selected parent, not decoded"},
         ]},
     }
     p = Path(dirpath) / "scene.json"          # beside the .lemesh dir -> auto-detectable

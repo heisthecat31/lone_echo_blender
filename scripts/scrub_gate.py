@@ -56,6 +56,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows consoles default to cp1252 and argparse echoes this module's docstring
+# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
+# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
+        pass
+
 REPO = Path(__file__).resolve().parents[1]
 
 # Files the gate is allowed to skip when looking for *its own* rule strings: this

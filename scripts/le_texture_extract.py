@@ -50,6 +50,16 @@ from le_archive_decode import (
     load_hash_lookup,
     parse_header,
 )
+import sys
+
+# Windows consoles default to cp1252 and argparse echoes this module's docstring
+# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
+# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
+        pass
 
 
 TEXTURE_PRIMARY_TYPE = 0xe8017b774f2b6327   # CGTextureResourceWin7

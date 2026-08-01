@@ -213,9 +213,52 @@ def test_translucent_material_decode():
 
 def test_emissive_intensity_without_bake_emissive_color():
     """Shipped emissive materials carry layerN_emissive_intensity while
-    bakeemissivecolor stays (0,0,0) — so `is_emissive` alone under-reports."""
+    bakeemissivecolor stays (0,0,0).
+
+    `is_emissive` used to be `any(bakeemissivecolor.rgb)`, which is False for
+    EVERY genuinely emissive material inspected (19 of 19 decoded fixture
+    materials, 8 of which carry a non-zero layer0_emissive_intensity). The gate
+    is now the authored per-layer emissive state; the old bake-time signal is
+    preserved as `bake_emissive_nonzero`.
+    """
     s = msc.decode_material_scalars(_slice(
         emissive=(0.0, 0.0, 0.0, 1.0),
         props=[(msc.HASH_EMISSIVE_INTENSITY[0], 6.0)]))
-    assert s["is_emissive"] is False           # bakeemissivecolor is black
-    assert s["emissive_intensity"] == 6.0      # but the layer knob is set
+    assert s["bake_emissive_nonzero"] is False   # bakeemissivecolor is black
+    assert s["is_emissive"] is True              # ...but the layer knob is set
+    assert s["emissive_layer_indices"] == [0]
+    assert s["emissive_intensity"] == 6.0
+
+
+# ---------------------------------------------------------------------------
+# 6. The three previously-unresolved texture-input hashes
+# ---------------------------------------------------------------------------
+
+def test_pom_height_map_preimage():
+    """`602e82b525713c1c` is `pom_height_map` — recovered, not guessed.
+
+    The missing axis was the non-layer parameter GROUPS: the uber-material
+    declares a parallax-occlusion group alongside `layer0..layer3`, and that
+    group declares a `height_map` sampler — so the input is `pom_<member>`,
+    exactly like `layer0_<member>`. `symbol64` reproduces the shipped hash
+    exactly, which is the only reason the name is accepted.
+    """
+    assert f"{msc.symbol64('pom_height_map'):016x}" == "602e82b525713c1c"
+    assert amm.build_name_table()[0x602e82b525713c1c] == "pom_height_map"
+
+
+def test_two_remaining_unknowns_are_scan_artifacts_not_names():
+    """`05575a94091f1839` and `80a6642707ce0367` are NOT parameter names.
+
+    Each equals the *shaderset's own hash* and appears once, at entry_offset 768
+    with slot=0 type=0 layer=1032 engineresource=4096 and denormal uscale/vscale
+    (1.6e-36 / 5.7e-42) — the scanner mistook the shaderset name field for an
+    input entry. They are the only two rows anywhere in the scan where
+    `inputname_hash == shaderset_hash`.
+
+    Guard: they must never acquire a "cracked" name. A name may only be added
+    here when symbol64(name) reproduces the hash exactly.
+    """
+    table = amm.build_name_table()
+    for h in (0x05575a94091f1839, 0x80a6642707ce0367):
+        assert h not in table, f"{h:016x} must stay unnamed (it is a scan artifact)"

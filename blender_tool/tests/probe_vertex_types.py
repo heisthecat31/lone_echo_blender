@@ -119,7 +119,7 @@ def probe(archives):
         for (usage, typ), c in sorted(packed_on_renderable.items()):
             print(f"  {usage} {typ}: {c}")
         print("VERDICT: packed types ARE used on renderable usages -> "
-              "byte-verify their bit layout (needs-disasm).")
+              "byte-verify their bit layout.")
     else:
         print("  (none)")
         print("VERDICT: packed types 7/9/10 are UNUSED on renderable usages in "

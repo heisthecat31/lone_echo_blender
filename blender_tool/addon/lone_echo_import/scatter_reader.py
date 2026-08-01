@@ -369,7 +369,7 @@ def basis_matrix(y_up_to_z_up: bool = True) -> Mat4:
     THE single place the basis is defined (tweak here at integration time). The
     default is a PURE +90 deg rotation about X (determinant +1, no mirror): it
     sends game (x, y, z) -> Blender (x, -z, y), identical to the .lemesh
-    importer's `mesh_builder._axis_matrix` (AXIS_CALIBRATION.md). When
+    importer's `mesh_builder._axis_matrix` (see docs/FORMATS.md). When
     `y_up_to_z_up` is False, B is identity (native passthrough).
     """
     if not y_up_to_z_up:

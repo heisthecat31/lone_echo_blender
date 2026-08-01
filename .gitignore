@@ -15,6 +15,13 @@ blender_tool/dist/
 *.lemesh/
 *.lescatter/
 
+# Corpus indexes and scan inputs you generate from YOUR OWN game install.
+# These are derived from game data -- they are yours, not ours, and must never
+# be committed here. `scan_inputs/` is the default LONE_ECHO_SCAN_ROOT.
+scan_inputs/
+generic_rebuilds/
+*_archive_index.tsv
+
 # Proprietary Oodle DLL and game data must NEVER be committed
 *.dll
 game_data/

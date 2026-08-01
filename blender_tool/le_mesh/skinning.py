@@ -523,8 +523,7 @@ def decode_skeleton(blob: bytes) -> Skeleton:
         if disk_jh == 0:
             skel.notes.append(
                 "jointhierarchy.count == 0 on disk: no hierarchy/bind pose is "
-                "serialized in this resource; names-only is authoritative "
-                "[stream-confirmed]")
+                "serialized in this resource; names-only is authoritative")
         elif disk_jh is not None and lookup is not None and 0 < disk_jh < lookup_n:
             skel.notes.append(
                 f"a smaller {disk_jh}-joint hierarchy IS serialized (< {lookup_n} "
@@ -569,8 +568,7 @@ def decode_skeleton(blob: bytes) -> Skeleton:
             j.object_bind = object_mats[i]
             j.inverse_bind = inverse_mats[i]
         note = ("object/inverse-bind matrices decoded (objectjoints + "
-                "invobjectjoints, CTransfQ blocks); object[i]@inverse[i]==I "
-                "[stream-confirmed]")
+                "invobjectjoints, CTransfQ blocks); object[i]@inverse[i]==I")
         # extra corroboration when a local bind pose + hierarchy are also present
         if skel.has_bindpose and skel.has_hierarchy:
             local = [_mat_from_transfq(j.r, j.t, j.s) for j in skel.joints]

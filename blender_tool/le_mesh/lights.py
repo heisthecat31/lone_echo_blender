@@ -5,9 +5,10 @@ Lone Echo (Win7) `CGSceneResourceWin7` payload and converts each record into
 Blender light parameters.
 
 ⚠ IMPORTING THESE LIGHTS NAIVELY IS WRONG. Most Lone Echo level lights are
-SPECULAR-ONLY and sit on top of a BAKED lightmap this tool does not yet import,
-so adding them to a Blender scene double-lights it. Read `docs/LIGHTING.md`
-before wiring this into an importer. The decoder ships; a light importer does not.
+SPECULAR-ONLY and sit on top of a BAKED lightmap, so adding all of them to a
+Blender scene double-lights it. A light importer ships from 0.3.0, but it is
+**off by default** and imports only the `eEnableDiffuse` subset — see
+`select_lights()` below and `docs/LIGHTING.md`.
 
 ==============================================================================
 WHERE THE LIGHTS LIVE
@@ -361,6 +362,151 @@ def decode_lights_table(buf, off: int = 0, max_count: int = 1_000_000):
             for i in range(count)], end
 
 
+# The three 4-byte holes the 352 B grid leaves unnamed. All zero on the shipped
+# records inspected, so `encode_light` writes zeros there and the round-trip is
+# byte-exact (tests/test_lights.py::test_encode_light_is_byte_exact_on_real_records).
+PAD_OFFSETS = (0xA4, 0xCC, 0x154)
+
+
+def encode_light(rec: LightRecord) -> bytes:
+    """Exact inverse of `decode_light` — 352 bytes.
+
+    Exists so fixtures and tests can be built from verified field values without
+    touching an archive (and so `decode(encode(r)) == r` pins the field grid).
+    The three unnamed pad words (`PAD_OFFSETS`) are written as zero; they are
+    zero on every shipped record inspected, so a re-encode of real bytes is
+    byte-exact. That the pads are always zero is an observation, not a guarantee.
+    """
+    buf = bytearray(STRIDE)
+    p = struct.pack_into
+    p("<II", buf, 0x00, rec.options & 0xFFFFFFFF, rec.lighttype & 0xFFFFFFFF)
+    p("<3f", buf, 0x08, *rec.pos)
+    p("<3f", buf, 0x14, *rec.primarycolor)
+    p("<3f", buf, 0x20, *rec.secondarycolor)
+    p("<4f", buf, 0x2C, *rec.attenuation)
+    p("<4f", buf, 0x3C, *rec.orientation)
+    p("<f", buf, 0x4C, rec.fovy)
+    p("<f", buf, 0x50, rec.nearp)
+    p("<f", buf, 0x54, rec.farp)
+    p("<f", buf, 0x58, rec.filtersize)
+    p("<3f", buf, 0x5C, *rec.direction)
+    p("<2f", buf, 0x68, *rec.penumbra)
+    p("<f", buf, 0x70, rec.falloff)
+    p("<f", buf, 0x74, rec.attenmethod)
+    p("<f", buf, 0x78, rec.bias)
+    p("<f", buf, 0x7C, rec.shadowfadestart)
+    p("<f", buf, 0x80, rec.shadowfadeend)
+    p("<f", buf, 0x84, rec.shadowthrottledist)
+    f = rec.fade
+    p("<6f", buf, 0x88, f["proximityend"], f["proximitystart"], f["proximityintensity"],
+      f["distantstart"], f["distantend"], f["distantintensity"])
+    p("<I", buf, 0xA0, int(f["fadetype"]) & 0xFFFFFFFF)
+    p("<f", buf, 0xA8, rec.shadowresolution)
+    p("<f", buf, 0xAC, rec.shadowoffsetscale)
+    p("<f", buf, 0xB0, rec.lightoffsetstart)
+    p("<f", buf, 0xB4, rec.lightoffsetdist)
+    ls = rec.lightshaft
+    p("<4f", buf, 0xB8, ls["intensity"], ls["startoffset"], ls["fadeinlen"], ls["offset"])
+    p("<i", buf, 0xC8, int(ls["slices"]))
+    p("<Q", buf, 0xD0, int(ls["goboassetid"]) & 0xFFFFFFFFFFFFFFFF)
+    p("<f", buf, 0xD8, rec.airlightminradius)
+    p("<III", buf, 0xDC, rec.lightmask & 0xFFFFFFFF, rec.visindex & 0xFFFFFFFF,
+      rec.qualitylevel & 0xFFFFFFFF)
+    p("<Q", buf, 0xE8, rec.quantizer & 0xFFFFFFFFFFFFFFFF)
+    p("<ii", buf, 0xF0, int(rec.signal[0]), int(rec.signal[1]))
+    p("<8f", buf, 0xF8, *[float(v) for v in rec.signal[2:10]])
+    p("<2f", buf, 0x118, *rec.shadowangularfade)
+    p("<Q", buf, 0x120, rec.name & 0xFFFFFFFFFFFFFFFF)
+    mask = bytes(rec.scenemask)
+    if len(mask) != 0x28:
+        raise ValueError(f"scenemask must be 0x28 B, got {len(mask)}")
+    buf[0x128:0x150] = mask
+    p("<I", buf, 0x150, rec.shadowqualitylevel & 0xFFFFFFFF)
+    p("<I", buf, 0x158, rec.cachedjointidx & 0xFFFFFFFF)
+    p("<I", buf, 0x15C, rec.jointoffsetidx & 0xFFFFFFFF)
+    return bytes(buf)
+
+
+def record_from_fields(d: dict, index: int = 0) -> LightRecord:
+    """Build a `LightRecord` from a plain field dict (an already-decoded dump or
+    a `lights.json` entry). Round-trips through `encode_light`/`decode_light`, so
+    a fixture built this way is guaranteed consistent with the 352 B grid.
+
+    Accepts either `options`/`lighttype` (raw) or the sidecar's `options_raw`,
+    and hex strings for the two CSymbol64 fields.
+    """
+    def sym(v):
+        return int(v, 16) if isinstance(v, str) else int(v)
+
+    ls = dict(d.get("lightshaft", {}))
+    ls.setdefault("intensity", 0.0)
+    ls.setdefault("startoffset", 0.0)
+    ls.setdefault("fadeinlen", 0.0)
+    ls.setdefault("offset", 0.0)
+    ls.setdefault("slices", 0)
+    ls["goboassetid"] = sym(ls.get("goboassetid", NULL_SYMBOL))
+    fade = dict(d.get("fade", {}))
+    for k in ("proximityend", "proximitystart", "proximityintensity",
+              "distantstart", "distantend", "distantintensity"):
+        fade.setdefault(k, 0.0)
+    fade["fadetype"] = int(fade.get("fadetype", 0))
+    sig = tuple(d.get("signal", (0, 0) + (0.0,) * 8))
+    mask = d.get("scenemask", b"\x00" * 0x28)
+    if isinstance(mask, str):
+        mask = bytes.fromhex(mask)
+
+    # `options` may be the raw word or the decoded name list (sidecar form)
+    opts = d.get("options_raw", d.get("options", 0))
+    if isinstance(opts, (list, tuple)):
+        names = set(opts)
+        opts = sum(b for b, n in OPTION_NAMES if n in names)
+    elif isinstance(opts, str):
+        names = set(opts.split("|"))
+        opts = sum(b for b, n in OPTION_NAMES if n in names)
+
+    # `lighttype` may be the raw enum or its name (`type` / `lighttype_name`)
+    lt = d.get("lighttype")
+    if lt is None:
+        tn = d.get("lighttype_name") or d.get("type") or ""
+        lt = next((k for k, v in LIGHT_TYPE_NAME.items() if v == tn), 0)
+
+    rec = LightRecord(
+        index=int(d.get("index", index)),
+        options=int(opts),
+        lighttype=int(lt),
+        pos=tuple(d["pos"]), primarycolor=tuple(d["primarycolor"]),
+        secondarycolor=tuple(d.get("secondarycolor", (1.0, 1.0, 1.0))),
+        attenuation=tuple(d["attenuation"]), orientation=tuple(d["orientation"]),
+        fovy=float(d.get("fovy", 0.0)), nearp=float(d.get("nearp", 0.0)),
+        farp=float(d.get("farp", 0.0)), filtersize=float(d.get("filtersize", 0.0)),
+        direction=tuple(d["direction"]), penumbra=tuple(d.get("penumbra", (-1.0, -1.0))),
+        falloff=float(d.get("falloff", 0.0)),
+        attenmethod=float(d.get("attenmethod", 2.0)),
+        bias=float(d.get("bias", 0.0)),
+        shadowfadestart=float(d.get("shadowfadestart", 0.0)),
+        shadowfadeend=float(d.get("shadowfadeend", 0.0)),
+        shadowthrottledist=float(d.get("shadowthrottledist", 0.0)),
+        fade=fade,
+        shadowresolution=float(d.get("shadowresolution", 0.0)),
+        shadowoffsetscale=float(d.get("shadowoffsetscale", 0.0)),
+        lightoffsetstart=float(d.get("lightoffsetstart", 0.0)),
+        lightoffsetdist=float(d.get("lightoffsetdist", 0.0)),
+        lightshaft=ls,
+        airlightminradius=float(d.get("airlightminradius", 0.0)),
+        lightmask=int(d.get("lightmask", 0)), visindex=int(d.get("visindex", NULL_U32)),
+        qualitylevel=int(d.get("qualitylevel", 0)),
+        quantizer=sym(d.get("quantizer", NULL_SYMBOL)),
+        signal=sig, shadowangularfade=tuple(d.get("shadowangularfade", (0.0, 0.0))),
+        name=sym(d.get("name", 0)), scenemask=bytes(mask),
+        shadowqualitylevel=int(d.get("shadowqualitylevel", 0)),
+        cachedjointidx=int(d.get("cachedjointidx", NULL_U32)),
+        jointoffsetidx=int(d.get("jointoffsetidx", NULL_U32)),
+    )
+    # normalise float precision through the on-disk grid so the fixture is
+    # exactly what a real decode would have produced
+    return decode_light(encode_light(rec), rec.index)
+
+
 # =============================================================================
 # Game -> Blender conversion
 # =============================================================================
@@ -467,7 +613,157 @@ def engine_irradiance(rec: LightRecord, distance: float):
     return tuple(c * atten for c in rec.primarycolor)
 
 
-def to_blender(rec: LightRecord) -> dict:
+def blender_matrix_rows(rec: LightRecord, y_up_to_z_up: bool = True):
+    """The light object's WORLD matrix, 4x4 row-major nested tuples.
+
+        M = A @ Translation(pos) @ R(orientation) @ Rx(180 deg)
+
+    * `A` is the ONE axis basis (`mesh_builder._axis_matrix`, +90 deg X, det +1,
+      game (x,y,z) -> (x,-z,y)); passing `y_up_to_z_up=False` makes it identity.
+      Using the same A the meshes use is what keeps the light rig aligned with
+      the geometry.
+    * `R(orientation)` is the record's own quaternion (x,y,z,w). `pos` and
+      `orientation` are already WORLD (no transform join, no parent chain).
+    * `Rx(180 deg)` is the lamp-forward flip: the engine's light forward is its
+      local **+Z** (`direction == R(q)*(0,0,1)`, 118/118) while a Blender lamp
+      emits along its local **-Z**. Rx(pi) maps -Z to +Z, det +1, no mirror.
+
+    Consequence, and the alignment invariant the tests assert:
+      `M[:3,:3] @ (0,0,-1) == blender_direction(rec)`.
+    Roll about the axis is unconstrained by the engine (no shipped light has a
+    gobo), but taking it from the quaternion keeps the result deterministic.
+    """
+    x, y, z, w = rec.orientation
+    n = math.sqrt(x * x + y * y + z * z + w * w)
+    if n > 1e-12:
+        x, y, z, w = x / n, y / n, z / n, w / n
+    # column-major-free: R[r][c]
+    R = (
+        (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
+        (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
+        (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)),
+    )
+    # R @ Rx(pi): negate columns 1 and 2
+    RF = tuple(tuple((R[r][c] if c == 0 else -R[r][c]) for c in range(3)) for r in range(3))
+    A = ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)) if y_up_to_z_up else \
+        ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    M = tuple(tuple(sum(A[r][k] * RF[k][c] for k in range(3)) for c in range(3))
+              for r in range(3))
+    t = to_blender_vec(rec.pos) if y_up_to_z_up else tuple(rec.pos)
+    return (M[0] + (t[0],), M[1] + (t[1],), M[2] + (t[2],),
+            (0.0, 0.0, 0.0, 1.0))
+
+
+# --- import policy: which lights are safe to import -------------------------
+#
+# Measured on 118 shipped level lights: only 49 set `eEnableDiffuse`
+# (station_front 15/47, bridge_night 28/65) while 112/118 set `eEnableSpecular`.
+# The specular-only majority exists to put highlights on surfaces whose DIFFUSE
+# response is already baked into the lightmap + irradiance volumes (86 of 87
+# lit-surface shaders bind BOTH paths). Blender has neither a specular-only lamp
+# nor the baked diffuse underneath, so importing all of them DOUBLE-LIGHTS the
+# scene — measured 7.06x brighter than the diffuse subset. Default to the
+# diffuse subset; "all" is opt-in.
+LIGHT_SET_DIFFUSE = "diffuse"     # DEFAULT -- eEnableDiffuse only
+LIGHT_SET_ALL = "all"             # opt-in, double-lights (warns)
+LIGHT_SET_ENABLED = "enabled"     # every runtime light, diffuse or not
+LIGHT_SETS = (LIGHT_SET_DIFFUSE, LIGHT_SET_ALL, LIGHT_SET_ENABLED)
+
+
+def select_lights(records, light_set: str = LIGHT_SET_DIFFUSE,
+                  skip_disabled: bool = True):
+    """Apply the import policy. Returns (kept, stats).
+
+    `stats` reports every reason a record was dropped so the caller can surface
+    an honest count instead of silently importing fewer lights than the level has.
+    """
+    if light_set not in LIGHT_SETS:
+        raise ValueError(f"light_set must be one of {LIGHT_SETS}, got {light_set!r}")
+    kept = []
+    stats = {"total": 0, "kept": 0, "skipped_disabled": 0,
+             "skipped_specular_only": 0, "specular_only_kept": 0,
+             "diffuse_enabled": 0, "specular_enabled": 0, "light_set": light_set}
+    for r in records:
+        stats["total"] += 1
+        stats["diffuse_enabled"] += 1 if r.affects_diffuse else 0
+        stats["specular_enabled"] += 1 if r.affects_specular else 0
+        if skip_disabled and not r.enabled:
+            stats["skipped_disabled"] += 1
+            continue
+        if light_set == LIGHT_SET_DIFFUSE and not r.affects_diffuse:
+            stats["skipped_specular_only"] += 1
+            continue
+        if not r.affects_diffuse:
+            stats["specular_only_kept"] += 1
+        kept.append(r)
+    stats["kept"] = len(kept)
+    return kept, stats
+
+
+def not_derivable(rec: LightRecord) -> dict:
+    """Fields that exist on disk but have NO faithful Blender equivalent, plus
+    the ones that are not on disk at all. An importer should carry these onto the
+    object as inert custom properties and MUST NOT invent values for them.
+
+    * `filtersize` is a shadow-map PCF filter width in texels -- it is NOT a
+      light radius. `SGLightParams` carries no source-size field whatsoever, so
+      `shadow_soft_size` is imported as 0 (a true point source).
+    * `falloff` is the extra `pow(cos a, falloff)` cone weighting -- Blender's
+      spot has no such exponent. Non-zero on 12/118.
+    * `faderangeoffset` is computed at runtime and never stored; see
+      `range_offset()`.
+    * `lightmask` / `scenemask` / `visindex` / `qualitylevel` are per-receiver
+      and per-scene-set gating with no Blender analogue -- a light with
+      `lightmask == 2` lights only receivers carrying bit 1, so importing every
+      light over-lights.
+    * `attenuation.w` is unresolved (== .z on 107/118, differs on 11).
+    * absolute exposure: the game auto-exposes and tonemaps these HDR values, so
+      only RATIOS are meaningful. Calibrate Film Exposure once per level.
+    """
+    return {
+        "filtersize_pcf": rec.filtersize,
+        "cone_falloff_exponent": rec.falloff,
+        "faderangeoffset_runtime": range_offset(rec),
+        "lightmask": rec.lightmask,
+        "scenemask": rec.scenemask.hex(),
+        "visindex": rec.visindex,
+        "qualitylevel": rec.qualitylevel,
+        "shadowqualitylevel": rec.shadowqualitylevel,
+        "attenuation_w": rec.attenuation[3],
+        "affects_diffuse": rec.affects_diffuse,
+        "affects_specular": rec.affects_specular,
+        "lightshaft_intensity": rec.lightshaft["intensity"],
+        "airlightminradius": rec.airlightminradius,
+    }
+
+
+def range_offset_divergence(rec: LightRecord, fraction: float = 0.5):
+    """Quantify the ONE systematic brightness error: the engine subtracts
+    `faderangeoffset` so attenuation reaches exactly 0 at the range, and Blender
+    has no such term.
+
+    Returns `(game_over_blender, blender_over_game)` at `fraction * range`.
+    For the physical case (`attenmethod == 2`) at half range the engine is at
+    `3/R^2` where Blender is at `4/R^2`:
+        game/blender  = 0.75  -> the game is 25 % DIMMER than the import
+        blender/game  = 1.333 -> the import is 33 % BRIGHTER than the game
+    `use_custom_distance` + `cutoff_distance = range` clips the tail but does not
+    fix the shape.
+    """
+    if rec.lighttype == eDirectionalLight:
+        return 1.0, 1.0
+    d = rec.range * fraction
+    if d <= 0.0:
+        return 1.0, 1.0
+    blender = 1.0 / (d ** rec.attenmethod) if rec.attenmethod else 1.0
+    game = blender - range_offset(rec)
+    if blender <= 0.0:
+        return 1.0, 1.0
+    ratio = max(0.0, game) / blender
+    return ratio, (1.0 / ratio if ratio > 0.0 else float("inf"))
+
+
+def to_blender(rec: LightRecord, y_up_to_z_up: bool = True) -> dict:
     """Everything an importer needs for one light, in Blender terms."""
     color, peak = normalized_color(rec.primarycolor)
     spot_size, spot_blend = blender_spot(rec)
@@ -477,6 +773,7 @@ def to_blender(rec: LightRecord) -> dict:
         "type": BLENDER_TYPE.get(rec.lighttype, "POINT"),
         "location": blender_position(rec),
         "direction": blender_direction(rec),
+        "matrix": blender_matrix_rows(rec, y_up_to_z_up),
         "color": color,
         "energy": blender_energy(rec),
         "peak_radiance": peak,
@@ -494,4 +791,5 @@ def to_blender(rec: LightRecord) -> dict:
         "cone_falloff_exponent": rec.falloff,   # no Blender equivalent
         "lightmask": rec.lightmask,
         "options": rec.option_names,
+        "not_derivable": not_derivable(rec),
     }

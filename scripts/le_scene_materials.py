@@ -61,6 +61,15 @@ import le_cross_archive_texture as s67                   # noqa: E402
 from le_mesh import materials as mat                                   # noqa: E402
 from le_mesh import material_scalars as msc                            # noqa: E402
 
+# Windows consoles default to cp1252 and argparse echoes this module's docstring
+# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
+# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
+        pass
+
 ARCHIVE_PRIMARY = s67.ARCHIVE_PRIMARY
 ARCHIVE_GPU     = s67.ARCHIVE_GPU
 

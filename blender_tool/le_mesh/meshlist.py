@@ -39,6 +39,7 @@ M_FLAGS = 0x4C         # u32 EFlags
 M_PROBEIDX = 0x50
 M_LIGHTMAPINDEX = 0x6C
 M_LMSLICEINDEX = 0x70
+M_NUMLOBES = 0x74      # u32, lightmap SG lobe count (4 on 1221/1221 shipped)
 M_OUTLINEMODE = 0x7C
 
 # --- CGRenderParams (0x68) field offsets ------------------------------------
@@ -148,6 +149,13 @@ class MeshObject:
     indices: list[int]
     index_size: int
     draws: list[Draw] = field(default_factory=list)
+    # `CGMeshData.numlobes @0x74` -- the lightmap's spherical-gaussian lobe count.
+    # Reads 4 on 1221/1221 shipped meshes, while the colour lightmap array holds
+    # 5 slices per page, so 5 == numlobes + 1. Which of "4 lobes + 1 extra" or
+    # "a 5-lobe bake whose numlobes means something else" is correct is still
+    # unresolved -- see `le_mesh/lightmap.py`. Defaulted so the dangling-reference
+    # path and any older caller keep working.
+    numlobes: int = 0
 
     @property
     def shadow_only(self) -> bool:
@@ -256,6 +264,7 @@ def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,
         aabb = struct.unpack_from("<6f", primary, m + M_AABB)
         lightmap_index = _u32(primary, m + M_LIGHTMAPINDEX)
         lm_slice_index = _u32(primary, m + M_LMSLICEINDEX)
+        numlobes = _u32(primary, m + M_NUMLOBES)
         outline_mode = _u32(primary, m + M_OUTLINEMODE)
 
         if vb_index >= vertexbuffers.count or ib_index >= indexbuffers.count:
@@ -291,6 +300,7 @@ def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,
             aabb_max=aabb[3:6],
             lightmap_index=lightmap_index,
             lm_slice_index=lm_slice_index,
+            numlobes=numlobes,
             outline_mode=outline_mode,
             vertex_count=vcount,
             vertex_stride=stride,

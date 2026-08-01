@@ -1,12 +1,15 @@
 # Lighting
 
-**Status: the light *decoder* ships. A light *importer* deliberately does not.**
+**Status (0.3.0): the light importer ships, OFF BY DEFAULT, and imports only the
+`eEnableDiffuse` subset. The baked lightmap is decoded but not yet auto-wired.**
 
 `le_mesh/lights.py` decodes the `SGLightParams` table out of a level's scene
 resource and converts each record into Blender light parameters, with unit tests.
 `blender_tool/extractor/le_lights.py` writes those records to a `lights.json`
-sidecar without decompressing a whole archive. Neither is wired into the add-on,
-and that is on purpose.
+sidecar without decompressing a whole archive. `addon/lone_echo_import/
+light_import.py` imports that sidecar as Blender lamps — but you have to ask for
+it, and by default it drops the specular-only majority. Read the next section
+before turning it on.
 
 ---
 
@@ -39,14 +42,95 @@ these lights to a Blender scene and you **double-light** it: the baked diffuse t
 lights were authored to sit on top of is simply absent, and the specular-only
 lights start contributing diffuse they were never meant to contribute.
 
-**This tool does not import the lightmap yet.** Until it does, a light importer
-would make results *less* faithful, not more, which is why the decoder ships behind
-no UI. If you build one anyway: ship it **off by default**, respect
-`eEnableDiffuse`, and expect to calibrate exposure per level by hand.
+Measured: importing every light rather than the `eEnableDiffuse` subset is
+**7.06× brighter** on identical receivers.
 
-The single highest-value lighting work for "make Blender look like the game" is the
-**baked** side — the HDR lightmap plus `uv1` and the AO channels — not these
-records.
+**The lightmap is not auto-wired yet.** Until it is, a naive light import makes
+results *less* faithful, not more — which is why the importer is off by default
+and, when on, defaults to the diffuse subset only.
+
+---
+
+## Using the light importer
+
+**File > Import > "Lone Echo Lights (.json)"**, or headless:
+
+```python
+import lone_echo_import
+lone_echo_import.import_lights("path/to/lights.json", bpy.context,
+                               {"light_set": "diffuse"})
+```
+
+Options (`DEFAULT_OPTS` in `light_import.py`):
+
+| option | default | meaning |
+|---|---|---|
+| `import_lights` | **`False`** | the whole importer is opt-in |
+| `light_set` | `"diffuse"` | `eEnableDiffuse` only. `"all"` is an explicit opt-in that returns a warning and parks the specular-only lamps in a hidden child collection |
+| `skip_disabled` | `True` | drop records with `eLightEnabled` clear |
+| `hide_specular_only` | `True` | with `light_set="all"`, hide them rather than lighting with them |
+| `y_up_to_z_up` | `True` | **the** axis basis — the same one the meshes use |
+| `use_custom_distance` | `True` | clip at `attenuation.z` |
+| `cycles_falloff_nodes` | `True` | build a Light Falloff node when `attenmethod != 2` (Cycles only; lossy in EEVEE) |
+| `exposure_scale` | `1.0` | USER calibration. 1.0 is the raw unit conversion — not a fudge factor |
+| `scene_filter` | `None` | import one scene by hash or name |
+
+The lamp's world matrix is `A · T(pos) · R(orientation) · Rx(180°)`, where `A` is
+the same Y-up→Z-up basis the meshes use and `Rx(180°)` is the lamp-forward flip
+(the engine's light forward is local **+Z**; a Blender lamp emits along local
+**−Z**). The alignment invariant the tests assert is
+`M[:3,:3] · (0,0,−1) == blender_direction(rec)`.
+
+Nothing undecodable is invented: `filtersize`, the cone `falloff` exponent, the
+runtime range offset, `lightmask`/`scenemask`/`visindex`/`qualitylevel` and
+`attenuation.w` all ride along as inert `le_*` custom properties.
+
+---
+
+## The baked lightmap
+
+`le_mesh/lightmap.py` decodes `CGLightMapResourceWin7` — a compact
+`[u32 count][count × 0x28]` array of five-`CSymbol64` rows (HDR colour, two AO
+maps, two occlusion maps) — plus the join that says *which* lightmap resource a
+given mesh indexes into, and `CGMeshData.lightmapindex` / `lmsliceindex` /
+`numlobes`. `addon/lone_echo_import/lightmap_builder.py` can wire it onto a
+material node graph.
+
+Three things a user has to know:
+
+* **The bake is SG5, not a single colour map.** The colour texture is a DX10
+  texture ARRAY: `arraySize 65` against AO siblings of `arraySize 13`, and
+  65 = 13 × 5. The engine indexes it `lightmapuv.z = lightmapuv.z * 5 + i`
+  (i = 0..4), so the array is **13 lightmap pages × 5 spherical-gaussian lobes,
+  page-major**: `slice = page * 5 + i`. Each page holds five radiance lobes in
+  TANGENT space and the diffuse term is
+  `Σ saturate(dot(lobe_dir_i, n_ts)) × (2/λ) × scale × lobe_i`.
+* **Blender exposes only slice 0 of an array DDS**, measured on 5.1.1: the array
+  file's pixels are bit-identical to split slice 0 and differ from every other
+  slice. A mesh on page 7 would therefore silently render page 0's lobe 0. The
+  importer splits the array itself — pure stdlib, one file per slice, cached next
+  to the source.
+* **Colour space is `Linear Rec.709`.** Blender 5.1.1 loads the DXGI-95
+  `BC6H_UF16` DDS natively as a float image and its loader auto-assigns exactly
+  that. `Linear Rec.709` and `Non-Color` are numerically identical under the stock
+  OCIO config; `sRGB` is a silent double-gamma (the shipped brightest texel
+  `(1.900, 2.014, 1.688)` comes back as `(4.397, 5.033, 3.339)`, ×2.31–2.50). We
+  set it explicitly rather than trusting the default, and prefer `Linear Rec.709`
+  over `Non-Color` so a non-default OCIO config still converts correctly.
+
+⚠ **What is NOT wired:** the resource → mesh join is decoded and tested, and
+`lightmap_builder` can build the node graph, but `material_builder` does not call
+it automatically and the extractor does not yet write a lightmap block into the
+`.lemesh` manifest. Driving it today means calling `wire_lightmap` yourself (the
+in-Blender probes `tests/blender_lightmap_probe.py` and
+`tests/blender_lightmap_render.py` do exactly that).
+
+⚠ **What is still unresolved:** what the 5th colour slice per page is.
+`CGMeshData.numlobes` reads 4 on every shipped mesh measured (1221/1221), so 5 is
+`numlobes + 1`; the slot the colour map fills is a *lobe basis* and the engine's
+basis enum offers both a 4-lobe and a 5-lobe spherical-gaussian option. Nothing
+measured separates them. The semantics of the two BC5 AO maps are also not
+decoded.
 
 ---
 
@@ -294,7 +378,22 @@ block (location, direction, colour, energy, spot size/blend, cutoff distance). T
 raw fields are authoritative; the derived block is this document's arithmetic
 applied for you.
 
-Unit tests: `blender_tool/tests/test_lights.py` (20 tests, archive-free). Its
+There is also an **archive-free** path that runs under plain `python3` and never
+opens a primary — it re-serialises an already-decoded dump into the current
+sidecar schema, pushing every record back through `encode_light`/`decode_light` so
+the result is byte-consistent with the 352-byte grid:
+
+```bash
+python3 blender_tool/extractor/le_lights.py \
+    --from-json <decoded-dump.json> --scene <scene-name> \
+    --out blender_tool/exports/<name>_lights.json
+```
+
+Unit tests: `blender_tool/tests/test_lights.py` (the decoder and the units) and
+`blender_tool/tests/test_light_import.py` (the sidecar, the selection policy, the
+axis and the add-on's duplicated arithmetic). Both are archive-free, and their
 fixtures are **constructed**, not extracted — this repository ships no game bytes —
 so they lock the decoder's offset table and the unit arithmetic. The corpus
 measurements quoted above live here, in the documentation, not in the test data.
+Set `LONE_ECHO_LIGHTS_JSON` to a sidecar you extracted yourself and
+`test_light_import.py` re-runs its invariants against your real data too.

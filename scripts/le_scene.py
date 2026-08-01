@@ -224,7 +224,7 @@ def resolve_world(actor: str, transforms: dict, cache: dict, stack: set):
                "eJoint rest-pose needs parent skeleton "
                "(jointorrefpointname attaches to a bone on the parent actor's rig)")
     elif pt == E_AUTO:
-        res = (local, False, "eAuto = runtime-selected parent, needs-disasm")
+        res = (local, False, "eAuto = runtime-selected parent, not decoded")
     elif pt == E_REFPOINT:
         res = (local, False, "eRefPoint = shapelists.transformlist, unimplemented")
     else:

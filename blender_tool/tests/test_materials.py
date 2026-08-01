@@ -78,7 +78,13 @@ def test_emissive_intensity_layer_fallback():
     )
     s = msc.decode_material_scalars(slice_bytes)
     assert s["emissive_intensity"] == 2.5
-    assert s["is_emissive"] is False       # bakeemissivecolor RGB all zero
+    # `is_emissive` is no longer gated on bakeemissivecolor: that field is
+    # (0,0,0) on 19 of 19 shipped materials inspected, INCLUDING every genuinely
+    # emissive one, so it under-reports emission and must not be the gate. The
+    # bake-time signal survives as `bake_emissive_nonzero`.
+    assert s["bake_emissive_nonzero"] is False   # bakeemissivecolor RGB all zero
+    assert s["is_emissive"] is True              # layer2_emissive_intensity = 2.5
+    assert s["emissive_layer_indices"] == [2]
     assert s["alpha"] == 1.0               # k_alpha absent -> default
     assert s["double_sided"] is False
 
@@ -201,13 +207,19 @@ def test_channel_role_lists_reference_known_roles():
     """A channel list may not route to a role the table does not define."""
     known = {role for role, _ in mat.INPUTNAME_ROLE.values()}
     for name in ("BASE_COLOR_ROLES", "NORMAL_ROLES", "ROUGHNESS_ROLES",
-                 "OPACITY_ROLES", "EMISSION_ROLES", "TRANSLUCENCY_ROLES"):
+                 "SPECULAR_ROLES", "ALPHA_ROLES", "TRANSMISSION_ROLES",
+                 "OPACITY_ROLES", "EMISSION_ROLES", "SECONDARY_EMISSION_ROLES",
+                 "TRANSLUCENCY_ROLES", "BLEND_MASK_ROLES", "FLOWMAP_ROLES"):
         unknown = [r for r in getattr(mat, name) if r not in known]
         assert not unknown, f"{name} routes to undefined roles: {unknown}"
 
     # the three mis-assignments the fabricated names caused must not come back
-    assert "layer1_alpha_map" not in mat.ROUGHNESS_ROLES      # it is opacity
-    assert "layer1_alpha_map" in mat.OPACITY_ROLES
+    assert "layer1_alpha_map" not in mat.ROUGHNESS_ROLES      # it is the alpha chain
+    assert "layer1_alpha_map" in mat.ALPHA_ROLES
+    # ...and `layerN_alpha_map` is no longer conflated with the opacity/transmission
+    # tint: OPACITY_ROLES is now a deprecated alias of TRANSMISSION_ROLES.
+    assert "layer1_alpha_map" not in mat.OPACITY_ROLES
+    assert mat.OPACITY_ROLES == mat.TRANSMISSION_ROLES
     assert "layer0_back_lighting_map" not in mat.EMISSION_ROLES   # it is translucency
     # the two *_composite_specular maps were routed to BASE COLOUR under their
     # fabricated names ("layer0_rgba_surface" / "layer1_glass_rgba"); they are

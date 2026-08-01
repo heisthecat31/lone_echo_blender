@@ -44,25 +44,38 @@ dead ends already ruled out, not a claim that everything works.
 | Multi-material meshes (one slot per draw) | **works** |
 | **LOD selection**, both systems | **works** — new in 0.2.0 |
 | Base color + normal maps (incl. BC5 normal reconstruction) | **works** |
-| **Transparency and emission** | ⚠ **do not reach the renderer at all** |
-| Baked lightmaps | not imported |
-| Scene lights | **decoded, deliberately not imported** |
+| **Transparency, emission, specular/F0, roughness+AO, layer blend masks** | **works on `.lemesh`** — new in 0.3.0 |
+| The same, on `.lescatter` whole-level imports | ⚠ **still base colour + normal only** |
+| **Scene lights** | **imported — off by default**, `eEnableDiffuse` subset — new in 0.3.0 |
+| Baked lightmaps | **decoded, not auto-wired** |
 
-Two of those deserve to be spelled out.
+Four of those deserve to be spelled out.
 
-**Materials are only partly wired.** Base colour and normal maps work. Transparency
-and emission do **not**: an end-to-end audit found every exported `.lemesh` manifest
-carries `"materials": []`, and there are **nine breaks** in the
-decoder → manifest → builder → EEVEE chain. Two are fixed in 0.2.0; the other seven
-are documented, with file-level detail, in [docs/MATERIALS.md](docs/MATERIALS.md).
-Do not read "PBR" here as "full PBR".
+**Materials are wired on the `.lemesh` path, not the `.lescatter` one.** An
+end-to-end audit found **nine breaks** in the decoder → manifest → builder → EEVEE
+chain. Two were fixed in 0.2.0 and five more in 0.3.0; the remaining two are both
+in the scatter sidecar, which still writes only base colour and normal. See
+[docs/MATERIALS.md](docs/MATERIALS.md).
 
-**Lights are decoded but importing them naively is wrong.** Most Lone Echo level
-lights are **specular-only** (of 118 decoded records only 49 carry `eEnableDiffuse`;
-on one 47-light level only 15 do) and they sit on top of a **baked** lightmap this
-tool does not yet import — 86 of the 87 lit shaders bind both paths. Blender has
-neither, so importing them **double-lights the scene**. The decoder ships; a light
-importer deliberately does not. See [docs/LIGHTING.md](docs/LIGHTING.md).
+**Materials and textures do not live in the archive that binds them.** Shadersets
+are 100 % resident, but 88 of 115 texture bindings are external on one reference
+archive, and materials are only ~19 % resident. A resolver that assumes local
+fails *silently*. 0.3.0 fixes it with two corpus-wide indexes you generate once
+from your own game data — see [Build the corpus indexes](#build-the-corpus-indexes-once).
+Without them the extractor still runs, but it warns loudly and finds far less.
+
+**Lights are imported, but off by default.** Most Lone Echo level lights are
+**specular-only** (of 118 decoded records only 49 carry `eEnableDiffuse`; on one
+47-light level only 15 do) and they sit on top of a **baked** lightmap this tool
+does not auto-wire — 86 of the 87 lit shaders bind both paths. Blender has neither,
+so importing them all **double-lights the scene**, measured at **7.06× brighter**.
+The importer therefore ships off, and when enabled it defaults to the
+`eEnableDiffuse` subset. See [docs/LIGHTING.md](docs/LIGHTING.md).
+
+**The baked lightmap is decoded but not joined up.** The resource, the mesh binding
+and the node graph all exist and are tested; nothing calls them automatically yet.
+It is an **SG5 array** — 13 pages × 5 lobes, `slice = page*5 + i` — and Blender
+exposes only slice 0 of an array DDS, so the importer splits the slices itself.
 
 ## How it works
 
@@ -133,8 +146,30 @@ variables (set only what your setup needs):
 | `LONE_ECHO_DATA_ROOT` | Root of your extracted game-data tree. |
 | `LONE_ECHO_OODLE_DLL` | Path to your own copy of the Oodle runtime DLL. |
 | `PYOODLE_PATH` | Location of the `pyoodle` checkout (only if it is not `pip install`-ed). |
+| `LONE_ECHO_SCAN_ROOT` | Where the optional scan inputs and the corpus indexes live (default: `scan_inputs/` in this repository). |
 
 All extractor commands must run under **Windows Python** (`python.exe`).
+
+### Build the corpus indexes (once)
+
+Neither textures nor materials reliably live in the archive that binds them, so
+the extractor needs a corpus-wide `hash -> home archive` map for each. **These are
+your data and are not shipped** — generate them once from your own install:
+
+```bat
+python.exe scripts\le_texture_archive_index.py
+python.exe scripts\le_material_archive_index.py
+```
+
+They write `texture_archive_index.tsv` and `material_archive_index.tsv` into
+`%LONE_ECHO_SCAN_ROOT%`. Each decompresses every archive **primary** in turn (the
+much larger GPU files are never touched); run them one at a time. `--priority-only`
+builds a fast partial index from the shared/master archives first.
+
+Without these, `le_extract.py` prints a warning naming exactly what is lost —
+texture roles resolve only for same-archive textures (a small minority of
+bindings), and ~81 % of materials fall back to `SGMaterialData` defaults and read
+as plain opaque.
 
 ### Extract a single mesh or model → `.lemesh`
 
@@ -144,8 +179,11 @@ python.exe blender_tool\extractor\le_extract.py ^
     --out blender_tool\exports --textures --direct-materials
 ```
 
-- `--textures` extracts the referenced textures alongside the package.
-- `--direct-materials` resolves each material's textures directly from the data.
+- `--textures` extracts the referenced textures alongside the package, pulling
+  each one from the archive it actually lives in.
+- Material roles are resolved **live from the archive** by default;
+  `--tsv-materials` switches back to precomputed scan TSVs under
+  `%LONE_ECHO_SCAN_ROOT%`.
 - `--all` extracts every mesh in the archive; `--list` prints the available meshes.
 
 The package is written to `blender_tool\exports\<archive>_<mesh>.lemesh\`.
@@ -184,7 +222,7 @@ With the add-on enabled, use **File > Import** and pick the package's
   (highest detail)**; `All levels (stacked)` reproduces the pre-0.2.0 behaviour.
   Clamped per mesh, and a no-op for the vast majority of mesh-lists, which carry no
   chain.
-- **Import Materials** — build materials for each draw (base colour + normal; see
+- **Import Materials** — build a full Principled material for each draw (see
   [Status](#status--what-works-and-what-does-not)).
 - **Include Shadow-Only Meshes** — also import meshes flagged shadow-only.
 - **Flip UV V** — convert top-left UV origin to Blender's bottom-left.
@@ -193,6 +231,14 @@ With the add-on enabled, use **File > Import** and pick the package's
   the meshes to it.
 - **Apply Scene Placement** — position the imported meshes at their level world
   transforms using an accompanying scene description.
+
+### Lone Echo Lights (.json) — scene lights
+
+**File > Import > "Lone Echo Lights (.json)"**, pointed at a `lights.json` written
+by `blender_tool/extractor/le_lights.py`. ⚠ **Off by default and, when enabled,
+imports only the `eEnableDiffuse` subset** — importing all of them is 7.06×
+brighter and double-lights a scene whose diffuse is already baked. See
+[docs/LIGHTING.md](docs/LIGHTING.md).
 
 ### Lone Echo Scatter (.lescatter) — whole levels
 
@@ -214,11 +260,21 @@ Each unique mesh is built once and shared across all of its instances as a linke
 duplicate, so even tens of thousands of instances stay memory-light.
 
 **Materials.** Meshes with more than one draw get **one material slot per draw**,
-with each face assigned to its covering draw. Each material is a Principled BSDF
-carrying **base colour plus normal**, with **BC5 normal reconstruction** wired into
-the shader graph. ⚠ That is the whole of it — **transparency and emission are not
-wired through**, and neither is the baked lightmap. See
-[docs/MATERIALS.md](docs/MATERIALS.md) for exactly where the chain breaks.
+with each face assigned to its covering draw. On the `.lemesh` path each material
+is a Principled BSDF carrying base colour, normal (with **BC5 normal
+reconstruction**), roughness (`composite_components.R`, taken **raw** — the
+engine's GGX alpha is already `sqrtroughness²`), specular/F0 through `Specular
+Tint`, the full alpha chain including `k_alpha`, an `opacity_map` transmission
+tint as an added Transparent BSDF, emission at
+`layerN_emissive_intensity × k_emissive_scale`, and per-layer blend-mask
+compositing. The render pass comes from `surface_render_method`, never the dead
+`blend_method` alias, and every image is loaded `CHANNEL_PACKED` so Blender does
+not premultiply packed alpha into the albedo.
+
+⚠ **`.lescatter` imports are still base colour + normal only** — the scatter
+sidecar drops everything else. And the baked lightmap is decoded but not wired up
+automatically. See [docs/MATERIALS.md](docs/MATERIALS.md) and
+[docs/LIGHTING.md](docs/LIGHTING.md).
 
 **Rendering.** A headless render harness,
 `blender_tool/tests/blender_scatter_render.py`, can render a package to an image
@@ -233,7 +289,9 @@ Run the archive-free core test suite (no game data required):
 python3 blender_tool/tests/run_tests.py
 ```
 
-142 tests, none of which need game data, an archive, Oodle, or Blender.
+398 tests, none of which need game data, an archive, Oodle, or Blender. Several
+sweep an optional fixture export under `blender_tool/exports/` and skip themselves
+when it is absent.
 
 Two read-only **corpus audits** re-derive the LOD findings against your own copy of
 the game data, and one does the same for material transparency/emissive state. They
@@ -259,7 +317,7 @@ python3 scripts/scrub_gate.py
 | [docs/FORMATS.md](docs/FORMATS.md) | The `.lemesh` and `.lescatter` package formats, field by field. |
 | [docs/LOD.md](docs/LOD.md) | Both LOD systems, the numbers, and the caveats. |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | What materials carry, and exactly where the chain to the renderer breaks. |
-| [docs/LIGHTING.md](docs/LIGHTING.md) | The light record, the unit conversion, and why a light importer is not shipped. |
+| [docs/LIGHTING.md](docs/LIGHTING.md) | The light record, the unit conversion, why the importer is off by default, and the baked SG5 lightmap. |
 
 ## License
 
