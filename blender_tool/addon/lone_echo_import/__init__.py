@@ -20,22 +20,23 @@ from pathlib import Path
 bl_info = {
     "name": "Lone Echo Importer (.lemesh / .lescatter)",
     "author": "Dualgame",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (4, 1, 0),
     "location": "File > Import > Lone Echo (.lemesh) / Lone Echo Scatter (.lescatter)",
-    "description": "Import Lone Echo / NRadEngine meshes and whole scatter levels "
-                   "with full attributes, per-draw PBR materials, and skeletons",
+    "description": "Import Lone Echo / NRadEngine meshes, characters and whole "
+                   "scatter levels with full attributes, per-draw PBR materials, "
+                   "skeletons and level-of-detail selection",
     "category": "Import-Export",
 }
 
 import bpy   # type: ignore  # noqa: E402
 from bpy.props import (   # type: ignore  # noqa: E402
-    BoolProperty, EnumProperty, StringProperty,
+    BoolProperty, EnumProperty, FloatProperty, StringProperty,
 )
 from bpy_extras.io_utils import ImportHelper          # type: ignore  # noqa: E402
 
 from . import (package_reader, mesh_builder, material_builder, scene_reader,   # noqa: E402
-               scatter_reader, scatter_import, light_import)
+               scatter_reader, scatter_import, light_import, lightmap_builder)
 
 # Re-export the scatter import entry point so headless callers can use
 # `lone_echo_import.import_lescatter(pkg, context, opts)` alongside import_lemesh.
@@ -45,7 +46,7 @@ import_lescatter = scatter_import.import_lescatter
 # subset only: most shipped Lone Echo lights are SPECULAR-ONLY (49 of 118 set
 # eEnableDiffuse; 15 of 47 on station_front) and sit on top of a BAKED lightmap,
 # so importing them all double-lights the scene -- measured at 7.06x brighter on
-# identical receivers. See light_import.py's header and docs/LIGHTING.md.
+# identical receivers. See light_import.py's header and docs/LIGHTING.md §0.
 import_lights = light_import.import_lights
 
 
@@ -209,12 +210,34 @@ def _resolve_scene(pkg_path, opts):
         return None
 
 
+def _archive_collection(context, archive: str):
+    """The ONE `lescene_<archive>` collection, created on first use and REUSED.
+
+    ⚠ Assembling a level means calling `import_lemesh` once per package (51 of
+    them for the bridge) against the SAME scene.json. `bpy.data.collections.new`
+    would hand back `lescene_<archive>.001 … .050`, one per package, so the room
+    would arrive as fifty sibling collections that no consumer can select, hide
+    or export as a unit. Look the name up first, and re-link it to the scene when
+    an earlier call left it unlinked.
+    """
+    name = f"lescene_{archive}"
+    coll = bpy.data.collections.get(name)
+    if coll is None:
+        coll = bpy.data.collections.new(name)
+    if coll.name not in context.scene.collection.children:
+        try:
+            context.scene.collection.children.link(coll)
+        except Exception:      # noqa: BLE001 - already linked elsewhere in the tree
+            pass
+    return coll
+
+
 def _apply_placements(context, source_coll, placements, scene, opts) -> dict:
     """Instance `source_coll` once per scene placement, at each WORLD transform.
 
     The imported meshes carry the axis correction A on their OBJECT matrices
     (mesh_builder sets `ob.matrix_basis = A @ ...`; A = +90deg X when
-    `y_up_to_z_up`; see docs/FORMATS.md). A placement's `world_xf` is a
+    `y_up_to_z_up`, per AXIS_CALIBRATION.md). A placement's `world_xf` is a
     RAD-engine-space transform, so to stay correct in Blender it is CONJUGATED by A
     and set on a collection-instance empty:
 
@@ -236,8 +259,7 @@ def _apply_placements(context, source_coll, placements, scene, opts) -> dict:
     A_inv = A.inverted()
     archive = scene.get("archive", "scene")
 
-    arch_coll = bpy.data.collections.new(f"lescene_{archive}")
-    context.scene.collection.children.link(arch_coll)
+    arch_coll = _archive_collection(context, archive)
 
     skip_unresolved = opts.get("skip_unresolved", False)
     placed = unresolved = skipped = 0
@@ -302,7 +324,35 @@ def _place_scene(context, coll, pkg_path, src, opts):
 
 
 def import_lemesh(pkg_path, context, opts: dict) -> dict:
-    """Core import routine. Returns a summary dict. Usable without the operator."""
+    """Core import routine. Returns a summary dict. Usable without the operator.
+
+    Lightmap options (the same keys `IMPORT_OT_lemesh` exposes; see
+    `lightmap_builder.wire_lightmap` for the full contract):
+
+        lightmap_mode        "baked" (default) | "ambient" | "none"
+        lightmap_basis       "sg5" (default) | "single"
+        lightmap_texture     explicit path to the level's BC6H_UF16 atlas
+        lightmap_dir         directory to search for it
+        lightmap_slice_dir   where the per-page slices are cached
+        lightmap_auto_split  bool, default True
+        lightmap_intensity   float, default 1.0
+        lightmap_use_ao      bool, default False -- leave OFF (findings §5)
+        lightmap_uv_layer    OVERRIDE for the lightmap UV set.  Default: the
+                             object's OWN resolved set -- the manifest's
+                             `lightmap_uv`, i.e. the texcoord on semantic slot 4
+                             (`shader-confirmed`).  Usually `uv1`;
+                             `uv2` on a (0, 1, 4) object.  Falls back to the
+                             literal "uv1" only for a package whose vertex
+                             format cannot be resolved at all.  ⚠ If this ever
+                             grows a UI field it must default to EMPTY (meaning
+                             "resolve per object"), never to the string "uv1".
+
+    ⚠ The whole block is inert unless an atlas actually resolves: the atlas is a
+    LEVEL asset (one 68 MB `arraySize 65` DDS per scene) and is not part of a
+    `.lemesh` package, so `lightmap_mode` defaults to the faithful `"baked"`
+    without any risk of firing on a package that has no bake. The summary's
+    `lightmap.reason` says why when nothing was wired.
+    """
     pkg_path = Path(pkg_path)
     if pkg_path.name == "manifest.json":
         pkg_path = pkg_path.parent
@@ -313,6 +363,17 @@ def import_lemesh(pkg_path, context, opts: dict) -> dict:
     if joint_names is not None:
         opts = dict(opts)
         opts["skeleton_joint_names"] = joint_names
+
+    # Lightmap: resolve the LEVEL atlas ONCE, not once per mesh (it is a 68 MB
+    # texture array and the resolver stats directories). `mesh_builder` reads
+    # the context out of `opts` and derives the per-MESH spec from it.
+    lm_mode = lightmap_builder.resolved_mode(opts)
+    lm_ctx = {"available": False, "reason": "lightmap_mode == 'none'"}
+    if lm_mode != lightmap_builder.MODE_NONE:
+        lm_ctx = lightmap_builder.resolve_lightmap_context(
+            pkg_path, pkg.manifest, opts)
+    opts = dict(opts)
+    opts["lightmap_context"] = lm_ctx
 
     # build materials up front, deduped by key
     materials: dict[str, "bpy.types.Material"] = {}
@@ -334,7 +395,15 @@ def import_lemesh(pkg_path, context, opts: dict) -> dict:
 
     n_obj = n_vert = n_tri = 0
     mesh_objects = []
-    for obj in pkg.objects:
+    # ★ MESH-level (scene-set) LOD. A character ships each LOD as its OWN mesh
+    # and selects with `CGRenderParams.scenemask`, not with the mesh-list LOD
+    # chain -- without this `liv_head` imports all 19 meshes and the face
+    # z-fights against its own LOD 1. See `package_reader.select_lod_objects`.
+    _objs = package_reader.select_lod_objects(pkg.objects, opts.get("lod_level", 0))
+    if len(_objs) != len(pkg.objects):
+        print("[lone_echo_import] scene-set LOD %d: %d of %d meshes"
+              % (opts.get("lod_level", 0), len(_objs), len(pkg.objects)))
+    for obj in _objs:
         if obj.get("shadow_only") and not opts.get("import_shadow_only", False):
             continue
         ob = mesh_builder.build_object(pkg, obj, get_material, opts)
@@ -354,9 +423,28 @@ def import_lemesh(pkg_path, context, opts: dict) -> dict:
     if opts.get("apply_scene_placement"):
         placement = _place_scene(context, coll, pkg_path, src, opts)
 
+    # Lightmap summary, read back off the objects rather than predicted: which
+    # pages were actually wired, and how many extra (material, page) variants
+    # that cost. `pages` is a sorted list, never a count, so a package whose
+    # meshes all collapsed onto one page is visible at a glance.
+    lm_pages = sorted({ob["le_lightmap_page"] for ob in mesh_objects
+                       if "le_lightmap_page" in ob.keys()})
+    lm_wired = sum(1 for ob in mesh_objects if ob.get("le_lightmap_wired"))
+    lightmap = {
+        "mode": lm_mode,
+        "available": bool(lm_ctx.get("available")),
+        "reason": lm_ctx.get("reason", ""),
+        "source": lm_ctx.get("source", ""),
+        "texture": Path(lm_ctx["color_file"]).name if lm_ctx.get("color_file") else "",
+        "arraysize": (lm_ctx.get("color_meta") or {}).get("arraysize"),
+        "pages": lm_pages,
+        "objects_wired": lm_wired,
+        "variants": sum(1 for m in bpy.data.materials if "le_lightmap_page" in m.keys()),
+    }
+
     return {"collection": coll_name, "objects": n_obj, "vertices": n_vert,
             "triangles": n_tri, "materials": len(materials), "bones": n_bones,
-            "placement": placement}
+            "placement": placement, "lightmap": lightmap}
 
 
 class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
@@ -404,11 +492,86 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
                     "resolved. Default: place them at their own local matrix, tagged "
                     "with a 'le_unresolved' custom property")   # type: ignore
 
+    # --- baked lightmap ------------------------------------------------------
+    # The bake is the term that carries the diffuse look of every lit surface:
+    # 101.8 MB of baked GI against 108 KB of light records, a 936x ratio, and
+    # most level lights are SPECULAR-ONLY (49 of 118 records set eEnableDiffuse;
+    # 15 of 47 on station_front). See docs/LIGHTING.md §0 and
+    # docs/LIGHTING.md.
+    lightmap_mode: EnumProperty(
+        name="Lightmap",
+        description="How to apply the level's baked lightmap. Inert unless a "
+                    "lightmap atlas is actually found -- it is a LEVEL asset and "
+                    "is not part of a .lemesh package, so give it a path below",
+        items=[
+            ("baked", "Baked (unlit)",
+             "Emission = albedo x lightmap, BSDF response zeroed. Reproduces the "
+             "shipped look; scene lights cannot double-light it"),
+            ("ambient", "Ambient (lit + baked)",
+             "Lightmap added as an emissive ambient term with the BSDF left live. "
+             "DOUBLE-COUNTS unless only the eEnableDiffuse lights are imported"),
+            ("none", "None",
+             "Leave the material graph untouched"),
+        ],
+        default="baked")   # type: ignore
+    lightmap_texture: StringProperty(
+        name="Lightmap Atlas", default="", subtype="FILE_PATH",
+        description="The level's lobe-basis DDS (DXGI 95 BC6H_UF16, arraySize = "
+                    "13 pages x 5 SG lobes). Blank = search the Lightmap Folder, "
+                    "then the package's own directory")   # type: ignore
+    lightmap_dir: StringProperty(
+        name="Lightmap Folder", default="", subtype="DIR_PATH",
+        description="Directory to search for the atlas (and for the BC5 AO pair, "
+                    "whose arraySize gives the page count). Used when no explicit "
+                    "atlas path is given")   # type: ignore
+    lightmap_basis: EnumProperty(
+        name="Basis",
+        description="How the five SG lobes of a page are combined",
+        items=[
+            ("sg5", "SG5 (engine math)",
+             "Weighted sum of the page's five tangent-space spherical-gaussian "
+             "lobes, the weights the engine's own DiffuseTermSG gives a flat "
+             "normal"),
+            ("single", "Single lobe",
+             "Lobe 0 of the page alone. Cheaper, NOT the engine's math"),
+        ],
+        default="sg5")   # type: ignore
+    lightmap_auto_split: BoolProperty(
+        name="Split Texture Array", default=True,
+        description="Split the arraySize>1 atlas into per-page slice files. "
+                    "Blender exposes only slice 0 of an array DDS, so turning "
+                    "this off makes EVERY mesh render page 0")   # type: ignore
+    lightmap_slice_dir: StringProperty(
+        name="Slice Cache", default="", subtype="DIR_PATH",
+        description="Where the split per-page slices are cached "
+                    "(blank = '_lmslices' beside the atlas)")   # type: ignore
+    lightmap_intensity: FloatProperty(
+        name="Intensity", default=1.0, min=0.0, soft_max=8.0,
+        description="Multiplies Emission Strength. 1.0 is the faithful value; "
+                    "anything else is an exposure choice, not a calibration")   # type: ignore
+    lightmap_use_ao: BoolProperty(
+        name="Apply Lightmap AO", default=False,
+        description="Multiply the ao0 H-basis band-0 term into the baked diffuse. "
+                    "OFF because the ENGINE does not: on the lightmap path the AO "
+                    "pair drives ambient SPECULAR only, in its own ubershader, so "
+                    "switching this on DOUBLE-darkens relative to the shipped look")   # type: ignore
+
     def draw(self, context):
         layout = self.layout
         for prop in ("lod_level", "import_materials", "import_shadow_only", "flip_v",
                      "y_up_to_z_up", "import_armature"):
             layout.prop(self, prop)
+        layout.separator()
+        layout.prop(self, "lightmap_mode")
+        lm = layout.column()
+        lm.enabled = self.lightmap_mode != "none"
+        lm.prop(self, "lightmap_texture")
+        lm.prop(self, "lightmap_dir")
+        lm.prop(self, "lightmap_basis")
+        lm.prop(self, "lightmap_auto_split")
+        lm.prop(self, "lightmap_slice_dir")
+        lm.prop(self, "lightmap_intensity")
+        lm.prop(self, "lightmap_use_ao")
         layout.separator()
         layout.prop(self, "apply_scene_placement")
         col = layout.column()
@@ -427,6 +590,17 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
             "apply_scene_placement": self.apply_scene_placement,
             "scene_json_path": self.scene_json_path,
             "skip_unresolved": self.skip_unresolved,
+            "lightmap_mode": self.lightmap_mode,
+            "lightmap_texture": bpy.path.abspath(self.lightmap_texture)
+                                if self.lightmap_texture else "",
+            "lightmap_dir": bpy.path.abspath(self.lightmap_dir)
+                            if self.lightmap_dir else "",
+            "lightmap_basis": self.lightmap_basis,
+            "lightmap_auto_split": self.lightmap_auto_split,
+            "lightmap_slice_dir": bpy.path.abspath(self.lightmap_slice_dir)
+                                  if self.lightmap_slice_dir else "",
+            "lightmap_intensity": float(self.lightmap_intensity),
+            "lightmap_use_ao": self.lightmap_use_ao,
         }
         try:
             summary = import_lemesh(self.filepath, context, opts)
@@ -442,6 +616,13 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
                         f"{pl['skipped']} skipped)")
             elif pl.get("note"):
                 msg += f"; placement: {pl['note']}"
+        lm = summary.get("lightmap") or {}
+        if lm.get("objects_wired"):
+            msg += (f"; lightmap {lm['mode']} on {lm['objects_wired']} meshes, "
+                    f"pages {lm['pages']} ({lm['variants']} material variants)")
+        elif lm.get("mode") != "none" and lm.get("reason"):
+            # Never silent: an unwired lightmap is a result, not an absence.
+            self.report({"WARNING"}, f"lightmap not wired: {lm['reason']}")
         self.report({"INFO"}, msg)
         return {"FINISHED"}
 

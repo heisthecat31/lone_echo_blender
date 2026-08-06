@@ -37,6 +37,7 @@ from lone_echo_import import mesh_builder, scene_reader   # noqa: E402
 
 ARCHIVE = "testarc"
 MESHLIST = "quadmesh0000beef"
+MESHLIST2 = "quadmesh0000f00d"      # a SECOND package in the same archive
 T = (0.01, 1.378, -19.876)      # the named RAD-space translation
 THETA_DEG = 30.0                # a non-trivial RAD Y-rotation (so conjugation bites)
 TOL = 1e-5
@@ -62,6 +63,28 @@ def _build_pkg(dirpath: Path) -> Path:
     out = Path(dirpath) / "quad.lemesh"
     pkg.write_package(out, source={"archive": ARCHIVE, "meshlist": MESHLIST},
                       objects=objs, materials=[material])
+    return out
+
+
+def _build_pkg2(dirpath: Path) -> Path:
+    """A second package in the SAME archive — the multi-package assembly case."""
+    from le_mesh import meshlist as ml
+    from le_mesh import materials as mat
+    from le_mesh import package as pkg
+    import synthetic
+
+    fx = synthetic.build_single_quad()
+    t = fx["tables"]
+    objs = ml.build_objects(
+        fx["primary"], fx["gpu"], fx["gpu_base"],
+        meshes=ml.Table(*t["meshes"]), renderparams=ml.Table(*t["renderparams"]),
+        vertexbuffers=ml.Table(*t["vertexbuffers"]), indexbuffers=ml.Table(*t["indexbuffers"]),
+    )
+    objs[0].draws[0].material_key = "m2"
+    out = Path(dirpath) / "quad2.lemesh"
+    pkg.write_package(out, source={"archive": ARCHIVE, "meshlist": MESHLIST2},
+                      objects=objs,
+                      materials=[mat.build_material_spec("m2", shaderset_hash="m2")])
     return out
 
 
@@ -93,7 +116,18 @@ def _write_scene(dirpath: Path) -> Path:
             {"actornodeid": "C", "world_xf": _ident_rowmajor(0.0, 0.0, 0.0),
              "parent_type": 1, "parent_type_name": "eAuto", "scale": 1.0,
              "start_visible": True, "resolved": False,
-             "reason": "eAuto = runtime-selected parent, not decoded"},
+             "reason": "eAuto = runtime-selected parent, needs-disasm"},
+        ],
+            MESHLIST2: [
+            {"actornodeid": "D", "world_xf": _ident_rowmajor(-3.0, 0.0, 1.0),
+             "parent_type": 0, "parent_type_name": "eNone", "scale": 1.0,
+             "start_visible": True, "resolved": True},
+            {"actornodeid": "E", "world_xf": _ident_rowmajor(-3.0, 0.0, 4.0),
+             "parent_type": 0, "parent_type_name": "eNone", "scale": 1.0,
+             "start_visible": True, "resolved": True},
+            {"actornodeid": "F", "world_xf": _ident_rowmajor(-3.0, 0.0, 7.0),
+             "parent_type": 0, "parent_type_name": "eNone", "scale": 1.0,
+             "start_visible": True, "resolved": True},
         ]},
     }
     p = Path(dirpath) / "scene.json"          # beside the .lemesh dir -> auto-detectable
@@ -227,6 +261,33 @@ def main():
     off_meshes = [o for o in bpy.data.objects if o.type == "MESH"]
     chk("placement OFF -> mesh sits at base A (origin, upright)",
         len(off_meshes) > 0 and _mclose(off_meshes[0].matrix_world, A))
+
+    # === run 4: MANY packages, ONE archive collection =========================
+    # Assembling a level calls import_lemesh once per package (51 for the
+    # bridge). `bpy.data.collections.new` would mint lescene_<archive>.001 …
+    # .050 -- fifty sibling collections nothing can select or hide as a unit.
+    # Two packages sharing one scene.json must land in ONE collection.
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    pkg2 = _build_pkg2(tmp)
+    for p in (pkg, pkg2):
+        lone_echo_import.import_lemesh(
+            str(p), bpy.context,
+            _base_opts(apply_scene_placement=True, scene_json_path=str(scene_path)))
+    bpy.context.view_layer.update()
+
+    arch_colls = [c for c in bpy.data.collections
+                  if c.name.startswith(f"lescene_{ARCHIVE}")]
+    chk("two packages -> exactly ONE lescene_<archive> collection",
+        len(arch_colls) == 1)
+    if arch_colls:
+        names = {o.name.split("__")[0] for o in arch_colls[0].objects}
+        chk("that one collection holds BOTH packages' placements",
+            len(arch_colls[0].objects) == 6 and len(names) == 2)
+        chk("the archive collection is linked to the scene exactly once",
+            sum(1 for c in bpy.context.scene.collection.children
+                if c is arch_colls[0]) == 1)
+    chk("no lescene_<archive>.001 duplicate was minted",
+        bpy.data.collections.get(f"lescene_{ARCHIVE}.001") is None)
 
     ok = all(v for _, v in CHECKS)
     for label, v in CHECKS:

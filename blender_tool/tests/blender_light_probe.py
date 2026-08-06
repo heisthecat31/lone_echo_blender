@@ -1,6 +1,6 @@
 """In-Blender probe for `addon/lone_echo_import/light_import.py`.
 
-Three jobs, all measured against the live Blender RNA:
+Three jobs, all `engine-confirmed` (they read the live Blender RNA):
 
   1. **RNA probe** — which Light properties actually exist on this build
      (`use_custom_distance`, `cutoff_distance`, `shadow_soft_size`, `angle`,
@@ -14,8 +14,8 @@ Three jobs, all measured against the live Blender RNA:
      4.0+ defaults to AgX, which desaturates highlights and would make correct
      values look wrong):
 
-        lights_A_diffuse_only.png     light_set="diffuse" (the DEFAULT subset)
-        lights_B_all_lights.png       light_set="all"     (every light -> DOUBLE-LIT)
+        lights_A_diffuse_only.png     light_set="diffuse" (the DEFAULT, 15/47)
+        lights_B_all_lights.png       light_set="all"     (47/47 -> DOUBLE-LIT)
         lights_C_all_hidden_spec.png  light_set="all" + hide_specular_only
                                       (the shipped opt-in: must match A)
         lights_D_diffuse_only_view2.png / lights_E_all_lights_view2.png
@@ -29,12 +29,10 @@ Three jobs, all measured against the live Blender RNA:
 
 Run (ABSOLUTE WINDOWS paths -- blender.exe starts with cwd C:\\):
 
-    blender.exe --background --factory-startup \
+    "/mnt/c/Program Files/Blender Foundation/Blender 5.1/blender.exe" \
+        --background --factory-startup \
         --python blender_tool/tests/blender_light_probe.py -- \
-        <ABS-WINDOWS lights.json> <ABS-WINDOWS outdir> [scene] [ymin,ymax]
-
-The `lights.json` is one YOU extracted with `blender_tool/extractor/le_lights.py`
-from your own copy of the game; this repository ships no light data.
+        <ABS-WINDOWS lights.json> <ABS-WINDOWS outdir>
 
 NOT named `test_*` on purpose: `tests/run_tests.py` auto-imports `test_*.py`
 under plain python3, where `bpy` does not exist.
@@ -61,13 +59,9 @@ from render_engine_util import resolve_render_engine, WORKBENCH_ID   # noqa: E40
 
 RES_X, RES_Y = 1280, 720
 
-# Optional world-Y slab to render, as "min,max". Levels are tens of metres long,
-# so restricting to one section keeps the A-vs-B comparison on one surface set.
-# Unset (the default) uses every light in the selected scene.
-SECTION_Y = None
-
-# Optional scene name/hash to restrict to; unset uses every scene in the sidecar.
-SCENE_FILTER = None
+# The corridor section rendered: it contains BOTH diffuse-enabled and
+# specular-only lights, so A-vs-B shows the difference on one surface set.
+SECTION_Y = (-118.0, -56.0)
 
 # TWO viewpoints, because the shipped lights aim in opposing directions and no
 # single camera can see every lit hemisphere:
@@ -79,26 +73,12 @@ VIEW_SIDE = (0.90, 0.40, -0.14)
 
 PASS = []
 FAIL = []
-SKIPPED = []
 
 
 def check(label, ok, detail=""):
     (PASS if ok else FAIL).append(label)
     print(f"  [{'OK ' if ok else 'FAIL'}] {label}{(' -- ' + detail) if detail else ''}")
     return ok
-
-
-def skip(label, why):
-    """A check the supplied data does not exercise.
-
-    Not every lights.json contains every light type or falloff mode -- a level
-    with no directional light cannot exercise the SUN mapping. Reporting that as
-    a FAILURE would blame the importer for the contents of the user's own
-    extraction, so it is recorded separately and does not affect the exit code.
-    """
-    SKIPPED.append(label)
-    print(f"  [skip] {label} -- {why}")
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -212,22 +192,22 @@ def build_receivers(doc):
     colours, energies, ranges); only the receivers are synthetic.
 
     Why spheres at `pos + dir * range/2` rather than floors and walls: the
-    shipped lights aim in mutually opposing directions (on one shipped level: 18
-    straight down, 12 up-and-right at +45 deg, 3 down-and-left, 6 omni points, 4
-    up-and-right at +55 deg), each with a 2-10 m reach, so NO single flat surface
-    is inside more than one group's range — the level's real receivers are small props a couple
+    shipped lights aim in mutually opposing directions (18 straight down, 12
+    up-and-right at +45 deg, 3 down-and-left, 6 omni points, 4 up-and-right at
+    +55 deg), each with a 2-10 m reach, so NO single flat surface is inside more
+    than one group's range — the level's real receivers are small props a couple
     of metres from each lamp. A sphere at the beam midpoint is always inside the
     light's range and always shows a lit crescent from any camera, so one shot
     can compare the two light sets fairly.
 
     The sphere set is IDENTICAL in every render (it is built from the whole
-    document, not from the selection), so A vs B differ only in which lamps
-    exist.
+    47-light document, not from the selection), so A vs B differ only in which
+    lamps exist.
     """
     mat = _matte("le_probe_matte")
     obs = []
-    y0, y1 = SECTION_Y if SECTION_Y else (float("-inf"), float("inf"))
-    for _, _, rec in LI.iter_lights(doc, SCENE_FILTER):
+    y0, y1 = SECTION_Y
+    for _, _, rec in LI.iter_lights(doc):
         if LI.light_type_enum(rec) == 2:                 # SUN: no position
             continue
         loc = Vector(LI.to_blender_vec(rec["pos"]))
@@ -248,10 +228,7 @@ def build_receivers(doc):
         for p in ob.data.polygons:
             p.use_smooth = True
         obs.append(ob)
-    section = f" in y {y0}..{y1}" if SECTION_Y else ""
-    print(f"  receivers: {len(obs)} spheres{section}")
-    if not obs:
-        raise SystemExit("no positional lights matched — check --scene / --section")
+    print(f"  receivers: {len(obs)} spheres in y {y0}..{y1}")
     return obs
 
 
@@ -376,62 +353,44 @@ def probe_blender_side(lights_path, outdir):
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # Expected counts come from the sidecar the user supplied, never from
-    # hard-coded numbers: this probe must work on any level.
-    want = LI.summarize_doc(LI.load_lights(lights_path),
-                            {"scene_filter": SCENE_FILTER})
-    n_total, n_diffuse = want["total"], want["kept"]
-    # What does this particular lights.json actually exercise? A level with no
-    # directional light cannot test the SUN mapping, and one where every light
-    # is attenmethod 2 cannot test the lossy-falloff path. Those are properties
-    # of the user's extraction, not defects in the importer.
-    _recs = [r for _, _, r in LI.iter_lights(LI.load_lights(lights_path), SCENE_FILTER)]
-    has_dirlight = any(r.get("type") == "eDirectionalLight" for r in _recs)
-    n_lossy = sum(1 for r in _recs if not LI.falloff_is_physical(r))
-    n_enabled = n_total - want["skipped_disabled"]
-    n_spec_only = n_enabled - n_diffuse
-    print(f"  sidecar: {n_total} lights, {n_enabled} enabled, "
-          f"{n_diffuse} diffuse-enabled, {n_spec_only} specular-only")
-
     a, a_lamps, a_vis = render_case(
         "lights_A_diffuse_only", lights_path,
-        {"scene_filter": SCENE_FILTER}, outdir)
+        {"scene_filter": "stn_ext_itc_station_front"}, outdir)
     check("default light_set is 'diffuse'", a["light_set"] == "diffuse")
-    check("default import keeps only the eEnableDiffuse lights",
-          a["imported"] == n_diffuse and a["total"] == n_total,
+    check("default import keeps only the 15 eEnableDiffuse lights",
+          a["imported"] == 15 and a["total"] == 47,
           f"imported {a['imported']}/{a['total']}, "
           f"skipped_specular_only={a['skipped_specular_only']}")
-    check("one lamp object per kept light, all render-visible",
-          len(a_lamps) == n_diffuse and len(a_vis) == n_diffuse)
+    check("15 lamp objects created, all render-visible",
+          len(a_lamps) == 15 and len(a_vis) == 15)
     check("no specular-only collection when defaulting to diffuse",
           a["specular_collection"] is None)
 
     b, b_lamps, b_vis = render_case(
         "lights_B_all_lights", lights_path,
-        {"scene_filter": SCENE_FILTER, "light_set": "all",
+        {"scene_filter": "stn_ext_itc_station_front", "light_set": "all",
          "hide_specular_only": False}, outdir)
-    check("light_set='all' imports every enabled light",
-          b["imported"] == n_enabled, f"{b['imported']} of {n_enabled}")
-    check("every lamp render-visible with hide_specular_only=False",
-          len(b_lamps) == n_enabled and len(b_vis) == n_enabled)
+    check("light_set='all' imports all 47", b["imported"] == 47)
+    check("all 47 lamps render-visible with hide_specular_only=False",
+          len(b_lamps) == 47 and len(b_vis) == 47)
     check("light_set='all' warns about double-lighting",
           any("DOUBLE-LIGHTING" in w for w in b["warnings"]))
 
     # second viewpoint: the specular-only down-lights face away from VIEW_BELOW,
     # so repeat the A/B pair from the side where they read clearly.
     render_case("lights_D_diffuse_only_view2", lights_path,
-                {"scene_filter": SCENE_FILTER}, outdir,
+                {"scene_filter": "stn_ext_itc_station_front"}, outdir,
                 view=VIEW_SIDE)
     render_case("lights_E_all_lights_view2", lights_path,
-                {"scene_filter": SCENE_FILTER, "light_set": "all",
+                {"scene_filter": "stn_ext_itc_station_front", "light_set": "all",
                  "hide_specular_only": False}, outdir, view=VIEW_SIDE)
 
     c, c_lamps, c_vis = render_case(
         "lights_C_all_hidden_spec", lights_path,
-        {"scene_filter": SCENE_FILTER, "light_set": "all"}, outdir)
-    check("the shipped opt-in hides the specular-only lamps",
-          len(c_lamps) == n_enabled and len(c_vis) == n_diffuse,
-          f"{len(c_vis)} visible of {len(c_lamps)}, want {n_diffuse}")
+        {"scene_filter": "stn_ext_itc_station_front", "light_set": "all"}, outdir)
+    check("shipped opt-in hides the 32 specular-only lamps",
+          len(c_lamps) == 47 and len(c_vis) == 15,
+          f"{len(c_vis)} visible of {len(c_lamps)}")
     check("hidden lamps live in a '_specular_only' child collection",
           c["specular_collection"] is not None, str(c["specular_collection"]))
 
@@ -452,34 +411,23 @@ def probe_blender_side(lights_path, outdir):
               - means["lights_A_diffuse_only"]) < 1e-6,
           f"{means['lights_C_all_hidden_spec']:.6f} vs "
           f"{means['lights_A_diffuse_only']:.6f}")
-    ratio = (f"B/A = {means['lights_B_all_lights'] / max(1e-9, means['lights_A_diffuse_only']):.2f}x, "
-             f"E/D = {means['lights_E_all_lights_view2'] / max(1e-9, means['lights_D_diffuse_only_view2']):.2f}x")
-    if n_spec_only == 0:
-        print(f"  (no specular-only lamps in this sidecar; skipping the "
-              f"double-lighting comparison) {ratio}")
-    elif means["lights_A_diffuse_only"] < 5e-3:
-        # Nothing is meaningfully lit — the receivers sit outside every beam or
-        # the lights are far too dim for their range — so the ratio measures
-        # noise. Say so rather than fail on a degenerate frame.
-        print(f"  (frame is effectively black, mean "
-              f"{means['lights_A_diffuse_only']:.6f}; the double-lighting "
-              f"comparison is not meaningful here) {ratio}")
-    else:
-        check("importing ALL lights is measurably brighter (the double-lighting)",
-              means["lights_B_all_lights"] > means["lights_A_diffuse_only"] * 1.05
-              and means["lights_E_all_lights_view2"]
-              > means["lights_D_diffuse_only_view2"] * 1.05, ratio)
+    check("importing ALL lights is measurably brighter (the double-lighting)",
+          means["lights_B_all_lights"] > means["lights_A_diffuse_only"] * 1.05
+          and means["lights_E_all_lights_view2"]
+          > means["lights_D_diffuse_only_view2"] * 1.05,
+          f"B/A = {means['lights_B_all_lights'] / max(1e-9, means['lights_A_diffuse_only']):.2f}x, "
+          f"E/D = {means['lights_E_all_lights_view2'] / max(1e-9, means['lights_D_diffuse_only_view2']):.2f}x")
 
     # per-lamp RNA readback on the default import
     _reset()
     setup_render()
     LI.import_lights(lights_path, bpy.context,
-                     {"scene_filter": SCENE_FILTER})
+                     {"scene_filter": "stn_ext_itc_station_front"})
     doc = LI.load_lights(lights_path)
     by_name = {o.name: o for o in bpy.data.objects if o.type == "LIGHT"}
     worst_e = worst_s = worst_b = 0.0
     soft = set()
-    for _, _, rec in LI.iter_lights(doc, SCENE_FILTER):
+    for _, _, rec in LI.iter_lights(doc, "stn_ext_itc_station_front"):
         p = LI.blender_params(rec)
         ob = by_name.get(p["name"])
         if ob is None:
@@ -499,25 +447,17 @@ def probe_blender_side(lights_path, outdir):
 
     sun = next((o for o in bpy.data.objects
                 if o.type == "LIGHT" and o.data.type == "SUN"), None)
-    if not has_dirlight:
-        skip("the ePrimaryDirLight imports as a SUN",
-             "this lights.json contains no directional light")
-    else:
-        check("the ePrimaryDirLight imports as a SUN at 10.0 W/m^2",
-              sun is not None and abs(sun.data.energy - 10.0) < 1e-4,
-              f"energy = {sun.data.energy if sun else None}")
+    check("the ePrimaryDirLight imports as a SUN at 10.0 W/m^2",
+          sun is not None and abs(sun.data.energy - 10.0) < 1e-4,
+          f"energy = {sun.data.energy if sun else None}")
     if sun is not None:
         check("SUN angle is 0 (no source size on disk)",
               abs(sun.data.angle) < 1e-9, f"angle = {sun.data.angle}")
 
     nodetreed = [o for o in bpy.data.objects
                  if o.type == "LIGHT" and o.get("le_falloff_node_built")]
-    if not n_lossy:
-        skip("Cycles Light Falloff nodes for attenmethod!=2 lights",
-             "every light here is attenmethod 2, which Blender models natively")
-    else:
-        check("Cycles Light Falloff nodes built for the attenmethod!=2 lights",
-              len(nodetreed) >= 1, f"{len(nodetreed)} of {n_lossy} lossy lamp(s)")
+    check("Cycles Light Falloff nodes built for the attenmethod!=2 lights",
+          len(nodetreed) >= 1, f"{len(nodetreed)} lamp(s)")
 
     # custom properties: the not-derivable fields are carried, inert
     any_lamp = next(o for o in bpy.data.objects if o.type == "LIGHT")
@@ -531,28 +471,15 @@ def probe_blender_side(lights_path, outdir):
 
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    if not argv:
-        print("usage: blender.exe --background --factory-startup --python "
-              "blender_light_probe.py -- <lights.json> [outdir] "
-              "[scene] [ymin,ymax]\n"
-              "  extract the lights.json yourself with extractor/le_lights.py")
-        sys.exit(2)
-    lights = argv[0]
-    outdir = argv[1] if len(argv) > 1 else str(BLENDER_TOOL / "exports" / "light_probe")
-    global SCENE_FILTER, SECTION_Y
-    if len(argv) > 2 and argv[2]:
-        SCENE_FILTER = argv[2]
-    if len(argv) > 3 and argv[3]:
-        lo, hi = (float(v) for v in argv[3].split(","))
-        SECTION_Y = (lo, hi)
+    lights = argv[0] if argv else str(BLENDER_TOOL / "fixtures" / "station_front_lights.json")
+    outdir = argv[1] if len(argv) > 1 else str(BLENDER_TOOL / "fixtures")
 
     probe_rna()
     doc = LI.load_lights(lights)
     probe_axis(doc)
     probe_blender_side(lights, outdir)
 
-    print(f"\n=== {len(PASS)} checks passed, {len(FAIL)} failed"
-          f"{f', {len(SKIPPED)} not exercised by this data' if SKIPPED else ''} ===")
+    print(f"\n=== {len(PASS)} checks passed, {len(FAIL)} failed ===")
     for f in FAIL:
         print(f"  FAILED: {f}")
     if FAIL:

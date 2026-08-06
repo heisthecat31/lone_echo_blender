@@ -2,13 +2,13 @@
 
 Standalone: it imports only `bpy` and takes the material / node-tree / BSDF it is
 given, so it can be driven from a probe script without the rest of the addon.
-`material_builder.build_material` can call it at the end; see `docs/LIGHTING.md`
+`material_builder.build_material` calls it at the end; see `docs/LIGHTING.md`
 for the current wiring status.
 
 Why "baked / unlit" is the default
 ----------------------------------
 Lone Echo is a hybrid renderer, but the *diffuse* term of every lit surface is
-baked.  What was measured on the shipped data:
+baked.  The evidence (docs/LIGHTING.md §0, all `stream-confirmed`):
 
 * the bake is **101.8 MB** of irradiance SH + 1024^2 HDR lightmaps against
   **108 KB** of light records — a 936x ratio;
@@ -25,8 +25,8 @@ BSDF's own diffuse/specular response so scene lights cannot add a second copy.
 `"ambient"` is the documented alternative for anyone who wants real lights on
 top; it *will* double-count unless only the `eEnableDiffuse` subset is imported.
 
-Colour management (measured on Blender 5.1.1)
----------------------------------------------
+Colour management (`engine-confirmed (Blender 5.1.1)`)
+------------------------------------------------------
 The HDR map is BC6H_UF16.  Blender 5.1.1 loads that DDS natively as a **float**
 image and its loader auto-assigns `'Linear Rec.709'`; `'Linear Rec.709'` and
 `'Non-Color'` return the exact on-disk texel, `'sRGB'` returns the double-gammaed
@@ -40,18 +40,21 @@ The lightmap samples `uv1`, which `mesh_builder` already imports as a UV layer,
 already V-flipped by the shared `flip_v` option.  A `UV Map` node pins the
 lightmap texture to that layer so it is independent of the active UV set.
 
-The bake is SG5, not a single colour map
-----------------------------------------
+The bake is SG5, not a single colour map (`shader-confirmed`)
+-------------------------------------------------------------
 The shipped colour map is a **texture array**: `0178fa39b1b95d2f.dds` is
 DXGI 95 BC6H_UF16 1024x1024 **arraySize 65**, and its AO siblings are
-**arraySize 13** (headers parsed in `tests/blender_lightmap_probe.py`).
-65 == 13 x 5, and the engine's own lightmap fetch indexes the array as
+**arraySize 13** (`engine-confirmed`, headers parsed in
+`tests/blender_lightmap_probe.py`).  65 == 13 x 5, and the engine's own
+lightmap fetch indexes the array as
 
+        float3 lightmapuv = context.lightmapuv;
         lightmapuv.z = lightmapuv.z * 5 + i;          // i = 0..4
 
 so the array is **13 lightmap pages x 5 SG lobes**, page-major.  The lightmap
 therefore does not hold irradiance directly; each page holds five spherical-
-gaussian radiance lobes in TANGENT space, and the engine's diffuse term is
+gaussian radiance lobes in TANGENT space, and the engine's diffuse term —
+`DiffuseTermSG` over `kLobeDirsSG5` / `kLambdaSG5` / `kSG5Scale` — is
 
         diffuse(n_ts) = SUM_i  saturate(dot(kLobeDirsSG5[i], n_ts))
                              * (2 / kLambdaSG5) * kSG5Scale * lobe_i
@@ -67,6 +70,7 @@ and directionally wrong, but a defined, reported fallback rather than a lie.
 from __future__ import annotations
 
 import struct
+import sys
 from pathlib import Path
 
 try:                                     # pragma: no cover - Blender always has it
@@ -99,8 +103,26 @@ COLORSPACE_LIGHTMAP_FALLBACK = "Non-Color"
 COLORSPACE_DATA = "Non-Color"
 UV_LAYER = "uv1"
 
+#: `CGMeshData.lightmapindex@0x6c` "this mesh is not lightmapped"
+#: (`le_mesh.lightmap.LIGHTMAP_INDEX_NONE`, duplicated for the standalone addon).
+LIGHTMAP_INDEX_NONE = 0xFFFFFFFF
+#: `CGMeshData.lmsliceindex@0x70` "this mesh has no lightmap PAGE".
+#: ⛔ NOT interchangeable with page 0.  `lightmapindex` and `lmsliceindex` are
+#: INDEPENDENT: 2 of the 1045 station_front static meshes that carry the valid
+#: row 1 carry this sentinel in the page field
+#: (`627bcb577b88816d`, `1d3ad4aa38198392` — `stream-confirmed`,
+#: docs/LIGHTING.md §5).  `le_mesh.lightmap.colour_slice_indices`
+#: returns `[]` for it and this module refuses to wire, because falling back to
+#: page 0 would render another part of the level's bake on those meshes.
+LM_SLICE_NONE = 0xFFFFFFFF
+
+#: DXGI formats the resolver identifies a candidate atlas by
+#: (`stream-confirmed`, docs/LIGHTING.md §1.2).
+DXGI_BC5_UNORM = 83
+DXGI_BC6H_UF16 = 95
+
 # --- the SG5 basis -----------------------------------------------------------
-#: the engine's five SG5 lobe directions
+#: `shader-confirmed` — the engine's own `kLobeDirsSG5`
 SG5_DIRS = (
     (0.839526355, -0.534037054, 0.100000001),
     (-0.247647554, 0.921233237, 0.300000042),
@@ -123,8 +145,9 @@ DEFAULT_BASIS = BASIS_SG5
 def sg5_weights(normal_ts=(0.0, 0.0, 1.0)):
     """DiffuseTermSG's per-lobe scalar for a tangent-space normal.
 
-    The engine's DiffuseTermSG is `saturate(dot(mean, n)) * 2 / sharpness *
-    color`, with `color = lobe * kSG5Scale` and `sharpness = kLambdaSG5`.
+    The engine's `DiffuseTermSG` is `saturate(dot(mean, n)) * 2 / sharpness *
+    color`, with `color = lobe * kSG5Scale` and `sharpness = kLambdaSG5`
+    (`shader-confirmed`).
     """
     k = 2.0 / SG5_LAMBDA * SG5_SCALE
     return [max(0.0, sum(a * b for a, b in zip(d, normal_ts))) * k
@@ -142,9 +165,9 @@ _NODE_Y = 900.0
 
 # --- DX10 DDS texture arrays -------------------------------------------------
 # Blender 5.1.1 exposes **exactly one** slice — slice 0 — of an `arraySize > 1`
-# DX10 DDS (measured: the array file's pixels are bit-identical to split slice 0
-# and differ from every other slice; see `tests/blender_lightmap_probe.py`
-# section `[slice-exposed]`).  So a mesh whose
+# DX10 DDS (`engine-confirmed`: the array file's pixels are bit-identical to
+# split slice 0 and differ from every other slice; see
+# `tests/blender_lightmap_probe.py` section `[slice-exposed]`).  So a mesh whose
 # `lm_slice_index` is 7 would silently render page 0's lobe 0.  Rather than push
 # that onto the extractor, the importer splits the array itself: pure stdlib,
 # one 1 MiB file per slice, cached next to the source.
@@ -205,8 +228,8 @@ def split_array_slice(src, slice_index, dst):
 def sg5_slice_indices(page):
     """Array slices holding page `page`'s five SG lobes.
 
-    The engine indexes the array as `lightmapuv.z = lightmapuv.z * 5 + i`
-    (i = 0..4): page-major, lobe-minor.
+    `shader-confirmed` — the engine's lightmap fetch is
+    `lightmapuv.z = lightmapuv.z * 5 + i` (i = 0..4): page-major, lobe-minor.
     """
     p = int(page)
     return [p * SG5_LOBES + i for i in range(SG5_LOBES)]
@@ -240,6 +263,368 @@ def materialise_slices(src, indices, out_dir):
 def materialise_page_slices(src, page, out_dir, lobes=SG5_LOBES):
     """`materialise_slices` for page `page`'s five SG lobes."""
     return materialise_slices(src, sg5_slice_indices(page)[:lobes], out_dir)
+
+
+# =============================================================================
+# IMPORT-PATH RESOLUTION -- what turns a .lemesh package into an `lm_spec`
+# =============================================================================
+# `wire_lightmap` consumes the dict `le_mesh.lightmap.build_lightmap_spec`
+# produces.  Building that dict needs three things, and the shipped `.lemesh`
+# manifest carries only the first:
+#
+#   1. the per-MESH binding  -- `lightmap_index` (table row) and
+#      `lm_slice_index` (the PAGE).  Both are in every manifest object entry
+#      (`le_mesh/package.py:132-133`).
+#   2. the lightmap TABLE     -- `CGLightMapResourceWin7`, which names the five
+#      texture hashes.  The extractor does not emit it today, so the colour
+#      atlas is named by an import OPTION instead (`lightmap_texture` /
+#      `lightmap_dir`), and a `manifest["lightmap"]` section is honoured if a
+#      future extractor grows one.
+#   3. the texture BYTES      -- the 68 MB `arraySize 65` BC6H_UF16 DDS.  It is
+#      a LEVEL asset, one per scene, not a per-package one, so it routinely
+#      lives outside the package directory.  Hence the explicit path option.
+#
+# Nothing here guesses: with no atlas resolved the whole lightmap path is a
+# reported no-op and the material graph is left exactly as `build_material`
+# made it.
+
+#: manifest key a future extractor could use to name the level's lightmap set;
+#: `{"color": {"hash": str, "file": str}, "ao0": {...}}` (relative to the
+#: package dir).  Absent from every shipped export today — read, never required.
+MANIFEST_KEY = "lightmap"
+
+#: directories searched for the atlas, relative to the package, in this order.
+PKG_SEARCH_DIRS = (".", "lightmap", "lightmaps", "textures")
+
+
+def _lightmap_uv_of(obj):
+    """The manifest object's RESOLVED lightmap UV attribute name, or "".
+
+    ★ The lightmap UV set is texcoord SEMANTIC SLOT 4 -- `shader-confirmed`:
+    `vsinput.lightmapuv = vertexbuffers.vb_texcoord4[vertexid];`
+    The `uvN` names in a `.lemesh` package are APPEARANCE ORDER, so `uv1` is the
+    lightmap set only when the object's texcoord slots are (0, 4).  On the 4
+    corpus objects with slots (0, 1, 4) it is `uv2`, and `uv1` there is a copy of
+    the albedo UV set (docs/LIGHTING.md).
+
+    Mirrors `le_mesh.package.lightmap_uv_for_manifest_object`:
+      1. `obj["lightmap_uv"]` -- written by the current extractor;
+      2. else resolve from `obj["raw_vertex_format"]`, which EVERY `.lemesh`
+         manifest ever written carries -- so old packages need no re-extraction;
+      3. else "" -- unknown, caller falls back to its legacy default.
+    "" is also returned for a mesh with no slot-4 texcoord at all: it has NO
+    lightmap UV set, and substituting another one is exactly the bug.
+
+    Self-contained on purpose: this module must install standalone, so it does
+    not hard-depend on `le_mesh` for a 10-line lookup.
+    """
+    if not isinstance(obj, dict):
+        return ""
+    name = obj.get("lightmap_uv")
+    if isinstance(name, str) and name:
+        return name
+    n = 0
+    for e in obj.get("raw_vertex_format") or []:
+        if e.get("usage") != 4:            # CGVertexFormat::EUsage::eTexCoord
+            continue
+        if e.get("slot") == 4:             # vb_texcoord4
+            return "uv%d" % n
+        n += 1
+    return ""
+
+
+def _le_mesh_lightmap():
+    """`le_mesh.lightmap`, or None.
+
+    The spec SHAPE is owned by `le_mesh.lightmap.build_lightmap_spec` and is
+    deliberately not duplicated here — a second implementation of a 15-key dict
+    is exactly how two modules drift apart.  The addon is meant to install
+    standalone, so the import is soft and bootstraps the research-tree layout
+    (`<blender_tool>/addon/lone_echo_import/` -> `<blender_tool>/le_mesh/`)
+    before giving up.  When it is genuinely unavailable the lightmap path
+    reports `le_mesh unavailable` and wires nothing.
+    """
+    try:
+        from le_mesh import lightmap as m   # type: ignore
+        return m
+    except ImportError:
+        pass
+    root = Path(__file__).resolve().parents[2]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    try:
+        from le_mesh import lightmap as m   # type: ignore
+        return m
+    except ImportError:
+        return None
+
+
+def _as_int(v):
+    """`int` from a manifest value that may be a uint32 stringified by
+    `mesh_builder._int_prop` (Blender ID int props are 32-bit SIGNED, so
+    0xFFFFFFFF round-trips as the string "4294967295")."""
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_lightmapped(lightmap_index) -> bool:
+    """True when `CGMeshData.lightmapindex` names a table row at all."""
+    v = _as_int(lightmap_index)
+    return v is not None and v >= 0 and v != LIGHTMAP_INDEX_NONE
+
+
+def _page_of(lm_slice_index):
+    """The lightmap PAGE, or **None**.
+
+    None for the `0xffffffff` sentinel, for a negative value and for anything
+    unparseable.  ⛔ Never 0 — see `LM_SLICE_NONE`.
+    """
+    v = _as_int(lm_slice_index)
+    if v is None or v < 0 or v == LM_SLICE_NONE:
+        return None
+    return v
+
+
+def _dds_candidates(directory):
+    """`[(path, header)]` for the DX10 DDS files in `directory`, name-sorted."""
+    try:
+        entries = sorted(Path(directory).glob("*.dds"))
+    except OSError:
+        return []
+    out = []
+    for p in entries:
+        info = dds_dx10_header(p)
+        if info is not None:
+            out.append((p, info))
+    return out
+
+
+def _pick_atlas(directory, want_hash=""):
+    """(colour_path, colour_header, ao_path, ao_header) found in `directory`.
+
+    The colour/lobe-basis map is the DXGI-95 (`BC6H_UF16`) one; the AO pair is
+    DXGI 83 (`BC5_UNORM`).  Both are `arraySize > 1` texture arrays and the AO
+    one is only wanted for its `arraysize`, which is the level's PAGE COUNT and
+    is what makes `slices_per_page` derived (65/13 == 5) instead of assumed.
+    A name matching `want_hash` wins over a format match.
+    """
+    colour = ao = None
+    for path, info in _dds_candidates(directory):
+        if want_hash and path.stem == want_hash:
+            colour = (path, info)
+            continue
+        if info["dxgi"] == DXGI_BC6H_UF16 and colour is None:
+            colour = (path, info)
+        elif info["dxgi"] == DXGI_BC5_UNORM and ao is None:
+            ao = (path, info)
+    return colour, ao
+
+
+def resolve_lightmap_context(pkg_dir, manifest, opts=None) -> dict:
+    """Resolve the LEVEL lightmap atlas for one import. Called once, not per mesh.
+
+    Resolution order (first hit wins), all `inferred` conventions except the
+    file formats, which are `stream-confirmed`:
+
+      1. `opts["lightmap_texture"]`  — an explicit path to the colour/lobe-basis
+         DDS (absolute, or relative to the package dir).
+      2. `manifest["lightmap"]`      — `{"color": {"hash", "file"}, "ao0": {...}}`
+         if a future extractor emits it.
+      3. `opts["lightmap_dir"]`      — a directory to search.
+      4. the package dir and its `lightmap/`, `lightmaps/`, `textures/`
+         subdirectories.
+
+    Returns a context dict — never raises, and `available` is False with a
+    human-readable `reason` whenever nothing was found:
+
+        {"available": bool, "reason": str, "color_file": str, "color_hash": str,
+         "color_meta": {...}, "ao_hash": str, "ao_meta": {...},
+         "slice_dir": str, "uv_layer": str, "source": str}
+    """
+    opts = opts or {}
+    manifest = manifest or {}
+    ctx = {"available": False, "reason": "", "color_file": "", "color_hash": "",
+           "color_meta": {}, "ao_hash": "", "ao_meta": {}, "slice_dir": "",
+           "uv_layer": opts.get("lightmap_uv_layer") or UV_LAYER, "source": ""}
+
+    pkg = Path(str(pkg_dir)) if pkg_dir else None
+    section = manifest.get(MANIFEST_KEY) or {}
+    m_color = section.get("color") or {}
+    m_ao = section.get("ao0") or {}
+    want_hash = str(m_color.get("hash") or "")
+
+    colour = ao = None
+    source = ""
+
+    explicit = opts.get("lightmap_texture")
+    if explicit:
+        p = Path(str(explicit))
+        if not p.is_absolute() and pkg is not None:
+            p = pkg / p
+        info = dds_dx10_header(p)
+        if info is None:
+            ctx["reason"] = (f"lightmap_texture {p} is missing or is not a DX10 DDS"
+                             if not p.exists() else
+                             f"lightmap_texture {p} is not a DX10 DDS")
+            return ctx
+        colour, source = (p, info), "lightmap_texture"
+        _, ao = _pick_atlas(p.parent, want_hash="")
+
+    if colour is None and m_color.get("file") and pkg is not None:
+        p = pkg / str(m_color["file"])
+        info = dds_dx10_header(p)
+        if info is not None:
+            colour, source = (p, info), f"manifest['{MANIFEST_KEY}']"
+            if m_ao.get("file"):
+                ap = pkg / str(m_ao["file"])
+                ainfo = dds_dx10_header(ap)
+                if ainfo is not None:
+                    ao = (ap, ainfo)
+
+    if colour is None:
+        search = []
+        if opts.get("lightmap_dir"):
+            search.append((Path(str(opts["lightmap_dir"])), "lightmap_dir"))
+        if pkg is not None:
+            search.extend((pkg / d, f"package dir '{d}'") for d in PKG_SEARCH_DIRS)
+        for d, label in search:
+            c, a = _pick_atlas(d, want_hash)
+            if c is not None:
+                colour, ao, source = c, (ao or a), label
+                break
+
+    if colour is None:
+        ctx["reason"] = (
+            "no lightmap atlas found — pass `lightmap_texture` (the level's "
+            "BC6H_UF16 lobe-basis DDS) or `lightmap_dir`. The atlas is a LEVEL "
+            "asset and is not part of a .lemesh package")
+        return ctx
+
+    cpath, cinfo = colour
+    if cinfo["dxgi"] != DXGI_BC6H_UF16:
+        # Loud, not fatal: `wire_lightmap` re-checks and reports `dxgi_unexpected`.
+        ctx["reason"] = (f"{cpath.name} is DXGI {cinfo['dxgi']}, expected "
+                         f"{DXGI_BC6H_UF16} (BC6H_UF16) — role mapping suspect")
+    ctx["available"] = True
+    ctx["source"] = source
+    ctx["color_file"] = str(cpath)
+    ctx["color_hash"] = str(m_color.get("hash") or cpath.stem)
+    ctx["color_meta"] = {"dxgi": cinfo["dxgi"], "width": cinfo["width"],
+                         "height": cinfo["height"], "arraysize": cinfo["arraysize"]}
+    if ao is not None:
+        apath, ainfo = ao
+        ctx["ao_hash"] = str(m_ao.get("hash") or apath.stem)
+        # ⚠ hash + metadata ONLY, deliberately no `file`.  The AO arraysize is
+        # the level's page count and is what makes `slices_per_page` DERIVED
+        # (65 / 13 == 5) rather than assumed.  The file is withheld because the
+        # AO map is an `arraySize 13` array too: handing it to Blender unsplit
+        # would silently sample page 0 for every mesh, and the engine does not
+        # apply AO on the lightmap path anyway (findings §5).
+        ctx["ao_meta"] = {"dxgi": ainfo["dxgi"], "width": ainfo["width"],
+                          "height": ainfo["height"], "arraysize": ainfo["arraysize"]}
+    ctx["slice_dir"] = str(opts.get("lightmap_slice_dir")
+                           or (cpath.parent / "_lmslices"))
+    return ctx
+
+
+def lightmap_spec_for_object(ctx, obj, opts=None) -> dict:
+    """One manifest object entry -> the `lm_spec` `wire_lightmap` consumes.
+
+    `{}` — a clean no-op — when there is no atlas, when the mesh is not
+    lightmapped (`lightmapindex == 0xffffffff`), when `le_mesh` is unavailable,
+    or when the mesh carries **no page**.  That last case is the one that
+    matters: see `LM_SLICE_NONE`.  The spec dict itself is built by
+    `le_mesh.lightmap.build_lightmap_spec`, never re-derived here.
+    """
+    if not ctx or not ctx.get("available"):
+        return {}
+    lm = _le_mesh_lightmap()
+    if lm is None:
+        return {}
+    if not is_lightmapped(obj.get("lightmap_index")):
+        return {}
+    page = _page_of(obj.get("lm_slice_index"))
+    if page is None:
+        return {}
+    forced = (opts or {}).get("lightmap_force_page")
+    if forced is not None:
+        # DIAGNOSTIC ONLY -- the same class of switch as
+        # `mesh_builder._axis_matrix`'s `mirror_axis`.  It exists so the failure
+        # mode ("every mesh renders page 0") can be RENDERED on demand instead of
+        # only described.  Never set by the operator.
+        f = _page_of(forced)
+        if f is not None:
+            page = f
+    row = _as_int(obj.get("lightmap_index")) or 0
+
+    color_hash = ctx["color_hash"]
+    files = {color_hash: ctx["color_file"]}
+    meta = {color_hash: dict(ctx["color_meta"])}
+    ao_hash = ctx.get("ao_hash") or ""
+    if ao_hash and ao_hash != color_hash:
+        meta[ao_hash] = dict(ctx.get("ao_meta") or {})
+
+    tex_set = lm.LightMapSet(
+        row,
+        int(color_hash, 16) if _is_hash(color_hash) else lm.NULL_HASH,
+        int(ao_hash, 16) if _is_hash(ao_hash) else lm.NULL_HASH,
+        lm.NULL_HASH, lm.NULL_HASH, lm.NULL_HASH)
+    binding = lm.LightMapBinding(row, page, tex_set)
+    # The UV set is PER OBJECT (it comes from that mesh's vertex format), while
+    # `ctx` is per IMPORT -- so the resolved name must win over the context
+    # default. Precedence: explicit operator override > this object's resolved
+    # slot-4 set > the context default > the legacy literal.
+    uv_layer = ((opts or {}).get("lightmap_uv_layer")
+                or _lightmap_uv_of(obj)
+                or ctx.get("uv_layer") or UV_LAYER)
+    return lm.build_lightmap_spec(binding, files, texture_meta=meta,
+                                  uv_layer=uv_layer)
+
+
+def _is_hash(s) -> bool:
+    """A 16-hex `CSymbol64` string, as `LightMapSet.textures` emits them."""
+    if not isinstance(s, str) or len(s) != 16:
+        return False
+    try:
+        int(s, 16)
+    except ValueError:
+        return False
+    return True
+
+
+def variant_name(base_name: str, page: int) -> str:
+    """Datablock name for the (material, page) variant.
+
+    The PAGE is in the key, so one material used by two meshes on two pages
+    yields two datablocks instead of collapsing onto whichever page happened to
+    be wired first.  It composes with `vertex_color_variant`'s `__vcol` suffix
+    because it is built from `mat.name`, which already carries it.
+    """
+    return f"{base_name}__lm{int(page)}"
+
+
+def wiring_opts(ctx, opts=None) -> dict:
+    """The options dict to hand `wire_lightmap` for `ctx`.
+
+    Pins `pkg_dir` to None because `lightmap_spec_for_object` puts an ABSOLUTE
+    path in `color["file"]` (the atlas is a level asset outside the package),
+    and points the split cache at the context's `slice_dir`.
+    """
+    out = dict(opts or {})
+    out["pkg_dir"] = None
+    if ctx and ctx.get("slice_dir"):
+        out.setdefault("lightmap_slice_dir", ctx["slice_dir"])
+    return out
+
+
+def resolved_mode(opts=None) -> str:
+    """`opts['lightmap_mode']`, normalised; unknown values fall back to the default."""
+    mode = str((opts or {}).get("lightmap_mode", DEFAULT_MODE) or DEFAULT_MODE).lower()
+    return mode if mode in MODES else DEFAULT_MODE
 
 
 # --- small helpers -----------------------------------------------------------
@@ -438,10 +823,12 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
                                    OFF because the ENGINE does not do it for a
                                    lightmapped surface: `ao0.R` is the H-basis
                                    band-0 term and `saturate(DotH4(0, (h.x,0,0,0)))`
-                                   reduces to exactly `ao0.R`, but the engine
-                                   applies that scalar only on the
-                                   irradiance-volume branch. On the lightmap path
+                                   reduces to exactly `ao0.R`, but that scalar is
+                                   applied only on the irradiance-volume path
+                                   (it sits inside the ubershader's
+                                   `else if(useirradiance)`). On the lightmap path
                                    the AO pair drives ambient SPECULAR only.
+                                   `shader-confirmed`.
             `lightmap_basis`       "sg5" (default) | "single". "sg5" is the
                                    engine's own diffuse math and needs the five
                                    per-lobe slices of this mesh's page — from
@@ -472,7 +859,10 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
         "wired": False, "mode": mode, "reason": "", "colorspace": "",
         "uv_layer": "", "image": "", "albedo_source": "", "ao_used": False,
         "emission_added": False, "basis": BASIS_SINGLE, "basis_reason": "",
-        "lobes": 0, "lobe_weights": [], "page": 0, "auto_split": False,
+        # `page` stays None, never 0, until a real `lmsliceindex` is read: 0 is a
+        # legitimate page (15 station_front meshes use it) and must never double
+        # as "unknown".
+        "lobes": 0, "lobe_weights": [], "page": None, "auto_split": False,
         "slice_files": [],
         "emission_strength": 0.0, "zeroed": [], "nodes": [],
     }
@@ -501,7 +891,7 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
     if not color.get("file"):
         report["reason"] = (
             "lightmap texture not extracted "
-            f"(hash {color.get('hash', '?')}) — extract it and re-import")
+            f"(hash {color.get('hash', '?')}) — see docs/LIGHTING.md")
         return report
     if color.get("dxgi_unexpected"):
         report["reason"] = (
@@ -527,13 +917,23 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
     # The shipped colour map is an arraySize>1 DDS and Blender shows only slice
     # 0 of it, so if the spec did not already hand us per-slice files, split them
     # out here. This is also what makes `lm_slice_index` mean anything at all.
-    page = lm_spec.get("slice_index", 0)
-    try:
-        page = int(page)
-    except (TypeError, ValueError):
-        page = 0
-    if page < 0 or page == 0xFFFFFFFF:
-        page = 0
+    # ⛔ THE PAGE IS NOT OPTIONAL AND HAS NO DEFAULT.
+    # `lightmapindex` (which table row) and `lmsliceindex` (which of the 13
+    # pages) are INDEPENDENT fields: 2 of the 1045 station_front static meshes
+    # carry the valid row 1 together with `lmsliceindex == 0xffffffff`
+    # (`stream-confirmed`, docs/LIGHTING.md §5), and
+    # `le_mesh.lightmap.colour_slice_indices` returns `[]` for that case
+    # precisely so no consumer silently substitutes page 0.  Page 0 is a real,
+    # different part of the bake (15 station meshes legitimately use it), so
+    # substituting it does not "degrade" — it renders someone else's lighting.
+    # Refusing to wire is the only honest option, and it is reported.
+    page = _page_of(lm_spec.get("slice_index"))
+    if page is None:
+        report["reason"] = (
+            "mesh has no lightmap PAGE (lmsliceindex == 0xffffffff or invalid); "
+            "refusing to fall back to page 0 — that would render a different "
+            "part of the bake docs/LIGHTING.md §5)")
+        return report
     report["page"] = page
     if not slices and opts.get("lightmap_auto_split", True):
         src = Path(str(pkg_dir)) / color["file"] if pkg_dir else Path(color["file"])
@@ -588,7 +988,9 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
     uvnode = nt.nodes.new("ShaderNodeUVMap")
     uvnode.uv_map = uv_layer
     uvnode.location = (_NODE_X, _NODE_Y)
-    uvnode.label = "lightmap UV (uv1)"
+    # Never hardcode `uv1` here: a node in a shipped .blend labelled `uv1` while
+    # it samples `uv2` costs an afternoon later.
+    uvnode.label = "lightmap UV (%s)" % uv_layer
     created.append(uvnode)
 
     tex_nodes = []
@@ -626,14 +1028,14 @@ def wire_lightmap(mat, node_tree, bsdf, lm_spec, opts=None) -> dict:
     else:
         lm_socket = tex_nodes[0].outputs["Color"]
 
-    # optional AO multiply — OFF by default, and for a reason read out of the
-    # engine's own maths rather than an unknown one.  `ao0.xy` + `ao1.xy` are four
-    # H-basis occlusion coefficients; the scalar diffuse AO is
-    # `saturate(DotH4(0, (h.x,0,0,0)))`, which — because `band0scale == sqrt(2pi)`
-    # and `DotH4`'s band-0 factor is `1/sqrt(2pi)` — is exactly `ao0.R`.  But the
-    # engine multiplies that scalar into the ambient diffuse ONLY on the
-    # irradiance-volume branch, never on the lightmap path.  So for a lightmapped
-    # surface, multiplying AO in would
+    # optional AO multiply — OFF by default, and now for a *shader-confirmed*
+    # reason rather than an unknown one.  `ao0.xy` + `ao1.xy` are four H-basis
+    # occlusion coefficients; the scalar diffuse AO is
+    # `saturate(DotH4(0, (h.x,0,0,0)))`, which — because `band0scale ==
+    # sqrt(2pi)` and `DotH4`'s band-0 factor is `1/sqrt(2pi)` — is exactly
+    # `ao0.R`.  But the engine multiplies that scalar into the ambient diffuse
+    # ONLY on the irradiance-volume path (inside `else if(useirradiance)`),
+    # never on the lightmap path.  So for a lightmapped surface, multiplying AO in would
     # DOUBLE-darken relative to the shipped look.
     ao = lm_spec.get("ao0") or {}
     if opts.get("lightmap_use_ao", False) and ao.get("file"):

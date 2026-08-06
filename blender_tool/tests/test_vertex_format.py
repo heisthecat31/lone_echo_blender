@@ -24,6 +24,33 @@ def test_parse_elements_and_stride():
     uv1 = elements[3]
     assert uv1.usage == vf.EUsage.eTexCoord and uv1.slot == 1
     assert uv1.type == vf.EType.eU16n
+    # ⚠ `uv1` is APPEARANCE ORDER — "the second texcoord element" — and this
+    # fixture's second texcoord sits on slot 1, not on the lightmap's slot 4.
+    # The name and the semantic slot are different things; see
+    # `tests/test_lightmap_uv_slot.py`.
+    assert uv1.slot != vf.LIGHTMAP_TEXCOORD_SLOT
+
+
+def test_lightmap_uv_comes_from_the_slot_not_the_name():
+    """`uvN` is a transport name; the engine binds the bake to texcoord slot 4
+    (`shader-confirmed`, `vb_texcoord4`)."""
+    import struct
+    buf = bytearray(0x130)
+    for i, el in enumerate(STRIDE44_ELEMENTS):
+        struct.pack_into("<8B", buf, i * 8, *el)
+    elements = vf.parse_elements(bytes(buf), 0, len(STRIDE44_ELEMENTS))
+    resolved = vf.lightmap_uv_attr_name(elements)
+    if elements[3].slot == vf.LIGHTMAP_TEXCOORD_SLOT:
+        assert resolved == "uv1"
+    else:
+        # no slot-4 texcoord in this fixture -> no lightmap UV set at all, and
+        # the resolver must NOT fall back to the second texcoord.
+        assert resolved is None
+    # a slot-4 element added after two others resolves to `uv2`, not `uv1`
+    els = list(elements) + [vf.VertexElement(
+        usage=vf.EUsage.eTexCoord, offset=STRIDE44, type=vf.EType.eU16n,
+        count=2, slot=4, size=4, stream=0, instancerate=0)]
+    assert vf.lightmap_uv_attr_name(els) == "uv2"
 
 
 def test_decode_all_attributes():

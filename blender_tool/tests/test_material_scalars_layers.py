@@ -1,4 +1,4 @@
-"""Per-layer material scalars: the emissive layer-selection fix and the added knobs.
+"""Per-layer material scalars: the B4 layer-selection fix and the added knobs.
 
 Pure stdlib (no oodle, no bpy). Locks:
 
@@ -11,6 +11,9 @@ Pure stdlib (no oodle, no bpy). Locks:
     == 25.0` where the legacy flat key still reads 2.0 (12.5x too dim);
   * absent authored knobs fall back to the engine's own authored default, never
     to an invented one.
+
+Evidence labels: `name-confirmed` (matches the engine's own type / field / enum
+names), `stream-confirmed` (shipped archive bytes), `inferred`.
 """
 
 import json
@@ -64,7 +67,8 @@ def _slice(*, bakecolor=(1, 1, 1, 1), emissive=(0, 0, 0, 1), blendmode=0,
 # 1. Every added name is a verified preimage
 # ---------------------------------------------------------------------------
 
-# Global (non-layer, non-group) uber-material knobs.
+# Global knobs. Names `name-confirmed`: `k_*` are the engine's ubermaterial
+# parameters and `k_bake_*` are the material asset schema's.
 ADDED_GLOBAL_NAMES = {
     "k_alpha": msc.HASH_K_ALPHA,
     "k_alpha_threshold": msc.HASH_K_ALPHA_THRESHOLD,
@@ -83,7 +87,7 @@ def test_added_global_scalar_names_are_preimages():
 
 
 def test_added_layer_scalar_names_are_preimages():
-    """`layerN_*` members of the engine's per-layer parameter block."""
+    """`layerN_*` members of the engine's `UberMaterialLayer`."""
     tables = {
         "emissive_intensity": msc.HASH_EMISSIVE_INTENSITY,
         "emissive_tint_color": msc.HASH_EMISSIVE_TINT,
@@ -109,7 +113,7 @@ def test_stream_confirmed_hashes_resolve():
     """Hashes actually observed in shipped materialprops tables.
 
     All 11 distinct materialprop hashes in the 51-package fixture corpus
-    (archive 0703fd2acd5803e9).
+    (`stream-confirmed`, archive 0703fd2acd5803e9).
     """
     observed = {
         "2fdcb09e52645f8b": "k_alpha",
@@ -194,8 +198,9 @@ def test_zero_intensity_is_not_emissive():
 # 3. The shipped worked example: 0613ef69c99cbbc6
 # ---------------------------------------------------------------------------
 
-# materialprops of bridge material 0613ef69c99cbbc6, decoded from archive
-# 0703fd2acd5803e9. eMTForwardTransparent / eBlendTranslucent.
+# materialprops of bridge material 0613ef69c99cbbc6 (`stream-confirmed`,
+# archive 0703fd2acd5803e9; identical table in exports/fixtures_mat and in
+# scratchpad/bridge_materials.tsv). eMTForwardTransparent / eBlendTranslucent.
 BRIDGE_0613_PROPS = {
     "31e35f7a5feb8441": 2.0,                    # layer0_emissive_intensity
     "516b9827ccc13de3": 25.0,                   # layer1_emissive_intensity
@@ -213,8 +218,8 @@ def _bridge_0613_slice() -> bytes:
 
 
 def test_bridge_0613_reads_layer1_intensity_25():
-    """The layer-selection regression: the emissive map is `layer1_emissive_map`,
-    so the intensity is layer1's 25.0 — not layer0's 2.0 (12.5x too dim)."""
+    """The B4 regression: the emissive map is `layer1_emissive_map`, so the
+    intensity is layer1's 25.0 — not layer0's 2.0 (12.5x too dim)."""
     s = msc.decode_material_scalars(_bridge_0613_slice())
 
     assert s["layers"][1]["emissive_intensity"] == 25.0     # the correct value
@@ -228,7 +233,7 @@ def test_bridge_0613_reads_layer1_intensity_25():
     assert s["emissive_intensity"] == 2.0
 
     # Emission Strength = layerN_emissive_intensity x k_emissive_scale, and
-    # k_emissive_scale is absent => the engine's authored default 1.0.
+    # k_emissive_scale is absent => authored default 1.0 (`name-confirmed`).
     assert s["emissive_scale"] == 1.0
     assert "k_emissive_scale" in s["scalar_defaults_applied"]
     assert s["layers"][1]["emissive_intensity"] * s["emissive_scale"] == 25.0
@@ -285,7 +290,8 @@ def test_unknown_enum_values_are_labelled_not_guessed():
 
 
 def test_authored_defaults_match_the_authoring_source():
-    """Every default is a value the engine itself authors.
+    """Every default is a value the engine's ubermaterial and the material asset
+    schema authored (`name-confirmed`).
 
     Nothing here may be invented; a changed number needs new evidence.
     """
@@ -307,6 +313,7 @@ def test_authored_defaults_match_the_authoring_source():
 
 def test_absent_knobs_fall_back_to_authored_defaults():
     s = msc.decode_material_scalars(_slice())
+    # each is the engine's own authored default for that parameter
     assert s["alpha_threshold"] == 0.5
     assert s["emissive_scale"] == 1.0
     assert s["refractive_index"] == 1.0

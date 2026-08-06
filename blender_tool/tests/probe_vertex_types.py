@@ -2,17 +2,17 @@
 
 Purpose: decide whether the packed vertex types eCmp(7)/eSphN(9)/eSphT(10) are
 ever used on *renderable* usages (position/normal/tangent). If they are absent
-or rare, decoding their (undocumented) bit layout is not
+or rare, byte-verifying their (undocumented) bit layout via disassembly is not
 worth it and `vertex_format.py` keeps them `packed_unresolved`. If they ARE
-common on renderable usages, that is the signal to invest in a full decode.
+common on renderable usages, that is the signal to invest in a disasm decode.
 
-MUST run under Windows Python (the Oodle runtime is a Windows binary):
+MUST run under Windows Python (Oodle DLL):
 
     python.exe blender_tool/tests/probe_vertex_types.py
     python.exe blender_tool/tests/probe_vertex_types.py <archive_hash> [<archive_hash> ...]
 
 Bounded on purpose: processes one archive at a time and caps meshlists per
-archive (multi-GB loads have exhausted memory — never load many at once).
+archive (WSL has OOM-crashed on multi-GB loads — never load many at once).
 """
 
 from __future__ import annotations
@@ -21,11 +21,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# --- path wiring: blender_tool/tests/ -> blender_tool + <repo>/scripts ---
+# --- path wiring: blender_tool/tests/ -> blender_tool + this repository's `scripts/`
 THIS = Path(__file__).resolve()
 BLENDER_TOOL = THIS.parents[1]
-REPO_ROOT = THIS.parents[2]
-SCRIPTS = REPO_ROOT / "scripts"
+LE_ROOT = THIS.parents[2]
+SCRIPTS = LE_ROOT / "scripts"
 for p in (str(BLENDER_TOOL), str(SCRIPTS)):
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -119,7 +119,7 @@ def probe(archives):
         for (usage, typ), c in sorted(packed_on_renderable.items()):
             print(f"  {usage} {typ}: {c}")
         print("VERDICT: packed types ARE used on renderable usages -> "
-              "byte-verify their bit layout.")
+              "byte-verify their bit layout (needs-disasm).")
     else:
         print("  (none)")
         print("VERDICT: packed types 7/9/10 are UNUSED on renderable usages in "

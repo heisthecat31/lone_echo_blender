@@ -1,6 +1,6 @@
 """Core tests for scripts/le_static_scatter.decode_static_master (no archive).
 
-Verifies the corrected layout: the tail scalars carry the real
+Verifies the corrected Front A layout: the tail scalars carry the real
 totalinstances + GPU instancedata pointer, and instancescount/instanceoffsets
 are recovered as a contiguous-per-mesh-run binding.
 """
@@ -89,7 +89,7 @@ def test_truncated_raises():
     raise AssertionError("expected ValueError on too-small blob")
 
 
-# --- GPU instancedata decode ---------------------------------------------
+# --- GPU instancedata decode (wave3) -------------------------------------
 
 def _itrec(block_words, first, stride_words, total, bk0=0, bk1=0):
     # one 36-byte instancetypedata record (9x u32): +0 blockoff_words, +4 first,

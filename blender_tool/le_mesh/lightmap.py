@@ -6,65 +6,68 @@ Blender and importable unchanged inside it.
 What this module covers
 -----------------------
 1. `SLightMapTextureNames` (stride `0x28`) -> the five texture name-hashes of one
-   lightmap set.
+   lightmap set.  `stream-confirmed` (see §"Evidence" below).
 2. The on-disk container: the resource slice is a **compact** `[u32 count][count x
-   0x28]` array at slice offset 0 — not a `CTable` memory image and not
-   CResource-prefixed. Holds on **98/98** shipped resources across two archives.
+   0x28]` array at slice offset 0 — NOT the engine's own declarations `CTable` memory image and NOT
+   CResource-prefixed.  `stream-confirmed` on **98/98** shipped
+   resources across two archives (§"Evidence").
 3. `CGMeshData.lightmapindex@0x6c` / `lmsliceindex@0x70` / `numlobes@0x74` ->
    a **direct row index** into that table, a **lightmap page** (texture-array
-   slice), and a lobe count.
-4. The **join**: which `CGLightMapResourceWin7` a given mesh indexes into. See
-   `lightmap_resource_name_for_scene` / `dynamic_lightmapsid` and "The join".
+   slice), and a lobe count.  All three `stream-confirmed`.
+4. The **join**: which `CGLightMapResourceWin7` a given mesh indexes into.
+   `stream-confirmed` — see `lightmap_resource_name_for_scene` /
+   `dynamic_lightmapsid` and §"The join" below.
 5. A Blender-facing spec dict (`build_lightmap_spec`) that names, per role, the
    texture file, the expected DXGI format and the colour space to load it in.
 
-⚠ Status: this decode is complete and tested, but the importer does **not** yet
-wire a lightmap onto a mesh end to end — see `docs/LIGHTING.md`.
+Full write-up with every count: docs/LIGHTING.md.
 
-What was measured
------------------
-Measured on the shipped corpus (bridge `0703fd2acd5803e9`, station_front
-`942c829457a04a62`):
+Evidence
+--------
+`stream-confirmed`, measured 2026-07-31 on the shipped LE Win7 corpus
+(bridge `0703fd2acd5803e9`, station_front `942c829457a04a62`):
 
 * **Container.** `size == 4 + count * 0x28` holds **exactly** for all 81 bridge
   + all 17 station_front resources — **98/98, zero failures**.  Observed shapes:
   `[u32 1]` (44 B) x 96, `[u32 7]` (284 B) x 1 (the bridge master), `[u32 10]`
   (404 B) x 1 (the station_front master).
 * **Row layout.** `lightmapid@0, ao0id@8, ao1id@0x10, dlocclusionid@0x18,
-  poocclusionid@0x20` — five `CSymbol64`.  Every populated slot resolves to a
-  real in-archive `CGTextureResource` whose DXGI format matches its role, on
+  poocclusionid@0x20` — five `CSymbol64`.  Names `name-only` (the engine's own type names);
+  layout stream-confirmed because every populated slot resolves to a real
+  in-archive `CGTextureResource` whose DXGI format matches its role, on
   **41 populated rows** across the two archives (113 rows read in total).
 * **The station_front master row 1** (the only populated row of its 10):
   `lightmapid 0178fa39b1b95d2f` DXGI 95 `BC6H_UF16` 1024^2 **arraysize 65**;
   `ao0id 81a8fcf99b655a42` / `ao1id …a43` DXGI 83 `BC5_UNORM` 1024^2
   **arraysize 13**; `dlocclusionid bd2f79f78fb557f1` and
   `poocclusionid bd2f79f78fb543f1` DXGI 80 `BC4_UNORM` 1024^2 **arraysize 13**.
-  ⛔ `dlocclusionid` and `poocclusionid` are **different hashes**; an earlier
-  note that both slots held one texture was reading a truncated hash.
+  ⛔ `dlocclusionid` and `poocclusionid` are **different hashes** — the wave-2
+  note that both slots held one texture `bd2f79…f1` was reading a truncated
+  hash.
 
-The join
---------
-`CGScene` owns *five* sibling resource instances — meshlist, visresource,
-reflectionresource, **lightmapresource**, staticinstresource — and `CGSceneData`
-carries **no** id field for any of them. On disk the siblings are addressed **by
-the scene's own resource name hash**:
+The join (question 3 — RESOLVED)
+--------------------------------
+`CGScene` (the engine's own type names) owns *five* sibling `CResourceInstanceT<>`s — meshlist,
+visresource, reflectionresource, **lightmapresource**, staticinstresource — and
+`CGSceneData` carries **no** id field for any of them.  On disk the siblings are
+addressed **by the scene's own resource name hash**:
 
 * bridge: 54 `CGSceneResourceWin7` / 54 `CGMeshListResourceWin7` / 54
   `CGStaticInstanceResourceWin7` share one name-hash set, and **54 of the 81**
   `CGLightMapResourceWin7` carry a name from that same set (1:1).
-* the remaining **27** are named *explicitly*: `SGDynamicInstancesData` ends with
-  `lightmapsid` (`CSymbol64`), which lands in the **last 8 bytes** of a
-  `CGDynamicInstanceResourceWin7` slice.  All 33 bridge dynamic instances were
-  read: **27 name an in-archive lightmap resource, 6 hold the 0xff..ff sentinel,
-  0 garbage** — and those 27 are *exactly* the 27 lightmap resources not co-named
-  with a mesh-list.  54 + 27 = 81, disjoint, no leftovers.
+* the remaining **27** are named *explicitly*: `SGDynamicInstancesData`
+  (the engine's own type names) ends with `lightmapsid` (`CSymbol64`), which lands in the **last
+  8 bytes** of a `CGDynamicInstanceResourceWin7` slice.  All 33 bridge dynamic
+  instances were read: **27 name an in-archive lightmap resource, 6 hold the
+  0xff..ff sentinel, 0 garbage** — and those 27 are *exactly* the 27 lightmap
+  resources not co-named with a mesh-list.  54 + 27 = 81, disjoint, no leftovers.
 * the co-name reading is what predicts populated-ness: of the 51 bridge
   mesh-lists that parse, the **9** with lightmapped meshes have a populated
   co-named table and the **42** without have an all-null one — **51/51, no
   exceptions**.  (36 populated = 9 co-named + 27 dynamic-named, exactly.)
 
-`lightmapindex` is a DIRECT row index
--------------------------------------
+`lightmapindex` is a DIRECT row index (question 2 — RESOLVED)
+------------------------------------------------------------
 The station_front master table has 10 rows of which **only row 1** is populated,
 and every one of the **1049** lightmapped meshes bound to it carries
 `lightmapindex == 1`.  An index over *populated rows only* would require 0.
@@ -72,39 +75,40 @@ Across 64 parsed mesh-lists + the one populated static-instance inline
 mesh-list (**1221 meshes** = 121 + 50 + 1050),
 `lightmapindex >= len(co-named table)` happened **0 times**.
 
-`lmsliceindex` is the lightmap PAGE
-----------------------------------
+`lmsliceindex` is the lightmap PAGE (question 4 — RESOLVED)
+----------------------------------------------------------
 Station_front's 1050 static meshes use `lmsliceindex` values **0..12, all 13
 present** — exactly the `arraysize` of the ao0/ao1/dlocclusion/poocclusion
-arrays (13).  The shipped shaders' reflection data binds
-`k_ambient_lightmap_ao0/ao1` with `Dimension == 5 == TEXTURE2DARRAY`, so the
-slice index is the array index.
+arrays (13).  The DXBC RDEF binds `k_ambient_lightmap_ao0/ao1` with
+`Dimension == 5 == D3D_SRV_DIMENSION_TEXTURE2DARRAY`
+(`stream-confirmed`), so the slice index is the array index.
 
 The colour (`lightmapid`) array is **65 = 13 x 5** slices: 5 per page, laid out
-**page-major**, `colour_slice = lmsliceindex * 5 + k`.  Validated on the shipped
-68 MB DDS: grouping every slice with its 4 run-neighbours beats every out-of-run
-slice **65/65** by background-block overlap, while the lobe-major alternative
-(stride 13) scores **0/65**; colour page *p* also matches AO slice *p* on 9 of 13
-pages (the other 4 are inconclusive, not contradictory).  See
-`colour_slice_indices`.
+**page-major**, `colour_slice = lmsliceindex * 5 + k`.  `export-validated` on
+the shipped 68 MB DDS: grouping every slice with its 4 run-neighbours beats
+every out-of-run slice **65/65** by background-block overlap, while the
+lobe-major alternative (stride 13) scores **0/65**; colour page *p* also matches
+AO slice *p* on 9 of 13 pages (the other 4 are inconclusive, not contradictory).
+See `colour_slice_indices`.
 
 Unresolved
 ----------
 * **What the 5th colour slice per page is.**  `CGMeshData.numlobes@0x74` reads
   **4 on every shipped mesh measured (1221/1221, both archives)**, so 5 is
-  `numlobes + 1`.  The slot `lightmapid` fills is a **lobe basis**, and the
-  engine's basis enum offers `eSH4Basis=0, eSH9Basis=1, eSG5Basis=2, …` — so
-  "4 lobes + 1 extra" and "a 5-lobe SG bake whose `numlobes` field means
-  something else" both fit.  Nothing measured separates them: within each run of
-  5 no slice is structurally the odd one out (the largest-background-count slice
-  is index 0 in only 6 of 13 runs).
-* The four AO channels' semantics.  The runtime slot names are known —
-  `btextures, ao0, ao1, dirlightocclusion, punctualocclusion` — but what the two
-  BC5s encode is still not decoded.  Resolving it needs the ambient-lightmap
-  sampling function, not more bytes.
-* No colour/lobe-basis sampler name appears in the shipped shaders' reflection
-  data (only `k_ambient_lightmap_ao0/ao1`), so how the lobe-basis array reaches
-  the shader is unresolved.
+  `numlobes + 1`.  `SGLightMapTextureResources.lobebasis` (the engine's own type names) is the
+  engine's own name for the slot `lightmapid` fills, and `EBasisType` offers
+  `eSH4Basis=0, eSH9Basis=1, eSG5Basis=2, …` — so "4 lobes + 1 extra" and "a
+  5-lobe SG bake whose `numlobes` field means something else" both fit.  Nothing
+  measured separates them: within each run of 5 no slice is structurally the odd
+  one out (the largest-background-count slice is index 0 in only 6 of 13 runs).
+* The four AO channels' semantics.  Runtime names are now known —
+  `SGLightMapTextures` (the engine's own type names) is `btextures, ao0, ao1,
+  **dirlightocclusion**, **punctualocclusion**` — but what the two BC5s encode
+  is still not decoded.  Resolving it needs the ambient-lightmap sampling
+  function, not more bytes.
+* No colour/`lobebasis` SRV name appears anywhere in the reference DXBC RDEF
+  corpus (only `k_ambient_lightmap_ao0/ao1`), so how the lobe-basis array
+  reaches the shader is `unresolved`.
 """
 
 from __future__ import annotations
@@ -130,10 +134,10 @@ _ROLE_OFFSETS = {
     "poocc": F_POOCC,
 }
 
-#: our short role key -> the engine's own `SLightMapTextureNames` field name.
-#: Our keys are kept for API stability; these are the real names and are what any
-#: future doc should quote.
-ROLE_STRUCT_FIELD = {
+#: our short role key -> the field name the engine's own declarations gives `SLightMapTextureNames`
+#: (`name-only`, the engine's own type names).  Our keys are kept for API stability; these are
+#: the real names and are what any future doc should quote.
+ROLE_PDB_FIELD = {
     "lightmapid": "lightmapid",
     "ao0": "ao0id",
     "ao1": "ao1id",
@@ -141,11 +145,12 @@ ROLE_STRUCT_FIELD = {
     "poocc": "poocclusionid",
 }
 
-#: the same five slots as the *runtime* struct names them: `btextures, ao0, ao1,
-#: dirlightocclusion, punctualocclusion`, whose resource-side counterparts are
-#: `lobebasis, ao0, ao1, dlocclusion, pocclusion`.  Note that slot 0 — the one
-#: this module's `lightmapid` names, and the only HDR one — is a **lobe basis**,
-#: not a plain colour map.
+#: the same five slots as the *runtime* struct names them.  `SGLightMapTextures`
+#: (the engine's own type names) = `btextures, ao0, ao1, dirlightocclusion, punctualocclusion`;
+#: `SGLightMapTextureResources` (the engine's own type names) = `lobebasis, ao0, ao1,
+#: dlocclusion, pocclusion`.  Both `name-only`.  Note that slot 0 — the one this
+#: module's `lightmapid` names, and the only HDR one — is a **lobe basis**, not
+#: a plain colour map.
 ROLE_RUNTIME_NAME = {
     "lightmapid": "lobebasis",
     "ao0": "ao0",
@@ -166,24 +171,27 @@ LM_SLICE_NONE = 0xFFFFFFFF
 MAX_TABLE_ENTRIES = 4096
 
 # --- the three CGMeshData fields this module consumes ------------------------
-# All three offsets are read out of shipped bytes: 1221 shipped meshes decode to
-# in-range values at these spots. `le_mesh.meshlist` reads all three.
+# the engine's own type names (`name-only` for the names, `stream-confirmed` for all
+# three offsets — 1221 shipped meshes decode to in-range values at these spots).
+# `le_mesh.meshlist` already reads the first two; `numlobes` is not yet plumbed
+# into `MeshObject` (patch in a local working file).
 M_LIGHTMAPINDEX = 0x6C      # u32  row index into the bound lightmap table
 M_LMSLICEINDEX = 0x70       # u32  lightmap PAGE == texture-array slice
 M_NUMLOBES = 0x74           # u32  lobe count; 4 on every shipped mesh measured
 
-#: The engine's lighting-basis enum. Recorded because the `numlobes == 4` /
-#: `5 colour slices per page` mismatch has to be read against it, not against a
-#: guess.
+#: `NRadEngine::EBasisType` (the engine's own type names).  `name-only`.  Recorded because the
+#: `numlobes == 4` / `5 colour slices per page` mismatch has to be read against
+#: it, not against a guess.
 EBASIS_TYPE = {
     0: "eSH4Basis", 1: "eSH9Basis", 2: "eSG5Basis",
     3: "eSG6Basis", 4: "eSG9Basis", 5: "eSG12Basis",
     6: "eMaxBasis", 7: "eBasisNone",
 }
 
-#: `numlobes` on every shipped mesh measured — 1221 of 1221 across the bridge and
-#: station_front.  A different value in some other archive would be a real
-#: finding, so callers should report rather than assume it.
+#: `numlobes` on every shipped mesh measured — 1221 of 1221 across the bridge
+#: and station_front.  `stream-confirmed`.  A different value in some
+#: other archive would be a real finding, so callers should report rather than
+#: assume it.
 OBSERVED_NUMLOBES = 4
 
 # --- DXGI formats the roles are expected to carry ----------------------------
@@ -191,9 +199,9 @@ DXGI_BC4_UNORM = 80
 DXGI_BC5_UNORM = 83
 DXGI_BC6H_UF16 = 95
 
-#: role -> the DXGI format observed on the one fully-resolved shipped row
-#: (station_front).  Treated as an *expectation*, not an assertion —
-#: `build_lightmap_spec` reports a mismatch instead of failing.
+#: role -> the DXGI format observed on the one fully-resolved shipped row.
+#: `stream-confirmed` on station_front; treated as an *expectation*, not
+#: an assertion — `build_lightmap_spec` reports a mismatch instead of failing.
 ROLE_EXPECTED_DXGI = {
     "lightmapid": DXGI_BC6H_UF16,
     "ao0": DXGI_BC5_UNORM,
@@ -203,7 +211,7 @@ ROLE_EXPECTED_DXGI = {
 }
 
 # --- colour management -------------------------------------------------------
-# Measured in Blender 5.1.1 by RNA probe + texel sample + EEVEE render
+# `engine-confirmed (Blender 5.1.1)`, by RNA probe + texel sample + EEVEE render
 # (`tests/blender_lightmap_probe.py`):
 #   * Blender 5.1.1 loads a DXGI-95 BC6H_UF16 DDS natively, as a FLOAT image, and
 #     its DDS loader auto-assigns colour space 'Linear Rec.709'.
@@ -231,10 +239,10 @@ ROLE_COLORSPACE = {
     "poocc": COLORSPACE_DATA,
 }
 
-#: the vertex UV set the lightmap is sampled with.  Measured across a 121-object
-#: fixture export: every mesh that carries a non-null lightmapindex also carries
-#: `uv1`, and its uv1 occupies a sub-rectangle of [0,1] (u 0..0.999, v 0..0.467)
-#: while uv0 spans the full range — the signature of an atlas slot.
+#: the vertex UV set the lightmap is sampled with.  `export-validated`: all 15
+#: shipped meshes in `exports/fixtures_mat` that carry a non-null lightmapindex
+#: also carry `uv1`, and their uv1 occupies a sub-rectangle of [0,1] (u 0..0.999,
+#: v 0..0.467) while uv0 spans the full range — the signature of an atlas slot.
 UV_LAYER = "uv1"
 
 
@@ -298,8 +306,8 @@ def decode_texture_names(blob: bytes, off: int = 0, index: int = 0) -> LightMapS
 def parse_lightmap_table(blob: bytes, off: int = 0, *, strict: bool = True) -> list:
     """Decode a `CGLightMapResourceWin7` slice -> list[LightMapSet].
 
-    On-disk form: `[u32 count][count x 0x28]` at slice offset 0.  There is no
-    CResource header and no `CTable` memory image.
+    On-disk form (`stream-confirmed`): `[u32 count][count x 0x28]` at
+    slice offset 0.  There is no CResource header and no `CTable` memory image.
 
     `strict=False` clamps `count` to what the buffer actually holds instead of
     raising — for probing a slice whose boundaries are not yet certain.
@@ -354,21 +362,22 @@ class LightMapBinding:
 # =============================================================================
 # the join:  which CGLightMapResourceWin7 does this mesh index into?
 # =============================================================================
-# See the module docstring's "The join". Two mechanisms, disjoint, and together
-# they account for every shipped lightmap resource in the bridge (54 + 27 == 81,
-# no leftovers):
+# `stream-confirmed` (see the module docstring's "The join").  Two
+# mechanisms, disjoint, and together they account for every shipped lightmap
+# resource in the bridge (54 + 27 == 81, no leftovers):
 #
-#   scene-owned geometry  ->  SIBLING-BY-NAME.  `CGScene` holds its lightmap
-#       resource next to its meshlist / staticinstresource / reflectionresource
-#       siblings, and `CGSceneData` stores no id for any of them: they are all
-#       addressed by the scene's own resource name hash.
+#   scene-owned geometry  ->  SIBLING-BY-NAME.  `CGScene` (the engine's own type names) holds
+#       `CResourceInstanceT<CGLightMapResource> lightmapresource` next to its
+#       meshlist / staticinstresource / reflectionresource siblings, and
+#       `CGSceneData` stores no id for any of them: they are all addressed by
+#       the scene's own resource name hash.
 #
-#   dynamic instances     ->  EXPLICIT.  `SGDynamicInstancesData` ends with
-#       `CSymbol64 lightmapsid`, which serialises as the LAST 8 BYTES of a
-#       `CGDynamicInstanceResourceWin7` slice.
+#   dynamic instances     ->  EXPLICIT.  `SGDynamicInstancesData` (the engine's own type names)
+#       ends with `CSymbol64 lightmapsid`, which serialises as the LAST 8 BYTES
+#       of a `CGDynamicInstanceResourceWin7` slice.
 
-#: `SGDynamicInstancesData.lightmapsid` is the struct's final field, so on disk
-#: it is the last 8 bytes of the slice.
+#: `SGDynamicInstancesData.lightmapsid` sits at struct offset 0x278 in memory;
+#: on disk it is the final field, hence the last 8 bytes of the slice.
 DYNAMIC_LIGHTMAPSID_TAIL = 8
 
 
@@ -376,13 +385,13 @@ def lightmap_resource_name_for_scene(scene_name_hash: int) -> int:
     """The `CGLightMapResourceWin7` name hash a scene/mesh-list binds to.
 
     It is the scene's *own* resource name hash — mesh-list, scene, static-instance
-    and lightmap resources of one scene all share it.  Measured: 54/54 in the
-    bridge, 16/16 in station_front; and of the 51 bridge mesh-lists that parse,
-    the 9 with lightmapped meshes are exactly the 9 whose co-named lightmap table
-    is populated (42/42 unlit ones are all-null).
+    and lightmap resources of one scene all share it.  `stream-confirmed`:
+    54/54 in the bridge, 16/16 in station_front; and of the 51 bridge mesh-lists
+    that parse, the 9 with lightmapped meshes are exactly the 9 whose co-named
+    lightmap table is populated (42/42 unlit ones are all-null).
 
     This is deliberately an identity function: it exists so callers name the
-    mechanism instead of open-coding "the same hash" and losing the reasoning.
+    mechanism instead of open-coding "the same hash" and losing the provenance.
     """
     return int(scene_name_hash)
 
@@ -394,10 +403,10 @@ def dynamic_lightmapsid(slice_bytes: bytes):
     Returns None for the `0xff..ff` "no lightmap" sentinel and for a slice too
     short to hold the field.
 
-    Measured over all 33 dynamic-instance resources in the bridge: 27 yield a
-    hash that is an in-archive `CGLightMapResourceWin7` name and 6 yield the
-    sentinel — 33/33 accounted for, 0 garbage.  Those 27 are exactly the 27
-    lightmap resources that are *not* co-named with a mesh-list.
+    `stream-confirmed`: over all 33 dynamic-instance resources in the
+    bridge, 27 yield a hash that is an in-archive `CGLightMapResourceWin7` name
+    and 6 yield the sentinel — 33/33 accounted for, 0 garbage.  Those 27 are
+    exactly the 27 lightmap resources that are *not* co-named with a mesh-list.
     """
     if slice_bytes is None or len(slice_bytes) < DYNAMIC_LIGHTMAPSID_TAIL:
         return None
@@ -430,9 +439,9 @@ def colour_slice_indices(lm_slice_index, per_page: int) -> list:
     """Lightmap page -> the `lightmapid` array slices that make up that page.
 
     **Page-major**: page `p` owns slices `[p*per_page, (p+1)*per_page)`.
-    Validated on the shipped 68 MB `0178fa39b1b95d2f.dds` (BC6H_UF16, 1024^2,
-    arraysize 65): each slice's four run-neighbours overlap it more than any
-    out-of-run slice does, **65/65**; the lobe-major alternative (stride 13)
+    `export-validated` on the shipped 68 MB `0178fa39b1b95d2f.dds` (BC6H_UF16,
+    1024^2, arraysize 65): each slice's four run-neighbours overlap it more than
+    any out-of-run slice does, **65/65**; the lobe-major alternative (stride 13)
     scores **0/65**.
 
     Returns `[]` when the mesh has no page (`0xffffffff`).
@@ -451,8 +460,8 @@ def colour_slice_indices(lm_slice_index, per_page: int) -> list:
 def is_lightmapped(lightmap_index) -> bool:
     """True when `CGMeshData.lightmapindex` names a lightmap set at all.
 
-    Shipped meshes carry 0xffffffff for "none" (106 of the 121 objects in one
-    fixture export; the other 15 carry 0).
+    `stream-confirmed`: shipped meshes carry 0xffffffff for "none"
+    (106 of the 121 objects in `exports/fixtures_mat`; the other 15 carry 0).
     """
     if lightmap_index is None:
         return False
@@ -469,12 +478,13 @@ def resolve(table: list, lightmap_index, lm_slice_index=LM_SLICE_NONE):
     Returns None when the mesh is not lightmapped, when the index is out of
     range for the table, or when the row it names is a null row.
 
-    The index is a **direct row index**, not an index over the populated rows
-    only: the station_front master table has 10 rows with only row **1**
-    populated, and all 1049 lightmapped meshes bound to it carry
-    `lightmapindex == 1`; the populated-only reading would require 0.  Across
-    1221 shipped meshes, `lightmapindex >= len(table)` never occurred.  `table`
-    must be the table of the resource the mesh's scene binds to — see
+    `stream-confirmed` (upgraded from `inferred` 2026-07-31): the index
+    is a **direct row index**, not an index over the populated rows only.  The
+    station_front master table has 10 rows with only row **1** populated, and
+    all 1049 lightmapped meshes bound to it carry `lightmapindex == 1`; the
+    populated-only reading would require 0.  Across 1221 shipped meshes,
+    `lightmapindex >= len(table)` never occurred.  `table` must be the table of
+    the resource the mesh's scene binds to — see
     `lightmap_resource_name_for_scene` / `dynamic_lightmapsid`.
     """
     if not is_lightmapped(lightmap_index):
@@ -574,6 +584,65 @@ def build_lightmap_spec(binding, texture_files: dict | None = None, *,
     return spec
 
 
+# =============================================================================
+# the `.lemesh` manifest `lightmap` section  (D3's ask, a local working file §2)
+# =============================================================================
+
+#: the manifest key the addon's `resolve_lightmap_context` reads FIRST.  Must
+#: match `addon/lone_echo_import/lightmap_builder.MANIFEST_KEY`.
+MANIFEST_KEY = "lightmap"
+
+#: `CGLightMapResourceWin7` resource-TYPE hash (hash_lookup.json).  Here rather
+#: than in the extractor so the one definition is in the pure-stdlib core.
+LIGHTMAP_TYPE_WIN7 = 0x6665BEDFEADF8B79
+#: `CGTextureResourceWin7` — the type the five role hashes name.
+TEXTURE_TYPE_WIN7 = 0xE8017B774F2B6327
+
+
+def manifest_lightmap_section(binding, texture_files: dict | None = None, *,
+                              texture_meta: dict | None = None,
+                              resource_name=None) -> dict:
+    """The `manifest["lightmap"]` section for ONE `.lemesh` package.
+
+    LEVEL-scoped, not per-object: one atlas serves every mesh-list of a scene, so
+    this is emitted once beside `objects`, and the per-object page stays on each
+    object's `lm_slice_index`.
+
+    Shape (a local working file §2 — `color` and `ao0` are the two the
+    importer reads; the rest is audit trail):
+
+        {"resource": "<16hex>", "row": <lightmapindex>,
+         "color": {"hash", "file", "colorspace", "dxgi", "width", "height",
+                   "arraysize", ...},
+         "ao0" | "ao1" | "dloc" | "poocc": <same or null>,
+         "pages": <ao arraysize>, "slices_per_page": <colour/ao>}
+
+    `file` is **package-relative** and is `""` when the DDS was not copied into
+    the package — a path here is a claim that the bytes are present, and the
+    68 MB atlas is opt-in (see the extractor's `--lightmap-textures`).  The
+    importer degrades correctly: an unreadable `file` falls through to its
+    directory scan, which the `hash` then steers.
+
+    Returns `{}` for `binding is None` so a caller can `or {}` without a branch.
+    """
+    if binding is None:
+        return {}
+    spec = build_lightmap_spec(binding, texture_files, texture_meta=texture_meta)
+    section = {
+        "resource": (f"{int(resource_name):016x}"
+                     if resource_name is not None else None),
+        "row": binding.lightmap_index,
+    }
+    for role in ROLES:
+        # `color` is the importer's name for the `lightmapid` / lobe-basis slot.
+        key = "color" if role == "lightmapid" else role
+        section[key] = spec["roles"][role]
+    ao = spec["roles"]["ao0"]
+    section["pages"] = (ao or {}).get("arraysize")
+    section["slices_per_page"] = spec.get("slices_per_page")
+    return section
+
+
 def spec_for_mesh(table: list, lightmap_index, lm_slice_index,
                   texture_files: dict | None = None, *,
                   texture_meta: dict | None = None,
@@ -587,11 +656,12 @@ def spec_for_mesh(table: list, lightmap_index, lm_slice_index,
 # =============================================================================
 # BC6H_UF16 synthetic stand-in  — TEST FIXTURE, NOT part of the on-disk decode
 # =============================================================================
-# This repository ships no game textures, so the tests cannot use a real lightmap
-# DDS. These helpers build a *synthetic* BC6H_UF16 DDS with exactly-known texel
-# values so the Blender load path, colour space and node graph can be tested end
-# to end against ground truth. Point the same tests at a DDS extracted from your
-# own game data to check real bytes.
+# The real lightmap texture bytes are NOT reachable from the checked-in fixtures
+# (no DXGI-95 DDS exists anywhere in the tree — verified by scanning every .dds).
+# These helpers build a *synthetic* BC6H_UF16 DDS with exactly-known texel values
+# so the Blender load path, colour space and node graph can be tested end to end
+# against ground truth.  See docs/LIGHTING.md for the one command
+# that would swap in real bytes.
 #
 # Only BC6H **mode 11** (5-bit mode field `0b00011`, one region, two 10-bit
 # untransformed RGB endpoints, 63 index bits) is implemented, and only with both
@@ -635,8 +705,8 @@ def bc6h_uf16_decode_endpoint(q: int, bits: int = BC6H_ENDPOINT_BITS) -> float:
     Mirrors the D3D BC6H unsigned path: `Unquantize` then `FinishUnquantize`,
     the result being a half-float bit pattern.  Exact for the constant blocks
     `bc6h_uf16_solid_block` writes (both endpoints equal, so interpolation is a
-    no-op).  Blender 5.1.1's own BC6H decoder returns bit-identical values for
-    these blocks.
+    no-op).  `engine-confirmed (Blender 5.1.1)`: Blender's own BC6H decoder
+    returns bit-identical values for these blocks.
     """
     if bits >= 15:
         unq = q

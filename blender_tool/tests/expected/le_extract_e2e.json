@@ -1,0 +1,221 @@
+{
+ "coordinate_system": "rad_engine",
+ "format": "lemesh",
+ "materials": [
+  {
+   "blend_mode": 8,
+   "channel_keys": [],
+   "double_sided": true,
+   "key": "9e4f2b291c93bbdf__85ff96a4ec421590",
+   "material_hash": "85ff96a4ec421590",
+   "mattype": 2,
+   "role_sources": {
+    "rdef_bind0": "rdef"
+   },
+   "role_textures": {
+    "rdef_bind0": "a2e72862e881be4f"
+   },
+   "shaderset_hash": "9e4f2b291c93bbdf",
+   "texture_names_count": 1,
+   "texture_names_sha256": "e3a31bab0388414892f05895c60c4d4217257928ad9a9c404485ab5d9137a6c7",
+   "unrouted_roles": [
+    "rdef_bind0"
+   ]
+  }
+ ],
+ "n_materials": 1,
+ "n_objects": 1,
+ "objects": [
+  {
+   "aabb_sha256": "b3ff98e8789c9c718c189a4742735cec5c8491cf24f60b91c35e498f2ffded62",
+   "attributes": {
+    "color0": {
+     "bytes": 384,
+     "comps": 4,
+     "dtype": "float32",
+     "encoding": "eU8n",
+     "packed_unresolved": false,
+     "sha256": "246eb48577e17632dad12033df9ddaf61cbe8bf79f3d26d5397852790ec8f468",
+     "slot": 0,
+     "usage": 1
+    },
+    "normal": {
+     "bytes": 384,
+     "comps": 4,
+     "dtype": "float32",
+     "encoding": "eS16n",
+     "packed_unresolved": false,
+     "sha256": "523160b38c42964e99f9b71f2ceb3b063e11ec42e8932bc259525c7c4ceb65cf",
+     "slot": 0,
+     "usage": 2
+    },
+    "position": {
+     "bytes": 288,
+     "comps": 3,
+     "dtype": "float32",
+     "encoding": "eF32",
+     "packed_unresolved": false,
+     "sha256": "4d96c3a70795b7d005a15f8c26fa7e269f5f6c91d03b59b443b2f702b21d77fa",
+     "slot": 0,
+     "usage": 0
+    },
+    "tangent": {
+     "bytes": 384,
+     "comps": 4,
+     "dtype": "float32",
+     "encoding": "eS16n",
+     "packed_unresolved": false,
+     "sha256": "54cc70bf34b6dd17cb9f9b108956b2d5d175bf0e17a88610cf5895bc9a8a0269",
+     "slot": 0,
+     "usage": 3
+    },
+    "uv0": {
+     "bytes": 192,
+     "comps": 2,
+     "dtype": "float32",
+     "encoding": "eF32",
+     "packed_unresolved": false,
+     "sha256": "58d52e8e218efd0a539c33111c6f9d48eaac0e8c596a01819a6e061ab96df133",
+     "slot": 0,
+     "usage": 4
+    },
+    "uv1": {
+     "bytes": 192,
+     "comps": 2,
+     "dtype": "float32",
+     "encoding": "eU16n",
+     "packed_unresolved": false,
+     "sha256": "5d89f056865052bcb89c910d2d62872e029fb273c3db03f8968a52a41593c1b5",
+     "slot": 4,
+     "usage": 4
+    }
+   },
+   "draw_lod": [
+    0
+   ],
+   "draws": [
+    {
+     "idx_count": 36,
+     "idx_start": 0,
+     "is_triangles": true,
+     "material_index": 0,
+     "material_key": "9e4f2b291c93bbdf__85ff96a4ec421590",
+     "permutation": 8200,
+     "primtype": 4,
+     "renderparam_index": 0,
+     "scene_mask": 1,
+     "scene_set_bit": 0,
+     "scene_set_min_count": 1,
+     "shaderset_index": 0,
+     "sort_priority": 0
+    }
+   ],
+   "flag_names": [
+    "eCastsShadow",
+    "eRigidPhysSkin",
+    "eEnableRaycast"
+   ],
+   "flags": 264193,
+   "force_single_sided": false,
+   "index": {
+    "bytes": 144,
+    "count": 36,
+    "dtype": "uint32",
+    "sha256": "95208ffe03a330b8ae6fc2204b8f251b2e01dff83dc0e50440cfe1b70cade484"
+   },
+   "lightmap_index": 4294967295,
+   "lightmap_uv": "uv1",
+   "lm_slice_index": 4294967295,
+   "mesh_index": 0,
+   "name": "obj000_47d35589198b69b0",
+   "name_hash": "47d35589198b69b0",
+   "numlobes": 4,
+   "outline_mode": 0,
+   "raw_vertex_format": [
+    {
+     "count": 3,
+     "instancerate": 0,
+     "offset": 0,
+     "size": 12,
+     "slot": 0,
+     "stream": 0,
+     "type": 8,
+     "type_name": "eF32",
+     "usage": 0,
+     "usage_name": "ePosition"
+    },
+    {
+     "count": 4,
+     "instancerate": 0,
+     "offset": 12,
+     "size": 4,
+     "slot": 0,
+     "stream": 0,
+     "type": 1,
+     "type_name": "eU8n",
+     "usage": 1,
+     "usage_name": "eColor"
+    },
+    {
+     "count": 2,
+     "instancerate": 0,
+     "offset": 16,
+     "size": 8,
+     "slot": 0,
+     "stream": 0,
+     "type": 8,
+     "type_name": "eF32",
+     "usage": 4,
+     "usage_name": "eTexCoord"
+    },
+    {
+     "count": 2,
+     "instancerate": 0,
+     "offset": 24,
+     "size": 4,
+     "slot": 4,
+     "stream": 0,
+     "type": 3,
+     "type_name": "eU16n",
+     "usage": 4,
+     "usage_name": "eTexCoord"
+    },
+    {
+     "count": 4,
+     "instancerate": 0,
+     "offset": 28,
+     "size": 8,
+     "slot": 0,
+     "stream": 0,
+     "type": 5,
+     "type_name": "eS16n",
+     "usage": 2,
+     "usage_name": "eNormal"
+    },
+    {
+     "count": 4,
+     "instancerate": 0,
+     "offset": 36,
+     "size": 8,
+     "slot": 0,
+     "stream": 0,
+     "type": 5,
+     "type_name": "eS16n",
+     "usage": 3,
+     "usage_name": "eTangent"
+    }
+   ],
+   "scene_lod_level": null,
+   "shadow_only": false,
+   "vertex_count": 24,
+   "vertex_stride": 44
+  }
+ ],
+ "source": {
+  "archive": "0703fd2acd5803e9",
+  "game": "lone_echo",
+  "meshlist": "8f76d470b7ca990f",
+  "tool_version": "0.1.0"
+ },
+ "version": 2
+}

@@ -59,7 +59,10 @@ def _pkg(tmp_path):
 def test_manifest_carries_the_lod_block(tmp_path):
     pkg = _pkg(tmp_path)
     manifest = json.loads((pkg.dir / "manifest.json").read_text())
-    assert manifest["version"] == 3
+    # The `lod` block landed in v3 and every later version is purely ADDITIVE, so
+    # pin the floor, not the exact number — bumping PACKAGE_VERSION for an
+    # unrelated additive key (v4 = uv1 + lightmap ids) must not fail this test.
+    assert manifest["version"] >= 3
     lod = manifest["lod"]
     assert lod["blob"] == "blobs/instance_lod.bin"
     assert lod["num_groups"] == 3

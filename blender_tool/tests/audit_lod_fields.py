@@ -1,7 +1,7 @@
 """audit_lod_fields — corpus check of the MESH-LIST LOD fields (they are inert).
 
-READ-ONLY corpus audit. For every archive in the archive manifest it loads ONLY
-the decompressed PRIMARY (one archive at a time, freed between — memory guard; the
+READ-ONLY corpus audit. For every archive in the the reference manifest it loads ONLY
+the decompressed PRIMARY (one archive at a time, freed between — WSL OOM guard; the
 GPU sibling is never opened, its per-resource size comes from the primary's header1)
 and reports, over every paired `CGMeshListResourceWin7`:
 
@@ -31,34 +31,18 @@ from __future__ import annotations
 import argparse
 import csv
 import gc
-import os
 import struct
 import sys
 from collections import Counter
 from pathlib import Path
 
-# Windows consoles default to cp1252 and argparse echoes this module's docstring
-# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
-# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
-        pass
-
 THIS = Path(__file__).resolve()
-REPO_ROOT = THIS.parents[2]
-for p in (str(REPO_ROOT / "scripts"), str(REPO_ROOT / "blender_tool")):
+LE_ROOT = THIS.parents[2]
+for p in (str(LE_ROOT / "scripts"), str(LE_ROOT / "blender_tool")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-# The corpus list: one row per archive, with an `archive` column. Generate it for
-# your own copy of the game data, or point `LONE_ECHO_SCAN_ROOT` at wherever you
-# keep it. Not shipped — it is derived from game data.
-MANIFEST_TSV = Path(os.environ.get(
-    "LONE_ECHO_ARCHIVE_MANIFEST",
-    str(Path(os.environ.get("LONE_ECHO_SCAN_ROOT", str(REPO_ROOT / "scan_inputs")))
-        / "archive_mesh_manifest.tsv")))
+MANIFEST_TSV = LE_ROOT / "generic_rebuilds" / "archive_mesh_manifest_all.tsv"
 NO_LOD_PRIMSET = 0xFFFFFFFF     # CGRenderParams.lodprimsetidx "unset" sentinel
 
 
@@ -157,7 +141,7 @@ def main() -> int:
     from le_archive_decode import load_hash_lookup
     names = load_hash_lookup(Path("hash_lookup.json"))
     if not names:
-        print("WARN: hash_lookup.json resolved empty — run from the repository root with a "
+        print("WARN: hash_lookup.json resolved empty — run from LE_ROOT with a "
               "RELATIVE path (an absolute one silently yields {})")
         return 2
 

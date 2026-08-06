@@ -1,7 +1,7 @@
 """Core tests for `le_mesh.static_lod` — the static-scatter LOD system.
 
 Archive-free: builds synthetic `SGStaticInstancesData` blobs whose byte layout
-mirrors the on-disk one (byte-packed tables, the two `CTableA<T,16>`
+mirrors the stream-confirmed one (byte-packed tables, the two `CTableA<T,16>`
 12-byte pads, the 8-aligned `totalnumlods`, the fixed 24-byte scalar tail) and
 checks the decode, the derived instance -> (group, level) binding, and the
 selection/clamping rules.
@@ -69,7 +69,7 @@ def _build(group_levels=(2, 3, 1), instances_per_level=1, num_meshes=6,
 
     # `visstrlookup` is per-instance but per-GROUP valued: constant across a
     # group's instances, a bijection group <-> value, values exactly 0..n-1 in
-    # first-appearance order (measured on 62/62 masters). `numvisentries`
+    # first-appearance order (stream-confirmed on 62/62 masters). `numvisentries`
     # is its distinct count.
     visstr, vis_of_group = [], {}
     for g, _lvl in expected:
@@ -247,7 +247,7 @@ def test_group_with_unreferenced_first_lod_is_rebased():
 def test_hierlods_parent_region_is_not_a_level_and_may_be_non_monotonic():
     """The LOD array's front is `hierlods` parents; they carry no instances.
 
-    `SHierLOD` is `{parent, firstchild, numchildren}` — `parent` is
+    `SHierLOD` is `{parent, firstchild, numchildren}` (the engine's own type names) — `parent` is
     a LOD index, NOT the record index: on `3c157c98a146325a` three records share
     `parent == 9`, and its `nodelookup[0:12]` is `0..10, 9`, i.e. non-monotonic.
     Leaf level derivation must be unaffected.

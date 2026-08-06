@@ -32,6 +32,7 @@ import os
 import struct
 import sys
 from pathlib import Path
+from unittest import SkipTest
 
 _ROOT = Path(__file__).resolve().parents[1]          # .../blender_tool
 _ADDON = _ROOT / "addon" / "lone_echo_import"
@@ -555,7 +556,7 @@ def test_undecodable_fields_are_carried_as_inert_custom_props():
     c = LI.blender_params(rec)["custom"]
     for k in ("le_filtersize_pcf_not_a_radius", "le_cone_falloff_exponent",
               "le_faderangeoffset_runtime", "le_lightmask", "le_scenemask",
-              "le_visindex", "le_qualitylevel", "le_attenuation_w_unresolved",
+              "le_visindex", "le_qualitylevel", "le_attenuation_maxfadedistance",
               "le_affects_diffuse", "le_affects_specular"):
         assert k in c, k
     # ... and none of them leaks into a converted value
@@ -579,18 +580,67 @@ def test_uint32_custom_props_do_not_overflow_a_signed_int():
 
 def test_range_offset_divergence_is_quantified_not_hidden():
     """Blender has no range-offset term: at half range an imported inverse-square
-    light is 4/3 as bright as the game (the game is 25 % dimmer)."""
-    quad = [r for r in _records()
+    light is 4/3 as bright as the game (the game is 25 % dimmer).
+
+    ⚠ That closed form is `(1/d^m) / (1/d^m - 1/w^m)` at `d = range/2`, and it
+    collapses to 4/3 (m=2) or 2 (m=1) ONLY when `w == range`. Since `w` is
+    `attenuation.w` = `maxfadedistance`, not the range, the identity holds on the
+    lights where the two agree and NOT on the one where they diverge — which is
+    the whole point of resolving `.w`, so it is asserted separately instead of
+    being averaged away. One fixture light is built to diverge for exactly this
+    reason (the shipped corpus has 11 such lights in 118).
+    """
+    same, diff = [], []
+    for r in _records():
+        a = list(r.get("attenuation") or ())
+        (diff if (len(a) == 4 and float(a[3]) > 0.0
+                  and abs(float(a[3]) - float(a[2])) > 1e-9) else same).append(r)
+    assert len(diff) == 1, len(diff)
+
+    quad = [r for r in same
             if LI.falloff_is_physical(r) and LI.light_type_enum(r) != 2]
     assert len(quad) == 4
     for rec in quad:
         _approx(LI.brightness_divergence(rec, 0.5), 4.0 / 3.0, 1e-9)
     # linear (attenmethod 1) lights are 2x at half range
-    lin = [r for r in _records() if abs(LI.attenmethod(r) - 1.0) < 1e-6]
-    assert len(lin) == 1
+    lin = [r for r in same if abs(LI.attenmethod(r) - 1.0) < 1e-6
+           and LI.light_type_enum(r) != 2]
     for rec in lin:
         _approx(LI.brightness_divergence(rec, 0.5), 2.0, 1e-9)
 
+    # the divergent light: the closed form does NOT collapse, and resolving `.w`
+    # made the import MORE faithful there, not less.
+    rec = diff[0]
+    z, w = float(rec["attenuation"][2]), float(rec["attenuation"][3])
+    m = LI.attenmethod(rec)
+    d = z * 0.5
+    _approx(LI.brightness_divergence(rec, 0.5),
+            (1.0 / d ** m) / (1.0 / d ** m - 1.0 / w ** m), 1e-9)
+    assert LI.brightness_divergence(rec, 0.5) < 4.0 / 3.0
+
+
+def test_range_offset_uses_maxfadedistance_not_the_range():
+    """★ `attenuation.w` is `maxfadedistance` (`shader-confirmed`, see
+    `le_mesh.lights.LightRecord.maxfadedistance`), NOT a second cull radius. The
+    range stays `.z` and is still what `cutoff_distance` uses; only the offset
+    term moves. One fixture light is built with `.w != .z` so the distinction is
+    witnessed rather than silently agreeing everywhere."""
+    recs = _records()
+    assert recs
+    moved = 0
+    for rec in recs:
+        a = list(rec.get("attenuation") or ())
+        assert len(a) == 4
+        z, w = float(a[2]), float(a[3])
+        assert LI.maxfadedistance(rec) == (w if w > 0.0 else z)
+        assert LI.light_range(rec) == z
+        assert LI.blender_params(rec)["cutoff_distance"] == z
+        m = LI.attenmethod(rec)
+        if w > 0.0 and abs(w - z) > 1e-9:
+            moved += 1
+            expect = 1.0 / (w ** m) if m != 0.0 else w
+            _approx(LI.range_offset(rec), expect, 1e-12)
+    assert moved == 1, moved
 
 def test_range_offset_matches_le_mesh_lights():
     for rec in _records():
@@ -630,7 +680,17 @@ def test_real_sidecar_if_supplied():
     """Set `LONE_ECHO_LIGHTS_JSON` to a `lights.json` you extracted yourself and
     this re-runs the invariants and the cross-implementation check on it."""
     if not REAL_SIDECAR or not Path(REAL_SIDECAR).is_file():
-        return
+        _why = ("is unset" if not REAL_SIDECAR
+                else f"points at {REAL_SIDECAR}, which is not a file")
+        raise SkipTest(
+            f"the `LONE_ECHO_LIGHTS_JSON` environment variable {_why}"
+            f" — it names a `lights.json` you extracted yourself with "
+            f"`python.exe blender_tool/extractor/le_lights.py <archive-hash> "
+            f"--out lights.json`, and setting it re-runs the light invariants "
+            f"and the cross-implementation check against that REAL sidecar. "
+            f"⛔ WHILE THIS SKIP IS ACTIVE EVERY LIGHT ASSERTION IN THIS FILE "
+            f"RUNS ONLY ON SYNTHETIC AND HARDCODED RECORDS — NO EXTRACTED "
+            f"`SGLightParams` RECORD IS CHECKED.")
     doc = LI.load_lights(Path(REAL_SIDECAR))
     recs = [r for _, _, r in LI.iter_lights(doc)]
     assert recs, "the supplied sidecar carries no lights"

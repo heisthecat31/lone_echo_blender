@@ -1,12 +1,195 @@
 # Materials
 
-**Status (0.3.0): the `.lemesh` path is wired end to end. Base colour, normal,
+**Status (0.4.0): the `.lemesh` path is wired end to end. Base colour, normal,
 roughness/AO, specular/F0, alpha, transmission tint, emission, layer blend masks
-and the render pass all reach EEVEE. The `.lescatter` path still does not — its
-sidecar carries only base colour and normal.**
+and the render pass all reach EEVEE; normal maps now run on the *shipped* tangent
+basis, and specular is reproduced with both of the engine's lobes. The
+`.lescatter` path still does not — its sidecar carries only base colour and
+normal.**
 
 Read [What actually reaches EEVEE](#what-actually-reaches-eevee) for the exact
-split before assuming any import is full PBR.
+split before assuming any import is full PBR, and [the role
+ladder](#role-ladder) for how a texture binding gets a meaning at all — through
+0.3.0 that was a single lookup covering under half the corpus.
+
+⛔ Two defects are **open** at 0.4.0. They are documented in the sections they
+belong to rather than in a release note: [`eBlendTranslucent` is not
+implemented](#blend-translucent), and [19 of 44 audited materials drop an
+authored layer](#dropped-layers) — 18 provably invisible, **1 not**.
+
+Evidence tags used below — `stream-confirmed`, `corpus-confirmed`,
+`shader-confirmed`, `name-confirmed` / `name-only`, `engine-confirmed`,
+`inferred` — are defined in [FORMATS.md](FORMATS.md#evidence-vocabulary).
+
+---
+
+<a id="role-ladder"></a>
+## Where a texture role comes from — the ladder
+
+A binding is a pair: a **texture** and a **role**. The texture is a hash and is
+easy. The role — `layer0_composite_diffuse` and its forty-odd siblings — is what
+decides which Principled socket that texture reaches, and it is *not* stored
+beside the texture.
+
+Through 0.3.0 there was exactly one source for it: the `inputname` field of an
+`SShaderInputData` row in the shaderset. That covers under half the corpus.
+**52.4 % of shadersets ship no `SShaderInputData` array at all**
+(`corpus-confirmed`) — including the two carrying Liv's largest meshes, 13,168 v
+and 14,270 v. Measured on `2fd6839161785e9c`: 4 of 17 shadersets contain **zero**
+8-aligned `u64` anywhere in 23–73 KB that matches any of 24,852 known `CSymbol64`
+hashes. Not a predicate failure and not per-archive damage — the same assets are
+byte-identical in `6a993ea8dd6c3dfd`, and their `CGShaderSetResourceWin7GPU`
+sibling is a 32-byte zero stub (`stream-confirmed`).
+
+0.4.0 replaces the single lookup with a **ladder**, tried in this order, and
+records **which rung answered** on every channel:
+
+| # | rung | what it is | evidence |
+|---|---|---|---|
+| 1 | `array` | this shaderset's own `SShaderInputData` row — the authored `inputname` | `stream-confirmed` |
+| 2 | `archive` | propagated from a sibling shaderset in the **same archive** that binds the same texture and *does* ship an array | `corpus-confirmed` |
+| 3 | `corpus` | propagated from the corpus-wide `texture_hash -> role` index, under the unanimity policy below | `corpus-confirmed` |
+| 4 | `format` | nothing names it anywhere: the composite atlas's DXGI `FORMAT` plus its resolution group implies the suffix | `corpus-confirmed` |
+
+Rung 2 is why coverage is so uneven per archive on its own: it reaches 9/9 roles
+in a 259-shaderset archive and 4/15 in a 17-shaderset one. Rung 3 is that same
+propagation run over all 149 shaderset-bearing archives at once.
+
+Two further sources are recorded alongside the four rungs:
+
+* `lod_sibling` — a character ships each LOD as its own mesh with its own
+  shaderset, but the two share one `material_hash`: they are one authored
+  material compiled twice. The join is deliberately **tight** and fires only when
+  (a) both shadersets carry the same `material_hash`, (b) the donor's role came
+  from its own array, and (c) the same texture hash is bound by both. Same
+  material, same texture, one array — there is nothing left to vote on. On
+  `liv_head` the LOD-1 skin shaderset `b149f66575443907` ships an array declaring
+  `layer0_thickness_mask` and `layer0_detail_normal_map` while the LOD-0
+  shaderset `c8deda534cc6f28b` — the one every render actually draws — ships none,
+  so eight of its binds used to land as `rdef_bind23..30`.
+* `rdef` — RDEF knew the *texture* and nothing knew the *role*.
+
+⛔ **Nothing unresolved is guessed into a Principled channel.** A bind the ladder
+cannot name stays `rdef_bind{n}`, lands in `unrouted_roles`, and says *why*. The
+provenance of each binding is written per channel as `role_sources`
+(`array` / `archive` / `corpus` / `format` / `lod_sibling` / `rdef`) and each
+disputed texture's vote counts as `role_ambiguity`, so a corpus-**voted** role can
+never be mistaken for an array-**declared** one. Both are audit only — nothing in
+the routing reads them.
+
+### RDEF is the binding *and* the name source
+
+A shaderset with no `SShaderInputData` array is read through its compiled
+shader's DXBC **`RDEF`** (resource-definition) chunk, which names every constant
+buffer, SRV and sampler the shader declares. RAD's cook **rewrites each material
+sampler's name to the name of the texture it bound**, so:
+
+★ **The law:** for a material bind, the `RDEF` resource name minus its `_decl`
+suffix is the exact `CSymbol64` preimage of that bind's `textureassetid` —
+`symbol64(rdef_name − "_decl") == textureassetid`, **74 verified / 0 mismatched**
+(`stream-confirmed`).
+
+RDEF is therefore a strict superset of the array: it needs no needle set, it
+covers the array-less shadersets, and it yields **exact asset names**
+(`liv_evasuit_pack_a_detail_msk`, `liv_helmet_glass_nml`, …) rather than only
+hashes — names the 24,852-entry harvested dictionary did not have. Decoded by
+`blender_tool/le_mesh/dxbc.py`, pure stdlib, pinned by
+`blender_tool/tests/test_dxbc.py`.
+
+Engine-supplied inputs are `k_`-prefixed (`k_irradiance_0`, `k_shadow_map`,
+`k_bone_cache_prev`, …) and carry `textureassetid == -1`; they are bound by the
+renderer, not by the material, and are skipped.
+
+⛔ **RDEF does not give you the role.** The cook overwrote the HLSL sampler name
+— which *was* the role — with the texture name, so the role survives only in the
+array. ⛔ **Bind order is not a substitute either:** over 3,146
+`(shaderset, layer)` groups binding the full four-role composite set, **all 24
+register permutations occur, the modal one at 10.5 %** (`corpus-confirmed`).
+
+### The corpus index, and the policy that refuses
+
+Rung 3 is a corpus-wide `texture_hash -> role` index
+(`blender_tool/le_mesh/role_index.py`). Measured over **25,694 binds / 138
+archives / 4,507 shadersets / 2,194 distinct textures** (`corpus-confirmed`):
+
+| | count | of the 1,665 textures declared by more than one shaderset |
+|---|---:|---:|
+| textures carrying more than one role | 90 | **5.41 %** |
+| … disagreeing only in the LAYER INDEX | 74 | 4.44 % |
+| … disagreeing in the SUFFIX | **16** | **0.96 %** |
+
+The two classes are not equally dangerous and are not the same phenomenon:
+
+* **Layer-index conflicts are benign and expected.** 50 of the 74 are
+  `generated_composite_*` — the cook's per-material atlases — used as
+  `layer0_composite_diffuse` by one material and `layer1_composite_diffuse` by
+  another. The Principled channel is chosen by the **suffix**, so the texture
+  still reaches the right socket; only the layer-compositing weight can be
+  misattributed.
+* **Suffix conflicts are real authored ambiguity, not decode error.** All 16 are
+  named, and every one is a reusable single-channel utility plate —
+  `fx_cmn_scrolling_noise_swirls_liquid_clr` is bound as albedo / alpha / blend
+  mask / emissive by 38 different shadersets, `mfx_water_runoff_sheet_b_nml` as
+  normal / flowmap / `pom_height_map` by 24. A greyscale noise plate genuinely
+  *is* a different thing in each material, so no amount of extra evidence
+  resolves it. ★ **Zero of the 16 is a `generated_composite_*`** — the class
+  carrying the binds the ladder exists to recover is exactly the class that never
+  disagrees on its suffix.
+
+⛔ **The suffix must be unanimous, or nothing is applied.** A layer-index
+disagreement is recorded and the suffix used; a suffix disagreement is refused
+outright and the bind stays unrouted. The four outcomes are named —
+`unanimous`, `layer_ambiguous`, `suffix_conflict`, `absent` — so a refusal is a
+value, not a silence.
+
+Generate the index from your own game install, exactly like the two archive
+indexes in [Cross-archive resolution](#cross-archive-resolution--read-this-before-trusting-a-package):
+
+```bat
+python.exe scripts\le_role_index.py        :: role_index.tsv, 149 archives
+```
+
+⛔ **No index data ships with this repository.** It is derived from your files.
+
+### The last rung: the DXGI `FORMAT`
+
+A `generated_composite_*` atlas that **no array anywhere declares** has one
+signal left. Every name- or identity-based route is a measured closed negative:
+
+* corpus-wide propagation resolves **0 of Liv's 11**, over all 149
+  shaderset-bearing archives (`corpus-confirmed`);
+* the composite **name** carries no channel code —
+  `generated_composite_<h1>_<h2>` has **2,241 distinct `h1` and 2,241 distinct
+  `h2` over 2,241 distinct names**, i.e. both halves are per-texture identity
+  hashes, and **0 of the 4,482 inner hashes** appear in the 27,995-entry
+  harvested name dictionary;
+* the **bind register** is refuted above (all 24 permutations occur).
+
+What *is* a function of the data is the **format**. Over the 216
+`generated_composite_*` textures carrying both a role and a measured DXGI format
+(`corpus-confirmed`):
+
+| format class | n | role suffix |
+|---|---:|---|
+| `BC5_UNORM` | 52 | `composite_normals`, 52/52 |
+| non-sRGB, non-BC5 (`BC1`/`BC3`/`BC4_UNORM`) | 52 | `composite_components` |
+| any `_SRGB` | 112 | diffuse / specular / data0 |
+
+⛔ **The sRGB class is not separable by format alone** — `BC3_UNORM_SRGB` is
+specular 51×, diffuse 11×, data0 4×. Within one resolution group the single
+`BC1_UNORM_SRGB` is the diffuse and the single `BC3_UNORM_SRGB` is the specular;
+**any group that is not that shape is refused outright**, and `composite_data0`
+is never emitted this way.
+
+⛔ **The format gives the suffix, never the layer.** The layer assigned is the
+lowest index the shaderset has not already claimed, because layer is genuinely
+not recoverable from the format: resolution-group and layer-group agree on only
+**95.5 %** of shadersets, and layer 0 is the strictly largest group in just **5 of
+19** multi-layer shadersets. That is sound exactly when one unresolved group
+remains, which is why more than one is refused. Every refusal names itself:
+`no_format`, `many_unresolved_resolution_groups`, `format_not_unique_in_group`,
+`format_matches_no_composite_class`, `no_free_layer_index`,
+`role_already_carried_by_this_shaderset`.
 
 ---
 
@@ -98,8 +281,8 @@ it, and `opts["ao_to_base_color"]` opts in to the approximation.
 ## What actually reaches EEVEE
 
 An end-to-end audit of the decoder → manifest → builder → EEVEE chain found **nine
-breaks**. Seven are fixed in 0.3.0; the two that remain are both on the
-`.lescatter` (whole-level scatter) path.
+breaks**. Six are fixed — four in 0.3.0 and two in 0.2.0 — and the **three** that
+remain are all on the `.lescatter` (whole-level scatter) path.
 
 | # | where | state |
 |---|---|---|
@@ -117,9 +300,18 @@ So: **`.lemesh` imports carry the full material chain; `.lescatter` imports stil
 carry base colour + normal only.** Closing 5–7 is mostly plumbing — the decoders
 already produce the values and the scatter schema drops them.
 
-⚠ One thing 0.3.0 does *not* claim: an end-to-end run against real archives. The
-extractor changes below are covered by unit tests and by reasoning about measured
-counts, not by a re-export of the fixture corpus.
+⚠ 0.3.0 could not claim an end-to-end run against real archives; its extractor
+changes rested on unit tests and on reasoning about measured counts. 0.4.0 adds
+tests that open real packages and run the extractor end to end
+(`blender_tool/tests/test_real_package_invariants.py`,
+`blender_tool/tests/test_extractor_e2e.py`), and a runner that counts skips,
+prints every skip reason and inventories the scripts under `tests/` it does *not*
+execute — a green run full of silent no-ops is how a real defect survived a whole
+cycle of green suites. See [TESTING.md](TESTING.md).
+
+⛔ Two breaks in this chain are **not** on the `.lescatter` path and are open at
+0.4.0: [`eBlendTranslucent`](#blend-translucent) is not built at all, and
+[19 of 44 audited materials drop an authored layer](#dropped-layers).
 
 ### The emissive-layer bug, with numbers
 
@@ -214,6 +406,43 @@ material. `SGMaterialData.permutations` ships **empty**, so it is not a second c
 > It needs the shaderset's permutation key decoded against the option bit order, or
 > disassembly. The full bit order is not pinned.
 
+### `eMTSkirt` is a decal sheet
+
+`eMTSkirt` / `eBlendSkirt` is the engine's **decal pass** (`eSkirts`), not an
+opaque one, and through 0.3.0 this importer rendered it opaque. A decal sheet is a
+quad whose **cut-out alpha is the whole content**: drawn opaque it is a solid
+rectangle sitting over the surface it was authored to detail.
+
+The pass and the equation are independent `u16`s, so either field alone is enough
+to identify a skirt; in the shipped corpus the two always co-occur (11 of 11 rows,
+`corpus-confirmed`).
+
+⚠ **This is the one material type whose resolved render mode may legitimately
+differ from the mode stored in the manifest.** Every `.lemesh` written before
+0.4.0 records `render_mode: "OPAQUE"` for the decal pass, and re-cooking every
+package to fix a picture is not a reasonable prerequisite — so
+`resolve_render_mode` repairs a skirt that says `OPAQUE` to `BLEND` and records
+`le_skirt_render_mode_repaired` on the material. It is the only place that
+function overrides the decoder, and fresh manifests never take the branch because
+`le_mesh.materials.render_mode_for` now agrees (asserted by
+`blender_tool/tests/test_skirt_decal_alpha.py`). Every skirt is tagged `le_skirt`
+so a scene's decals can be found. `opts["skirt_alpha"] = False` restores the
+pre-fix opaque picture for an A/B.
+
+<a id="blend-translucent"></a>
+### ⛔ `eBlendTranslucent` is not implemented
+
+`eBlendTranslucent` is the **second most common** equation in the joint
+distribution above — 7 of the 21 materials in that archive — and **0.4.0 does not
+build it**. [Target mapping](#target-mapping) records what it *should* become: a
+`'BLENDED'` pass plus a Transparent BSDF coloured by
+`opacity_map × opacity_tint_color`, a dual-source add and specifically **not**
+Principled's `Transmission`, which is refraction. Until that exists, a material
+declaring it falls back to the nearest supported pass, which is visibly wrong on
+the surfaces that use it.
+
+This is an open defect, not a documented approximation.
+
 ### The alpha chain
 
 ```
@@ -289,6 +518,185 @@ engine's GGX visibility uses the Burley remap `alpha = ((m+1)/2)²` where Blende
 uses Smith with `alpha = roughness²`. Equal at normal incidence; Blender is ~1.4×
 brighter at 60° and ~9× at 85° in the mirror configuration.
 
+### Two lobes, not one
+
+★ RAD's composite path runs **two specular lobes** and weights them per texel.
+0.3.0 rendered lobe [0] at full weight and dropped lobe [1] entirely
+(`shader-confirmed`):
+
+```
+brdfblends       = (1 − composite_components.z, composite_components.z)
+specintensity[0] = composite_specular.w ; specalbedo[0] = composite_specular.xyz * .w
+specintensity[1] = composite_data0.w    ; specalbedo[1] = composite_data0.xyz    * .w
+sqrtroughness[0] = composite_components.x
+sqrtroughness[1] = composite_components.w
+```
+
+`layerN_composite_data0` is lobe [1]'s albedo — **the exact packing
+`composite_specular` uses for lobe [0], one index up** — and its roughness comes
+from `composite_components.w` rather than `.x`. When nothing is bound there the
+engine sets `specalbedo[1] = specalbedo[0]`.
+
+Blender's Principled BSDF has **one** specular lobe, so there is no faithful
+target for the second: `composite_data0` is deliberately never routed to a
+channel and appears in `unrouted_roles` with that reason attached. The faithful
+single-lobe stand-in is the engine's *own* weighted combination, and 0.4.0 builds
+it — weight `1 − components.B`, lobe [1]'s roughness from `components.A`, blended
+into lobe [0]'s only when lobe [1] actually carries energy. A zero albedo
+contributes no specular, so weighting its roughness in would be a fudge rather
+than a decode.
+
+Measured on Liv's orange gel-coat, dropping lobe [1] **over-drove F0 by 2.75× and
+under-drove roughness by 6.9×** — the "wet vinyl" look.
+
+⚠ Because `composite_data0` is (correctly) unrouted, a manifest carries no `dxgi`
+for it; the builder reads the DXGI format out of the DDS header already in the
+package (a 148-byte read, no archive opened). Reading an `_SRGB` specular map as
+linear would inflate F0 — the exact class of error the two-lobe work fixes.
+
+| option | default | meaning |
+|---|---|---|
+| `brdf_lobe_blend` | **`True`** | build the weighted two-lobe combination. `False` restores the pre-fix single-lobe-at-full-weight look for an A/B. |
+| `brdf_lobe_zero_roughness_gate` | **`True`** | ⚠ keeps a `composite_components.x` of exactly 0 out of Blender's `Roughness`. Blender reads that as a **perfect mirror**; the engine's own GGX numerator is `sqrtroughness⁴`, so there it contributes nothing at all. |
+
+A material predating the `brdf_lobes` manifest record still gets the fix: the
+record is reconstructed from the manifest it does have — the components texture is
+the `roughness` channel, the weight is its `.z`, and lobe [1]'s albedo hash is
+`role_textures["layer{N}_composite_data0"]`, which the decoder records even though
+it never routes it. Pinned by `blender_tool/tests/test_brdf_lobes.py`.
+
+---
+
+<a id="tangent-basis"></a>
+## Normal maps — the shipped tangent basis
+
+★ **Consuming the shipped tangent fixed a defect present in every render this
+tool had ever made.**
+
+`tangent` (`CGVertexFormat::EUsage` 3, `s16n` × 4) is decoded on **913 of 913**
+objects (`corpus-confirmed`) and, until 0.4.0, was imported by **nothing** —
+three writers, zero readers. Every normal map therefore ran on Blender's
+UV-derived (mikktspace) tangent.
+
+⛔ **That basis was not merely different, it was inverted.** The importer flips V
+for Blender, which inverts the derived bitangent: Blender's own
+`loop.bitangent_sign` agrees with the shipped `sign(w)` on **0.0–0.8 % of loops**
+on 11 of the 13 measured meshes (and on exactly 50.0 % of the two back-shell
+meshes, where the reversed winding flips it back on one shell).
+**An inverted bitangent inverts the green channel of every tangent-space normal
+map.** The shipped basis never consults the UV derivative, so it cannot inherit
+that error.
+
+Measured against Blender's *actual* tangent (`mesh.calc_tangents()`, i.e.
+mikktspace) on `64b4b5b2a0153f7e` — 13 meshes, 277,336 loops, `engine-confirmed`
+in Blender 5.1.1 by `blender_tool/tests/blender_tangent_probe.py`:
+
+| mesh class | angle between the shipped and the derived basis |
+|---|---|
+| the 2 carrying a duplicated back-face shell | **median 93.1°, p90 179.8°, max 180.0°; 50.6 % of loops past 15°** |
+| the 11 single-shell meshes | median 0.05–1.9°, p99 1.1–22.1°; 1–3 % of loops past 15° |
+
+⚠ The defect is real but it is **concentrated in the back shell**, not spread
+evenly across the body. Earlier estimates of 20–25 % past 15° were measured
+against a naive area-weighted UV tangent and over-stated Blender's own error by an
+order of magnitude.
+
+### `tangent.w` is two fields, not a handedness bit
+
+⛔ `.w` is **not** ±1. It takes exactly **four** values — **−1.0, −0.5, +0.5,
++1.0** — over **509,266** vertices (`corpus-confirmed`,
+`blender_tool/tests/test_vertex_streams.py`). `s16n` maps `int16` onto [−1, 1], so
+this is a deliberate 2-bit quantisation: a **sign** *and* a **magnitude**. Both
+halves are now measured.
+
+**Sign = bitangent handedness.** Over 5 character packages / 36 objects /
+**397,082 vertices**, `sign(w)` agrees with the handedness derived from the
+shipped UVs (`sign(dot(cross(N, T), B_uv))`, Lengyel accumulation, disk space, no
+V flip) on **397,082 of 397,082 vertices — 100.00 %**, and at that rate inside
+each of the four states separately (`stream-confirmed`). So
+`B = cross(N, T) · sign(w)` is a *reconstruction*, not an assumption.
+
+**Magnitude tags a duplicated back-face shell.** Over 5 character packages /
+**63 objects** carrying a 4-component tangent: 26 carry both magnitudes, 37 carry
+only `|w| = 1.0`, and **0 carry only 0.5** — there is never a back shell without a
+front. In all 26 the two classes are exactly equal in size, and
+(`stream-confirmed`):
+
+* **109,400 of 109,400 (100.00 %)** `|w| = 0.5` vertices have a
+  position-identical `|w| = 1.0` partner;
+* **109,317 of 109,400 (99.92 %)** of those pairs have exactly negated normals;
+* only **65.67 %** have exactly negated *tangents* — ★ **the back shell carries
+  its own frame**, it is not a sign flip of the front one;
+* every triangle appears twice, once per shell (7,302 × 2 on
+  `64b4b5b2a0153f7e/obj000`, where the pair's tangents are 180.0° apart at
+  p10 = median = p90).
+
+⚠ **The buffer order is not part of the law.** 25 of the 26 lay it out
+fronts-then-backs; one interleaves them. Read the tag, never the index.
+
+⇒ **The shader needs the sign and nothing else.** The back shell's flipped frame
+is already in that shell's own `normal` and `tangent` values, so a per-vertex
+`sign(w)` reconstructs both sides correctly with no special case.
+
+⛔ **A fifth value is refused loudly, not rounded.** An unknown state means the
+2-bit reading is wrong for that asset and `sign(w)` would then be a guess. The
+importer records the state histogram on the mesh as `le_tangent_w_states`, the
+presence of a shell as `le_tangent_w_has_back_shell`, and any unknown value as
+`le_tangent_w_unexpected`, then falls back to Blender's own tangent and says so.
+⚠ It classifies the **distinct** values — there are four — not tens of thousands
+of vertices one at a time; this runs on every object of every import.
+
+### The TBN is rebuilt in shader nodes
+
+⛔ **Blender will not accept an authored per-loop tangent anywhere.**
+`mesh.loops[].tangent` is read-only and recomputed by mikktspace from the active
+UV layer, `ShaderNodeNormalMap` has no tangent input, and `ShaderNodeTangent`
+offers only radial axes and a UV map. So `mesh_builder` stores the shipped basis
+as generic point attributes — `le_tangent` (`FLOAT_VECTOR`) and `le_tangent_w`
+(`FLOAT`) — and `material_builder._shipped_tangent_normal` rebuilds the frame in
+nodes, which is the only route by which an authored basis reaches a Blender
+shader:
+
+```
+T   = normalize(object_to_world(le_tangent))
+T'  = normalize(T − N · dot(N, T))            Gram-Schmidt against N
+B   = cross(N, T') · sign(le_tangent_w)
+n   = 2 · color − 1                           the same remap NormalMap does
+out = normalize(T' · n.x + B · n.y + N · n.z)
+```
+
+`N` is `ShaderNodeNewGeometry`'s `Normal` — the **world-space** shading normal,
+which is the custom split normal this importer set from the shipped `normal`
+stream, so both legs of the frame come from the same source.
+
+⚠ **The `OBJECT` → `WORLD` `ShaderNodeVectorTransform` on `T` is required and is
+not decoration.** `le_tangent` is stored in mesh space — the vertex blobs stay
+byte-faithful to disk and the Y-up → Z-up conversion lives on `ob.matrix_basis` —
+while `Geometry.Normal` is world space. Without the transform the two legs sit in
+different frames and the result is **silently wrong rather than visibly broken**.
+The default axis matrix is a pure rotation (det +1) and carries the handedness
+across unchanged; the diagnostic `mirror_axis` toggle is det −1 and *would* flip
+it, which is exactly what that toggle already documents itself as.
+
+⛔ **It degrades, it never blackens.** A mesh with no `le_tangent` reads
+`(0, 0, 0)` from the Attribute node, and normalizing that yields a black surface.
+The graph therefore keeps the `ShaderNodeNormalMap` leg as well and mixes to it
+wherever `length(le_tangent) < 0.5` — it is a **mix, not a switch**. An object
+that ships no tangent stream renders **exactly as it did before, per pixel**.
+
+| option | default | meaning |
+|---|---|---|
+| `shipped_tangent` | **`True`** | wire the shipped basis. `False` restores Blender's mikktspace tangent through `ShaderNodeNormalMap` — what every render before 0.4.0 used. |
+
+The material records which basis it received as `le_tangent_basis`
+(`"shipped"` / `"mikktspace"`). Pinned by
+`blender_tool/tests/test_shipped_tangent.py`; verified inside Blender, reading the
+result back, by `blender_tool/tests/blender_tangent_probe.py`.
+
+⚠ The shipped basis is also the prerequisite for the world-space SG5
+normal-mapped lightmap sum described in [LIGHTING.md](LIGHTING.md), which is
+decoded but not yet wired.
+
 ---
 
 ## Layer compositing
@@ -309,10 +717,18 @@ its own term vanish, so with authored defaults the whole thing collapses to
 `saturate(vertex_blend / fade) × saturate(mask.R × scale + offset)`.
 
 The importer builds the mask term as `Math(MULTIPLY_ADD, use_clamp=True)` — which
-*is* `saturate()` — and feeds it to a `ShaderNodeMix` per gated channel. The
-**vertex-blend** term is deliberately NOT built: it is component (i−1) of the
-second vertex colour stream, which `mesh_builder` does not import today, and
-whether it is sampled at all is a shader permutation bit that is not on disk.
+*is* `saturate()` — and feeds it to a `ShaderNodeMix` per gated channel.
+
+The **vertex-blend** term is still deliberately NOT built, but for one reason
+now instead of two. `vertblend` is component (i−1) of the `float4 blend : COLOR1`
+vertex stream (`shader-confirmed`). 0.4.0 **imports** that stream: `color1` is not
+decoration, it is the engine's per-vertex layer-blend weight, it ships on **523 of
+913 objects (57.3 %)** and it reached Blender on none of them — which is why layer
+compositing here has only ever been mask-driven. It now arrives as a `color1`
+point colour attribute. ⚠ What is still missing is permission to *use* it:
+whether the shader samples it at all is the `use_vertex_blend_` permutation bit,
+which is not on disk. So the data is imported and nothing is asserted about its
+use; `le_mesh.materials` records that as `vertex_blend_applied`.
 
 ⚠ **Every shipped `layerN_blend_mask_offset` in the corpus is `-1.0`**, which makes
 `saturate(mask.R × 1 + (−1))` zero for every possible texel: the layer contributes
@@ -322,6 +738,19 @@ two region maps are weighted masks with animated per-slice weights, so this is a
 (`suppressed_at_rest`) rather than editorialising. Pass
 `opts["layer_blend_mask_offset"] = 0.0` to see those layers at their authored-on
 state — an override of a runtime-animated value, not a fudge factor.
+
+<a id="dropped-layers"></a>
+### ⛔ 19 of 44 audited materials drop an authored layer
+
+An audit of 44 materials found **19 that drop a layer the artist authored**.
+
+* **18 of the 19 are provably invisible** — the layer's blend mask is pinned at
+  its OFF extreme by the `-1.0` offset above, so nothing that layer could
+  contribute is capable of reaching the frame.
+* **1 is not.** That one is a real, unexplained loss of authored content.
+
+⛔ Do not read "18 provably invisible" as "19 harmless". The nineteenth is counted,
+not explained, and it stays on this page until it is.
 
 ---
 
@@ -364,10 +793,10 @@ wrong.
 | opaque `mattype`, `blendmode 0` | `surface_render_method = 'DITHERED'`, Alpha = 1 |
 | `eMTAlphaTested` | hard cutout: `Math(GREATER_THAN, alpha, k_alpha_threshold)` → Alpha, `'DITHERED'` (EEVEE Next has no `CLIP` mode) |
 | transparent `mattype`, `eBlendTransparent` | `'BLENDED'`, Alpha = the alpha chain |
-| `eMTForwardTransparent` + `eBlendTranslucent` | `'BLENDED'` + transmission tint: mix a Transparent BSDF coloured by `opacity_map × opacity_tint_color`. Do **not** use Principled Transmission — that is refraction, not this dual-source add. |
+| `eMTForwardTransparent` + `eBlendTranslucent` | ⛔ **NOT IMPLEMENTED** — see [above](#blend-translucent). The target is `'BLENDED'` + transmission tint: mix a Transparent BSDF coloured by `opacity_map × opacity_tint_color`. Do **not** use Principled Transmission — that is refraction, not this dual-source add. |
 | additive / linear dodge | EEVEE has no additive blend; approximate with Emission + `'BLENDED'` + Alpha ≈ luminance. **Lossy — flag it.** |
 | `eMTRefraction` | Principled `Transmission Weight = 1`, `IOR = k_refractive_index`, raytraced refraction |
-| `eMTSkirt` | no Blender equivalent; import opaque and tag |
+| `eMTSkirt` / `eBlendSkirt` | the decal pass: `'BLENDED'` with the cut-out alpha, tagged `le_skirt`. ⚠ The **one** case where the resolved mode may legitimately differ from the manifest's — see [`eMTSkirt` is a decal sheet](#emtskirt-is-a-decal-sheet). |
 | `eDoubleSided` | `use_backface_culling = False`. The geometry is genuinely single-sided, so **the setting is enough — do not duplicate or flip faces.** For blended glass also set `show_transparent_back = False` unless the mesh really is a closed shell. |
 
 Verified against Blender 5.1's RNA: `blend_method` still exists but is a **legacy
@@ -394,6 +823,7 @@ and earlier, where only the alias exists, it falls back to it.
 
 ---
 
+<a id="cross-archive-resolution--read-this-before-trusting-a-package"></a>
 ## Cross-archive resolution — read this before trusting a package
 
 Neither textures nor materials live in the archive that binds them:
@@ -410,12 +840,14 @@ extracted, and a missed material falls back to `SGMaterialData` defaults, so an
 `eMTForwardTransparent` material reads as `mattype 0` / `eBlendOpaque` and renders
 opaque.
 
-0.3.0 fixes this with two corpus-wide indexes. They are **your data**, generated
-once from your own game install into `$LONE_ECHO_SCAN_ROOT`:
+0.3.0 fixes this with two corpus-wide indexes, and 0.4.0 adds a third — the
+[role index](#role-ladder). All three are **your data**, generated once from your
+own game install into `$LONE_ECHO_SCAN_ROOT`:
 
 ```bat
 python.exe scripts\le_texture_archive_index.py     :: texture_archive_index.tsv
 python.exe scripts\le_material_archive_index.py    :: material_archive_index.tsv
+python.exe scripts\le_role_index.py                :: role_index.tsv
 ```
 
 With the texture index in place, the archive's own texture hashes are **unioned**
@@ -427,8 +859,14 @@ archive at a time, each decompressed primary dropped before the next is opened,
 and cached process-wide so an `--all` run does not re-open the same home archives
 once per mesh-list.
 
+With the role index in place, rung 3 of the [ladder](#role-ladder) can answer for
+a texture no shaderset in the current archive names.
+
 ⛔ Dropping the texture gate entirely was measured and rejected: 1,884 bindings at
-**89 % false positives**. Struct validation alone is not selective enough.
+**89 % false positives**. Struct validation alone is not selective enough. ⚠ The
+needle set matters much less than it used to — [RDEF](#rdef-is-the-binding-and-the-name-source)
+names the bound textures outright and needs no needles — but the gate still
+guards the `SShaderInputData` scan itself.
 
 Without the indexes the extractor still runs, but it **says so, loudly**, and
 names what is lost. Silent local-only degradation is the exact bug they exist to

@@ -55,7 +55,7 @@ def test_decode_full_skeleton():
     assert math.isclose(j2.t[0], 0.25, abs_tol=1e-4)
     assert math.isclose(j2.s, 1.0, abs_tol=1e-6)
 
-    # inverse_bind is intentionally not decoded yet
+    # inverse_bind is intentionally not decoded yet (needs-disasm)
     assert skel.joints[0].inverse_bind is None
 
     # dict form is JSON-friendly

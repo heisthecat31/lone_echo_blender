@@ -1,33 +1,38 @@
 """Layer compositing: `layerN_blend_mask` gates the layers above 0.
 
-Locks the rule the engine's own layer composite follows, against the real
+Locks the rule the engine's own layer compositing performs against the real
 shipped values of the bridge material `0613ef69c99cbbc6`.
 
-THE RULE::
+Evidence labels: `shader-confirmed` (matches the arithmetic the engine's own
+shaders perform) · `stream-confirmed` (decoded shipped bytes) ·
+`engine-confirmed` (Blender RNA read-back) · `inferred`.
 
-    the composite loop
-      output = layers[0]                          # layer 0 IS the base
-      for i = 1 .. num_layers-1                   # ASCENDING, accumulating
-        fade   = max(blend_fade[i] * fade_scale_offset_map[i].x, 0.01)
-        scale  = blend_mask_scale[i]  * fade_scale_offset_map[i].y
-        offset = blend_mask_offset[i] + fade_scale_offset_map[i].z
-        b      = ComputeBlend(scale, offset, blend_mask[i].R, ...)
+THE RULE (`shader-confirmed`, the engine's layer compositing)::
+
+    BlendLayers()
+      output = layers[0]                              # layer 0 IS the base
+      for i = 1 .. num_layers_-1                      # ASCENDING, accumulating
+        fade   = max(blend_fade[i] * blend_fade_scale_offset_map[i].x, 0.01)
+        scale  = blend_mask_scale[i]  * blend_fade_scale_offset_map[i].y
+        offset = blend_mask_offset[i] + blend_fade_scale_offset_map[i].z
+        b      = ComputeBlend(scale, offset, blend_mask[i].x, ...)
         output = BlendLayer(output, layers[i], b, blend_mode[i], alphas)
 
-    ComputeBlend
-      _scale  = scale  * scale_regions_map[i].x
-      _offset = offset * (1.0 - offset_regions_map[i].x)
+    ComputeBlend()
+      _scale  = scale  * blend_scale_regions_map[i].x
+      _offset = offset * (1.0 - blend_offset_regions_map[i].x)
       _mask   = saturate(mask * _scale + _offset)        # `mask` is `.x` == RED
       return BlendAmount(vertblend, height, fade, 0.0) * _mask
 
-    BlendAmount     saturate(((vertblend - height) / fade) - 0)
-    BlendValue      6 eBlendTransparent is the authored default and is a LERP:
+    BlendAmount()   saturate(((vertblend - height) / fade) - 0)
+    BlendValue()    6 eBlendTransparent is the authored default and is a LERP:
                     (1 - m) * base + m * layer
 
 Every participating map defaults to the value that makes its own term vanish
-(the blend mask to white 1, the fade/scale/offset map to (1,1,0), the
-scale-regions map to white 1, the offset-regions map to black 0), so with
-authored defaults the whole thing is::
+(`blend_mask` = `common_white` 1, `blend_fade_scale_offset_map` = `common_yellow`
+(1,1,0), `blend_scale_regions_map` = `common_white_array` 1,
+`blend_offset_regions_map` = `common_black_array` 0), so with authored defaults
+the whole thing is::
 
     blend = saturate(vertex_blend / fade) * saturate(mask.R * scale + offset)
 """
@@ -78,7 +83,7 @@ def _fixtures():
 
 
 # ---------------------------------------------------------------------------
-# Shipped values, decoded from bridge material 0613ef69c99cbbc6
+# Shipped values, bridge material 0613ef69c99cbbc6 (`stream-confirmed`)
 # ---------------------------------------------------------------------------
 BRIDGE_KEY = "b964375c606d812f__0613ef69c99cbbc6"
 BRIDGE_ROLE_TEXTURES = {
@@ -131,16 +136,17 @@ def _blend(spec, index):
 # ---------------------------------------------------------------------------
 
 def test_blend_param_hashes_are_real_preimages():
-    """Ten role names WERE fabricated on this front once (findings 3). Every
-    per-layer blend parameter name must hash to the key it is filed under."""
+    """Ten role names WERE fabricated on this front once (see the fabricated-name
+    correction in docs/MATERIALS.md). Every per-layer blend parameter name must
+    hash to the key it is filed under."""
     for (layer, param), name_hash in mat.HASH_LAYER_BLEND_PARAM.items():
         name = f"layer{layer}_{param}"
         assert symbol64(name) == name_hash, name
 
 
 def test_the_shipped_bridge_hashes_resolve_to_the_blend_offsets():
-    """These two words are in the bridge material's `materialprops`, and each is
-    the verified preimage of its name."""
+    """`stream-confirmed`: these two words are in the bridge material's
+    `materialprops`, and each is the verified preimage of its name."""
     assert f"{symbol64('layer1_blend_mask_offset'):016x}" == "c6f8f070a09880a0"
     assert f"{symbol64('layer2_blend_mask_offset'):016x}" == "2f0e118582db9c08"
     assert BRIDGE_NAMED_SCALARS["c6f8f070a09880a0"] == -1.0
@@ -159,13 +165,13 @@ def test_blend_mask_role_hashes_are_real_preimages():
 # ---------------------------------------------------------------------------
 
 def test_mask_channel_is_red():
-    """The engine samples the blend mask through its RED channel."""
+    """`k_blend_mask[i].x` -- the engine samples the RED channel."""
     assert mat.BLEND_MASK_COMPONENT == "R"
 
 
 def test_default_blend_operator_is_a_lerp_not_an_add():
-    """The authored `blend_mode` default is 6, and the engine's operator 6 is
-    `(1 - mask) * base + mask * layer`."""
+    """`blend_mode` is authored `-default 6` in the material asset schema, and
+    the engine's `BlendValue` makes 6 `(1 - mask) * base + mask * layer`."""
     assert mat.DEFAULT_LAYER_BLEND_MODE == 6
     assert mat.LAYER_BLEND_MODE_NAMES[6] == "eBlendTransparent"
     assert 6 in mat.LAYER_BLEND_LERP_MODES
@@ -174,12 +180,13 @@ def test_default_blend_operator_is_a_lerp_not_an_add():
 
 
 def test_authored_defaults_are_the_neutral_values():
+    # every value here is the authored default in the material asset schema
     assert mat.DEFAULT_BLEND_MASK_SCALE == 1.0
     assert mat.DEFAULT_BLEND_MASK_OFFSET == 0.0
     assert mat.DEFAULT_BLEND_FADE == 1.0
-    assert mat.MIN_BLEND_FADE == 0.01                 # the shader's `max(..., 0.01)`
+    assert mat.MIN_BLEND_FADE == 0.01                 # `max(..., 0.01f)`
     assert mat.DEFAULT_BLEND_ALPHA == 1.0
-    assert mat.DEFAULT_BLEND_MASK_VALUE == 1.0        # sampler defaults to white
+    assert mat.DEFAULT_BLEND_MASK_VALUE == 1.0        # sampler default common_white
     assert mat.DEFAULT_BLEND_HEIGHT == 0.0
 
 
@@ -224,7 +231,7 @@ def test_bridge_layer1_reads_its_own_mask_and_offset():
     assert b["mask"]["role_key"] == "layer1_blend_mask"
     assert b["mask"]["texture"] == "cf07d65049f874e7"
     assert b["mask_component"] == "R"
-    assert b["mask_offset"] == -1.0                 # the shipped value
+    assert b["mask_offset"] == -1.0                 # `stream-confirmed`
     assert b["mask_scale"] == 1.0                   # authored default
     assert b["blend_fade"] == 1.0
     assert "blend_mask_offset" in b["from_material"]
@@ -234,9 +241,10 @@ def test_bridge_layer1_reads_its_own_mask_and_offset():
 
 def test_bridge_layer1_is_parked_at_its_animated_off_extreme():
     """`saturate(mask.R * 1.0 + (-1.0)) == 0` for every mask value in [0,1], so
-    the layer contributes nothing at rest. `blend_mask_offset` is animatable with
-    a soft minimum of -1.0, and the two region maps are weighted masks with
-    ANIMATED per-slice weights -- so this is a runtime state, not a decode bug."""
+    the layer contributes nothing at rest. `blend_mask_offset` is
+    `-animatable true -softmin -1.0` in the material asset schema, and the two
+    region maps are weighted masks with ANIMATED per-slice weights -- this is a
+    runtime state, not a decode bug."""
     b = _blend(_bridge_spec(), 1)
     assert b["amount_min"] == 0.0
     assert b["amount_max"] == 0.0
@@ -296,9 +304,10 @@ def test_blend_fade_is_clamped_to_the_authored_minimum():
 
 
 def test_vertex_blend_contract_is_recorded_but_not_applied():
-    """`vertblend` for layer i is component (i-1) of the SECOND vertex colour
-    stream. We record where it comes from; wiring it needs `mesh_builder` to
-    import `color1` AND a shader permutation bit that is not on disk."""
+    """`vertblend = blend[i-1]` of the engine's `float4 blend : COLOR1` vertex
+    stream. We record where it comes from; wiring it
+    needs `mesh_builder` to import `color1` AND the `use_vertex_blend_`
+    permutation bit, which is not on disk."""
     spec = _bridge_spec()
     for index, comp in ((1, "R"), (2, "G")):
         b = _blend(spec, index)
@@ -402,17 +411,18 @@ def test_builder_ignores_a_manifest_without_blend_records():
 
 
 def test_builder_specular_is_wired_to_specular_tint():
-    """Supersedes the earlier "specular is not representable" verdict.
+    """SUPERSEDES `test_builder_specular_stays_unwired` (A10).
 
-    That verdict said `specalbedo` (= F0, reaching 1.0) could not be expressed
-    because `Specular IOR Level` is `hard_max = 1.0` -> F0 <= 0.08. Measured
-    refutation on Blender 5.1.1 (Cycles + EEVEE): `Specular Tint` is
-    `hard_max = FLT_MAX` and Principled's dielectric F0 is
+    The A7 task-5 verdict said `specalbedo` (= F0, reaching 1.0) was not
+    representable because `Specular IOR Level` is `hard_max = 1.0` -> F0 <= 0.08.
+    Measured refutation (`engine-confirmed`, Blender 5.1.1, Cycles + EEVEE):
+    `Specular Tint` is `hard_max = FLT_MAX` and Principled's dielectric F0 is
     `F0(IOR) * 2 * level * tint`, linear and UNCLAMPED -- with the level at its
     0.5 neutral point and the tint at `F0 / F0(IOR)`, the rendered
-    normal-incidence specular matched a Glossy BSDF of colour F0 to 0.00 % for
-    every F0 in {0.01 .. 1.0}. See docs/MATERIALS.md and tests/test_specular.py.
-    The builder now wires it, behind `opts['wire_specular']` (default True).
+    normal-incidence specular matched a Glossy BSDF of colour F0 to 0.00% for
+    every F0 in {0.01 .. 1.0}. See docs/MATERIALS.md and
+    tests/test_specular.py. The builder now wires it, behind
+    `opts['wire_specular']` (default True).
     """
     mb = _mb()
     src = MB_PATH.read_text(encoding="utf-8")
@@ -429,10 +439,10 @@ def test_builder_specular_is_wired_to_specular_tint():
 # ---------------------------------------------------------------------------
 
 def test_fixture_corpus_blend_records():
-    """Corpus facts measured over a 51-package / 100-unique-material fixture
-    export: 18 materials carry a blend mask, 9 of them also bind a layer>=1
-    non-mask texture, and EVERY shipped `layerN_blend_mask_offset` is -1.0.
-    Skipped when the (gitignored) fixture export is absent."""
+    """Corpus facts, `stream-confirmed` over `exports/fixtures_mat3` (51 packages,
+    100 unique materials): 18 materials carry a blend mask, 9 of them also bind a
+    layer>=1 non-mask texture, and EVERY shipped `layerN_blend_mask_offset` is
+    -1.0."""
     root = _fixtures()
     if root is None:
         return

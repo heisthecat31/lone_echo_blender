@@ -12,9 +12,9 @@ holds the three real station_front lightmap textures:
     81a8fcf99b655a42.dds   DXGI 83 BC5_UNORM  1024x1024  arraySize 13   (ao0)
     81a8fcf99b655a43.dds   DXGI 83 BC5_UNORM  1024x1024  arraySize 13   (ao1)
 
-65 == 13 x 5.  That arithmetic, cross-checked against
-the engine's own `lightmapuv.z = lightmapuv.z * 5 + i`, is what
-identifies the array layout as **13 lightmap pages x 5 SG lobes**, page-major.
+65 == 13 x 5.  That arithmetic, cross-checked against the engine's lightmap
+sampler (`lightmapuv.z = lightmapuv.z * 5 + i`), is what identifies the array
+layout as **13 lightmap pages x 5 SG lobes**, page-major.
 
 Sections (each prints lines the writeup quotes verbatim):
 
@@ -31,8 +31,7 @@ Sections (each prints lines the writeup quotes verbatim):
                 ambient double-count
   8. sg5      — the source-derived 5-lobe SG5 diffuse sum vs a python reference
   9. uv1      — that `mesh_builder`'s `flip_v` reaches uv1
- 10. renders  — `exports/lightmap_probe_renders/verify/*.png`, always
-              `view_transform='Standard'`
+ 10. renders  — `fixtures/verify/a9_*.png`, always `view_transform='Standard'`
 """
 
 import os
@@ -54,9 +53,7 @@ from lone_echo_import import lightmap_builder as LB       # noqa: E402
 import lone_echo_import                                   # noqa: E402
 from render_engine_util import resolve_render_engine      # noqa: E402
 
-# Renders go under `exports/` (gitignored): they are game-derived imagery and
-# must never land in a tracked directory.
-FIXTURES = BLENDER_TOOL / "exports" / "lightmap_probe_renders"
+FIXTURES = BLENDER_TOOL / "fixtures"
 VERIFY = FIXTURES / "verify"
 VERIFY.mkdir(parents=True, exist_ok=True)
 TMP = Path(os.environ.get("TEMP", "/tmp")) / "le_lightmap_probe"
@@ -438,7 +435,7 @@ def probe_page_grouping():
         "the 65-slice colour array groups in FIVES from the shipped pixels "
         "alone: within slices 0-4 the occupancy masks agree 98.6-99.2%, across "
         "the 5-boundary only 86.8-87.0%. With arraySize 65 == 13 x 13-slice AO "
-        "arrays and the engine's lightmapuv.z * 5 + i indexing, the "
+        "arrays and the engine's sampler (lightmapuv.z * 5 + i), the "
         "layout is 13 PAGES x 5 SG LOBES, page-major.")
 
 
@@ -831,8 +828,8 @@ def probe_auto_split():
 # =============================================================================
 # 8  SG5: the engine's real diffuse math
 # =============================================================================
-# The engine's own ambient-diffuse SG5 path:
-#   SampleAmbientDiffuse, the usesg5 branch
+# `shader-confirmed` — the engine's own shaders:
+#   SampleAmbientDiffuse, usesg5 branch
 #   DiffuseTermSG
 #   kLobeDirsSG5 / kLambdaSG5 / kSG5Scale
 #   lightmapuv.z = lightmapuv.z * 5 + i
@@ -1002,24 +999,24 @@ def pictures_colour_and_slices():
     if 0 not in _slice_files:
         say("render", "SKIP colour/slice pictures — no split slices")
         return
-    _atlas_png(_slice_files[0], "lm_lm_slice0_linear709.png", "Linear Rec.709",
+    _atlas_png(_slice_files[0], "a9_lm_slice0_linear709.png", "Linear Rec.709",
                label="REAL lightmap page0 lobe0, CORRECT colour space")
-    _atlas_png(_slice_files[0], "lm_lm_slice0_srgb_WRONG.png", "sRGB",
+    _atlas_png(_slice_files[0], "a9_lm_slice0_srgb_WRONG.png", "sRGB",
                label="same texture read as sRGB — the silent gamma error")
-    _atlas_png(_slice_files[0], "lm_lm_slice0_agx_WRONG.png", "Linear Rec.709",
+    _atlas_png(_slice_files[0], "a9_lm_slice0_agx_WRONG.png", "Linear Rec.709",
                view_transform="AgX",
                label="correct colour space but AgX view transform — desaturated")
-    _atlas_png(REAL_LM, "lm_lm_arrayfile_whatever_slice.png", "Linear Rec.709",
+    _atlas_png(REAL_LM, "a9_lm_arrayfile_whatever_slice.png", "Linear Rec.709",
                label="the 65-slice ARRAY file raw (auto_split OFF) — the bug: "
                      "Blender shows slice 0 no matter which page the mesh wants")
-    _atlas_png(REAL_LM, "lm_lm_arrayfile_page1_autosplit.png", "Linear Rec.709",
+    _atlas_png(REAL_LM, "a9_lm_arrayfile_page1_autosplit.png", "Linear Rec.709",
                page=1, opts={"lightmap_auto_split": True,
                              "lightmap_slice_dir": str(TMP / "autosplit")},
                label="the FIX: same array file, lm_slice_index=1, auto_split ON "
                      "-> slice 5 (page 1 lobe 0)")
     for s in (1, 2, 3, 4, 5, 9):
         if s in _slice_files:
-            _atlas_png(_slice_files[s], f"lm_lm_slice{s}.png", "Linear Rec.709",
+            _atlas_png(_slice_files[s], f"a9_lm_slice{s}.png", "Linear Rec.709",
                        label=f"split slice {s} (page {s // 5} lobe {s % 5})")
 
 
@@ -1111,11 +1108,11 @@ def main():
     probe_uv1_flip()
 
     pictures_colour_and_slices()
-    baked_dark = pictures_mesh(LB.MODE_BAKED, False, "lm_mesh_baked_nolights.png")
-    baked_sun = pictures_mesh(LB.MODE_BAKED, True, "lm_mesh_baked_withsun.png")
-    ambient = pictures_mesh(LB.MODE_AMBIENT, True, "lm_mesh_ambient_withsun.png")
-    off = pictures_mesh(LB.MODE_NONE, True, "lm_mesh_off_withsun.png")
-    sg5 = pictures_mesh(LB.MODE_BAKED, False, "lm_mesh_baked_sg5.png", basis="sg5")
+    baked_dark = pictures_mesh(LB.MODE_BAKED, False, "a9_mesh_baked_nolights.png")
+    baked_sun = pictures_mesh(LB.MODE_BAKED, True, "a9_mesh_baked_withsun.png")
+    ambient = pictures_mesh(LB.MODE_AMBIENT, True, "a9_mesh_ambient_withsun.png")
+    off = pictures_mesh(LB.MODE_NONE, True, "a9_mesh_off_withsun.png")
+    sg5 = pictures_mesh(LB.MODE_BAKED, False, "a9_mesh_baked_sg5.png", basis="sg5")
 
     if None not in (baked_dark, baked_sun, ambient, off):
         say("verdict-unlit",

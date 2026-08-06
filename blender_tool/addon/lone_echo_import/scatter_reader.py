@@ -23,6 +23,9 @@ PINNED PACKAGE CONTRACT (`<name>.lescatter/`):
          "positions":"blobs/m<m>_pos.bin",   # float32 x3 x nverts, LE, GAME space (Y-up)
          "normals":"blobs/m<m>_nrm.bin",      # optional (key absent if none)
          "uv0":"blobs/m<m>_uv0.bin",          # optional
+         "uv1":"blobs/m<m>_uv1.bin",          # optional, v4: the LIGHTMAP UV set
+         "lightmap_index":u32, "lm_slice_index":u32, "numlobes":u32,
+                                              # optional, v4: CGMeshData +0x6C/+0x70
          "indices":"blobs/m<m>_idx.bin",      # uint32 x nindices, LE
          "proxy":bool }, ... ],
       "instances_blob":"blobs/instances.bin",  # N records, GLOBAL order i=0..N-1,
@@ -32,13 +35,38 @@ PINNED PACKAGE CONTRACT (`<name>.lescatter/`):
          "blob":"blobs/instance_lod.bin",      # N records PARALLEL to instances.bin,
                                                # 12 B each, LE:
     #      lod_group:u32 (0xFFFFFFFF == none), lod_level:u32, lod_group_levels:u32
-         "num_groups":int, "max_level":int, "levels_histogram":{"0":n, ...} }
+         "num_groups":int, "max_level":int, "levels_histogram":{"0":n, ...} },
+      "instance_lightmap": {                   # v5, optional -- THE LEVEL BAKE INPUT
+         "present":True, "count":N,
+         "uv_blob":"blobs/instance_lm_uv.bin",     # float32 PAIRS, GLOBAL instance order
+         "offsets_blob":"blobs/instance_lm_uvoff.bin",  # u32/instance: start in PAIRS
+         "counts_blob":"blobs/instance_lm_count.bin",   # u32/instance: pair count
+         "page_blob":"blobs/instance_lm_page.bin",      # u32/instance: the atlas page
+         "total_uv_pairs":int, "flip_v_applied":False }
+    #    ... or {"present":False, "reason":"..."} when it was not extracted.
     }
     #
     # v1 packages (version 1, no per-mesh "draws" key) still load unchanged; the
     # reader normalizes them to a single whole-buffer draw via `ScatterPackage.draws`.
     # v1/v2 have no "lod" block -- `read_instance_lod` then reports one level for
     # every instance, so `filter_by_lod` is a no-op and old packages behave as before.
+    # v1..v3 have no "uv1" / lightmap-id keys -- `uv1()` returns None and
+    # `lightmap_ids()` reports the "none" sentinels, so those packages import
+    # byte-for-byte as they do today.
+    # v1..v4 have no "instance_lightmap" section -- `instance_lightmap` reports
+    # `present == False` with a reason and every accessor returns None, so the
+    # per-instance lightmap mode simply has nothing to do.
+    #
+    # ⛔ THE `uv1` STREAM IS NOT THE LEVEL LIGHTMAP UV SET.
+    # 1046 of the 1050 per-mesh `uv1` blobs in the shipped station_front package
+    # are ENTIRELY ZERO (`export-validated`, docs/LIGHTING.md 8.3):
+    # for INSTANCED static geometry the vertex-buffer slot-4 set is dead data --
+    # the engine overrides it per instance from `k_instancelightuvs`
+    # (`shader-confirmed`) -- so the cook left it zeroed. Wiring `uv1` to a
+    # lightmap on this path samples atlas texel (0,0) for 99.6 % of the level.
+    # The real UVs are the v5 `instance_lightmap` section, and they DIFFER BETWEEN
+    # INSTANCES OF THE SAME MESH (findings 8.2), which is why honouring them costs
+    # one mesh datablock per lightmapped instance.
     # Only `format` is validated on load (all versions are accepted).
     #
     # WHY LOD MATTERS HERE: every LOD level of a prop is a separate mesh with its
@@ -78,6 +106,9 @@ LOD_NONE = 0xFFFFFFFF   # `lod_group` sentinel: this instance has no LOD group
 LOD_ALL = -1            # keep every instance (all levels stacked)
 LOD_COARSEST = -2       # keep each group's last level
 
+#: v5 manifest section carrying the PER-INSTANCE lightmap UVs + page.
+INSTANCE_LM_KEY = "instance_lightmap"
+
 
 # ---------------------------------------------------------------------------
 # Package parsing (pure stdlib; array-based blob loads)
@@ -98,6 +129,153 @@ class InstanceLod:
     group: int            # LOD-group / node id, or -1 when ungrouped
     level: int            # 0 = highest detail
     group_levels: int     # how many levels this instance's group has (>= 1)
+
+
+class InstanceLightmap:
+    """The v5 `instance_lightmap` section: per-INSTANCE lightmap UVs + atlas page.
+
+    ★ Why this exists at all, in one line: instances of the SAME mesh carry
+    DIFFERENT lightmap UVs -- each owns its own strip of the atlas
+    (`stream-confirmed`, docs/LIGHTING.md 8.2) -- so the light UV
+    is per-instance data and cannot ride the shared mesh datablock.
+
+    Layout (GLOBAL instance order, index `i` == `InstanceRecord.index`):
+
+        uv_blob      float32 pairs, all instances concatenated
+        offsets_blob u32 per instance: start index of that instance in UV PAIRS
+        counts_blob  u32 per instance: how many pairs (== that mesh's nverts)
+        page_blob    u32 per instance: the atlas page (`lightmapidx`, u16 @rec+0x1a)
+
+    ⚠ `page` is the INSTANCE's page and it is authoritative. It disagrees with the
+    per-mesh `lm_slice_index` for 65.1 % of station_front's 21,394 instances
+    (findings 8.4) -- for an instanced draw the instance field is what the engine
+    reads (`shader-confirmed` in the engine's own instancing path).
+
+    ⚠ `flip_v_applied` is a property of the STREAM, not of the UV set: the
+    extractor emits RAW (D3D-authored) UVs with `flip_v_applied: False`, and the
+    V flip is the consumer's job exactly as it is for `uv0`/`uv1`
+    docs/LIGHTING.md 4.4 + 9.3). Applying it twice is a silent
+    "renders someone else's strip" bug, so it is recorded rather than assumed.
+
+    Blobs load LAZILY on first access -- `present`/`count`/`flip_v_applied` are
+    manifest reads, so a caller that never turns the mode on never pays the
+    ~54 MB the station_front UV blob costs. Never raises: a missing or short blob
+    downgrades to `present == False` with a human-readable `reason`, the same way
+    `read_instance_lod` degrades to "one level each".
+    """
+
+    def __init__(self, pkg):
+        self._pkg = pkg
+        sec = pkg.manifest.get(INSTANCE_LM_KEY) or {}
+        self.section = dict(sec)
+        # `present` is TRI-STATE by contract: a v5 package that could not extract
+        # the stream says so with `{"present": false, "reason": ...}`, which is a
+        # DIFFERENT statement from a v1..v4 package that has no section at all.
+        # Keep the two distinguishable -- "not extracted" is a bug report, "not
+        # available" is an old package.
+        self.declared = bool(sec)
+        self.present = bool(sec.get("present"))
+        if self.present:
+            self.reason = ""
+        elif self.declared:
+            self.reason = str(sec.get("reason")
+                              or "package declares instance_lightmap present=false")
+        else:
+            self.reason = ("package carries no `%s` section (pre-v5 export)"
+                           % INSTANCE_LM_KEY)
+        self.flip_v_applied = bool(sec.get("flip_v_applied", False))
+        try:
+            self.count = int(sec.get("count") or 0)
+        except (TypeError, ValueError):
+            self.count = 0
+        try:
+            self.total_uv_pairs = int(sec.get("total_uv_pairs") or 0)
+        except (TypeError, ValueError):
+            self.total_uv_pairs = 0
+        self._loaded = False
+        self._uv = self._off = self._cnt = self._page = None
+
+    # --- lazy blob load ------------------------------------------------------
+
+    def _load(self):
+        if self._loaded:
+            return
+        self._loaded = True
+        if not self.present:
+            return
+        try:
+            self._uv = self._pkg._floats(self.section["uv_blob"])
+            self._off = self._pkg._uints(self.section["offsets_blob"])
+            self._cnt = self._pkg._uints(self.section["counts_blob"])
+            self._page = self._pkg._uints(self.section["page_blob"])
+        except (KeyError, OSError, ValueError) as exc:
+            self._uv = self._off = self._cnt = self._page = None
+            self.present = False
+            self.reason = f"instance_lightmap blob unreadable: {exc}"
+            return
+        n = min(len(self._off), len(self._cnt), len(self._page))
+        if n == 0:
+            self._uv = self._off = self._cnt = self._page = None
+            self.present = False
+            self.reason = "instance_lightmap blobs are empty"
+            return
+        if not self.count or self.count > n:
+            self.count = n
+
+    # --- accessors -----------------------------------------------------------
+
+    def uv(self, i):
+        """The RAW float32 `[u, v, u, v, ...]` for global instance `i`, or None.
+
+        None (never a zero-filled stand-in) for an out-of-range index, an absent
+        section and a record whose slice runs off the end of the blob: a zero UV
+        set is a *valid-looking* answer that samples atlas texel (0, 0), which is
+        precisely the failure this whole path exists to avoid.
+        """
+        self._load()
+        if self._uv is None or not (0 <= i < self.count):
+            return None
+        start = int(self._off[i])
+        pairs = int(self._cnt[i])
+        if pairs <= 0 or (start + pairs) * 2 > len(self._uv):
+            return None
+        return self._uv[start * 2:(start + pairs) * 2]
+
+    def page(self, i):
+        """The atlas page for global instance `i`, or None when unavailable.
+
+        ⛔ Never defaults to 0. Page 0 is a real page that 1,676 station_front
+        instances legitimately use, so substituting it renders a different part of
+        the bake rather than "degrading" docs/LIGHTING.md 5).
+        """
+        self._load()
+        if self._page is None or not (0 <= i < self.count):
+            return None
+        v = int(self._page[i])
+        return None if v == 0xFFFFFFFF else v
+
+    def vertex_count(self, i):
+        """How many UV pairs instance `i` carries (== its mesh's nverts), or None."""
+        self._load()
+        if self._cnt is None or not (0 <= i < self.count):
+            return None
+        return int(self._cnt[i])
+
+    def pages_histogram(self):
+        """`{page: n_instances}` over the whole stream (diagnostics / summaries)."""
+        self._load()
+        hist = {}
+        if self._page is None:
+            return hist
+        for i in range(self.count):
+            p = self.page(i)
+            if p is not None:
+                hist[p] = hist.get(p, 0) + 1
+        return hist
+
+    def __repr__(self):      # pragma: no cover - diagnostics only
+        return (f"<InstanceLightmap present={self.present} count={self.count} "
+                f"flip_v_applied={self.flip_v_applied} reason={self.reason!r}>")
 
 
 class ScatterPackage:
@@ -159,6 +337,21 @@ class ScatterPackage:
         rel = mesh.get("uv0")
         return self._floats(rel) if rel else None
 
+    def uv1(self, mesh):
+        """Flat float32 [u,v, ...] for the LIGHTMAP UV set, or None if absent.
+
+        Mirrors `uv0` exactly (same blob layout, same per-vertex order), so the
+        importer can build both layers with one code path. A package written
+        before the uv1 addition simply has no `"uv1"` key and reports None --
+        version-tolerant by construction, no `version` check needed.
+
+        The `flip_v` convention is IDENTICAL to uv0 (see `scatter_import`): the
+        V flip is a property of the API SAMPLER ORIGIN, not of the UV set
+        (docs/LIGHTING.md 4.4).
+        """
+        rel = mesh.get("uv1")
+        return self._floats(rel) if rel else None
+
     def indices(self, mesh):
         """Flat uint32 triangle indices, or [] if absent."""
         rel = mesh.get("indices")
@@ -168,6 +361,28 @@ class ScatterPackage:
     def lod(self):
         """The v3 `lod` manifest block, or `{}` for v1/v2 packages."""
         return self.manifest.get("lod") or {}
+
+    @property
+    def instance_lightmap(self) -> "InstanceLightmap":
+        """The v5 per-instance lightmap accessor (cached; blobs load lazily).
+
+        Always returns an object — a pre-v5 package yields one with
+        `present == False` and a `reason`, so callers branch on `.present`
+        instead of on `None`.
+        """
+        cached = getattr(self, "_instance_lightmap", None)
+        if cached is None:
+            cached = InstanceLightmap(self)
+            self._instance_lightmap = cached
+        return cached
+
+    def instance_lightmap_uv(self, i):
+        """RAW per-instance lightmap UV pairs for GLOBAL instance `i`, or None."""
+        return self.instance_lightmap.uv(i)
+
+    def instance_lightmap_page(self, i):
+        """The atlas page for GLOBAL instance `i`, or None. ⛔ never 0 by default."""
+        return self.instance_lightmap.page(i)
 
     @property
     def max_lod_level(self):
@@ -187,6 +402,31 @@ class ScatterPackage:
             return mesh["draws"]
         return [{"matidx": mesh["matidx"], "shdidx": mesh["shdidx"],
                  "idx_start": 0, "idx_count": mesh["nindices"]}]
+
+    @staticmethod
+    def lightmap_ids(mesh):
+        """-> (lightmap_index, lm_slice_index, numlobes) for a mesh entry.
+
+        The same three `CGMeshData` fields the `.lemesh` path carries
+        (`lightmapindex @0x6C`, `lmsliceindex @0x70`, `numlobes`), with the SAME
+        defaults `mesh_builder.py:256-263` uses, so both importers agree on what
+        "absent" means:  lightmap_index 0, lm_slice_index 0xFFFFFFFF ("none"),
+        numlobes 0.  A pre-uv1 package carries none of these keys and therefore
+        reports exactly those defaults.
+
+        ⚠ `lm_slice_index` is the PAGE selector -- the only thing that picks which
+        lightmap page a mesh samples -- so it must be preserved even though it
+        holds the uint32 sentinel 0xFFFFFFFF, which does NOT fit a Blender signed
+        32-bit ID property (see `scatter_import._int_prop`).
+        """
+        def _u32(key, default):
+            try:
+                return int(mesh.get(key, default))
+            except (TypeError, ValueError):
+                return default
+        return (_u32("lightmap_index", 0),
+                _u32("lm_slice_index", 0xFFFFFFFF),
+                _u32("numlobes", 0))
 
 
 def read_instances(pkg: ScatterPackage) -> list:
@@ -369,7 +609,7 @@ def basis_matrix(y_up_to_z_up: bool = True) -> Mat4:
     THE single place the basis is defined (tweak here at integration time). The
     default is a PURE +90 deg rotation about X (determinant +1, no mirror): it
     sends game (x, y, z) -> Blender (x, -z, y), identical to the .lemesh
-    importer's `mesh_builder._axis_matrix` (see docs/FORMATS.md). When
+    importer's `mesh_builder._axis_matrix` (AXIS_CALIBRATION.md). When
     `y_up_to_z_up` is False, B is identity (native passthrough).
     """
     if not y_up_to_z_up:

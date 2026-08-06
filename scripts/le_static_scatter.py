@@ -47,12 +47,31 @@ are now DECODED. instance i belongs to mesh m where instanceoffsets[m]
     +8 stride are in 4-byte WORDS (x4 for bytes); +4 = firstinstance (==
     instanceoffsets[m]); +24 = totalinstances; +12==2, +28/+32 = bookkeeping.
 
-Each instance record = a fixed 26-byte transform header then a variable baked-
-lighting tail (fills `stride`; the tail size is why bytes/instance is non-uniform,
-station 2513.6 vs min_itc 6543.9 -- the transform header is constant):
-  +0x00 translation 3x f32 (world) | +0x0C rotation 4x int16 snorm (x,y,z,w) unit
-  quat | +0x14 scale 3x f16 | +0x1A pad. => H2 (full TRS) confirmed: |q|==1 over
-  302 sampled instances, matching SGInstanceData (transform C44Matrix).
+Each instance record = a fixed 44-byte header (`NRadEngine::SGPackedInstanceData`,
+0x2c, `name-confirmed`) then `nverts` x `C2Vector` of BAKED LIGHTMAP UVs
+(8 B/vertex), so `stride == 44 + 8*nverts` -- which is why bytes/instance is
+non-uniform (station 2513.6 vs min_itc 6543.9) while the header is constant:
+
+  +0x00 pos          C3Vector    3x f32, world
+  +0x0C orientation  C4VectorS16N 4x int16 snorm (x,y,z,w) unit quat
+  +0x14 scale        C3HVector   3x f16
+  +0x1A lightmapidx  uint16      <- the PER-INSTANCE lightmap page (was "pad")
+  +0x1C probeidx_lmask_dlmask uint32
+  +0x20 color        C4HVector   4x f16
+  +0x28 lodfadeidx   uint32
+  +0x2C lightmapuvs  C2Vector[nverts]   8 B/vertex, per-instance per-vertex
+
+H2 (full TRS) confirmed: |q|==1 over 302 sampled instances, matching
+SGInstanceData (transform C44Matrix). The UV tail and the +0x1a page are
+`stream-confirmed` on 942c829457a04a62 (station_front): stride 900/636/844 on
+meshes 0/1/468 == 44+8*nverts, and `44*C + 8*sum(count*nverts)` reproduces
+`instancedatasize` with residual exactly 0 on station_front AND min_itc.
+See docs/LIGHTING.md.
+
+⚠ ERA TRAP: the later engine revision uses a 48-B record and a 4-byte
+`C2VectorU16N` UV in a SEPARATE offsets-indexed buffer
+(`k_instancelightuvs`/`lmuvoffsetidx`), absent from this era. Never carry one
+era's formula to the other.
 
 `decode_static_master`, `decode_instancetype_table`, `decode_instance_transform`
 are archive-independent (unit-tested on synthetic blobs); `decode_gpu_transforms`
@@ -208,16 +227,152 @@ class InstanceTransform:
 
 
 def decode_instance_transform(buf: bytes, off: int = 0) -> InstanceTransform:
-    """Decode the fixed 26-byte transform header of one instance record.
+    """Decode the transform part of one `SGPackedInstanceData` record.
 
     +0x00 translation 3xf32; +0x0C rotation 4x int16 snorm (/32767, order x,y,z,w);
-    +0x14 scale 3x f16; +0x1A pad u16. The variable tail after +0x1C is per-instance
-    baked lighting (fills `stride`), NOT part of the transform.
+    +0x14 scale 3x f16. +0x1A is NOT padding -- it is `lightmapidx` (see
+    `instance_lightmap_page`) -- and the record continues to +0x2C, after which the
+    per-instance lightmap UV array runs to the end of `stride`.
     """
     t = struct.unpack_from("<3f", buf, off)
     q = tuple(v / 32767.0 for v in struct.unpack_from("<4h", buf, off + 12))
     s = struct.unpack_from("<3e", buf, off + 20)
     return InstanceTransform(translation=t, rotation=q, scale=s)
+
+
+# ---------------------------------------------------------------------------
+# Per-instance BAKED LIGHTMAP data (page + per-vertex UVs).
+# `stream-confirmed` on 942c829457a04a62 / 4c47d84c1e52447a; see the module
+# docstring and the project documentation.
+# Archive-independent: everything below takes an already-decompressed
+# `instancedata` region, so it is unit-tested on synthetic bytes.
+# ---------------------------------------------------------------------------
+
+#: `sizeof(NRadEngine::SGPackedInstanceData)` -- the fixed part of one record.
+INSTANCE_HEADER_BYTES = 0x2C            # 44
+#: `sizeof(C2Vector)` -- one vertex's lightmap UV pair (2x f32).  ⛔ Echo r15 uses
+#: `C2VectorU16N` (4 B) instead; do not carry this constant across eras.
+INSTANCE_UV_BYTES = 8
+#: `SGPackedInstanceData.lightmapidx` -- the per-instance lightmap PAGE.
+INSTANCE_LIGHTMAPIDX_OFF = 0x1A
+#: where the `C2Vector lightmapuvs[vtxcount]` array starts inside a record.
+INSTANCE_UV_OFF = INSTANCE_HEADER_BYTES
+#: `SGStaticInstanceTypeData.vertexsize`, in DWORDS. 2 dwords == 8 B == C2Vector.
+EXPECTED_VERTEXSIZE_DWORDS = INSTANCE_UV_BYTES // 4
+
+
+def instance_uv_count(stride: int) -> int:
+    """How many `C2Vector` UV pairs one instance record of `stride` bytes holds.
+
+    Raises when the stride is not `44 + 8*n` -- a mis-strided read must be loud,
+    because it silently produces plausible-looking floats otherwise.
+    """
+    tail = int(stride) - INSTANCE_HEADER_BYTES
+    if tail < 0 or tail % INSTANCE_UV_BYTES:
+        raise ValueError(
+            f"instance stride {stride} is not {INSTANCE_HEADER_BYTES} + "
+            f"{INSTANCE_UV_BYTES}*n -- wrong record model or wrong table")
+    return tail // INSTANCE_UV_BYTES
+
+
+def instance_lightmap_page(buf: bytes, off: int = 0) -> int:
+    """`SGPackedInstanceData.lightmapidx` (u16 @ +0x1a) of the record at `off`.
+
+    ⛔ This is the page an INSTANCED draw uses -- NOT `CGMeshData.lmsliceindex`.
+    Measured on all 21,394 station_front instances they agree 7,444 / disagree
+    13,909 (65.1%). `stream-confirmed`.
+    """
+    return struct.unpack_from("<H", buf, off + INSTANCE_LIGHTMAPIDX_OFF)[0]
+
+
+@dataclass
+class InstanceLightmap:
+    """Per-instance baked lightmap stream, in GLOBAL instance order.
+
+    `uv_bytes` is the concatenation of every emitted instance's UV array, copied
+    VERBATIM off disk (the on-disk element is already little-endian float32 x2,
+    so no unpack/repack happens and nothing is rounded). `offsets[i]` is where
+    instance `i`'s UVs start **in PAIRS** (multiply by 8 for bytes), `counts[i]`
+    is how many pairs it owns (== that mesh-type's vertex count), `pages[i]` is
+    its `lightmapidx`.
+    """
+    count: int = 0                        # instances described
+    uv_bytes: bytearray = field(default_factory=bytearray)
+    offsets: list = field(default_factory=list)   # start index, in UV PAIRS
+    counts: list = field(default_factory=list)    # UV pairs per instance
+    pages: list = field(default_factory=list)     # u16 lightmapidx, widened
+    total_uv_pairs: int = 0
+    #: `44*count + 8*sum(counts)` over EVERY instance of the master (not just the
+    #: emitted subset) -- compare against `instancedatasize` for a residual.
+    predicted_instancedatasize: int = 0
+    warnings: list = field(default_factory=list)
+
+    def page_histogram(self) -> dict:
+        hist: dict = {}
+        for p in self.pages:
+            hist[p] = hist.get(p, 0) + 1
+        return dict(sorted(hist.items()))
+
+
+def decode_instance_lightmap(region: bytes, decode: "StaticMasterDecode",
+                             typetable: list, *,
+                             nverts_by_mesh: dict | None = None,
+                             selected: set | None = None,
+                             max_instances: int | None = None) -> InstanceLightmap:
+    """Pull per-instance lightmap page + UVs out of a decompressed `instancedata`.
+
+    `region`         : the decompressed `instancedata` bytes (offset 0 == the
+                       region base the typetable's `block_offset` indexes into).
+    `nverts_by_mesh` : optional {mesh index -> decoded vertex count}. When given,
+                       a mesh whose `stride`-derived UV count disagrees is
+                       reported in `warnings` -- the Echo-era runtime raises
+                       exactly this mismatch, so it is worth surfacing.
+    `selected`       : optional set of mesh indices to emit (mirrors the scene
+                       extractor's `--subset`). Instances of other meshes are
+                       skipped, keeping the arrays PARALLEL to `instances.bin`.
+
+    GLOBAL instance order is preserved because `instanceoffsets` is the prefix
+    sum of `instancescount`: iterating mesh-types in index order and their
+    instances in local order visits global instance 0, 1, 2, ... exactly.
+    """
+    out = InstanceLightmap()
+    total_all = 0
+    for m in range(decode.num_meshes):
+        rec = typetable[m]
+        n_inst = decode.instancescount[m] if m < len(decode.instancescount) else 0
+        try:
+            uvn = instance_uv_count(rec.stride)
+        except ValueError as exc:
+            out.warnings.append(f"mesh {m}: {exc}")
+            uvn = 0
+        if len(rec.raw) > 3 and rec.raw[3] != EXPECTED_VERTEXSIZE_DWORDS:
+            out.warnings.append(
+                f"mesh {m}: instancetypedata vertexsize {rec.raw[3]} dwords != "
+                f"{EXPECTED_VERTEXSIZE_DWORDS} (C2Vector)")
+        if nverts_by_mesh is not None:
+            want = nverts_by_mesh.get(m)
+            if want is not None and uvn and want != uvn:
+                out.warnings.append(
+                    f"mesh {m}: stride implies {uvn} lightmap UVs but the mesh "
+                    f"decodes {want} vertices")
+        total_all += n_inst * (INSTANCE_HEADER_BYTES + INSTANCE_UV_BYTES * uvn)
+        if selected is not None and m not in selected:
+            continue
+        nbytes = uvn * INSTANCE_UV_BYTES
+        for j in range(n_inst):
+            if max_instances is not None and out.count >= max_instances:
+                break
+            off = instance_record_offset(rec, j)
+            out.offsets.append(out.total_uv_pairs)
+            out.counts.append(uvn)
+            out.pages.append(instance_lightmap_page(region, off))
+            if nbytes:
+                out.uv_bytes += region[off + INSTANCE_UV_OFF:
+                                       off + INSTANCE_UV_OFF + nbytes]
+            out.total_uv_pairs += uvn
+            out.count += 1
+    out.predicted_instancedatasize = total_all
+    return out
 
 
 def instance_record_offset(rec: InstanceTypeRecord, local_index: int) -> int:
@@ -278,16 +433,31 @@ def load_master_blob(archive_hash: str, hash_lookup: Path = Path("hash_lookup.js
     return name_hash, blob
 
 
-def decode_gpu_transforms(archive_hash: str, master_name_hash: int,
-                          decode: StaticMasterDecode,
-                          hash_lookup: Path = Path("hash_lookup.json"),
-                          max_instances: int | None = None):
-    """Pull + decode per-instance world transforms for a decoded master.
+@dataclass
+class GpuInstanceDecode:
+    """What one pass over the GPU `instancedata` region yields."""
+    G: int                              # the master's GPU resource base
+    typetable: list                     # list[InstanceTypeRecord]
+    transforms: list                    # list[InstanceTransform], global order
+    lightmap: InstanceLightmap | None = None   # only when want_lightmap
 
-    OOM-safe: reads only the primary tail (to resolve the GPU base G from the GPU
-    resource table / header1) plus the [instancedata|instancetypedata] window of
-    the GPU sibling. Returns (G, typetable, transforms) where transforms[i] is the
-    InstanceTransform of global instance i (capped by `max_instances`).
+
+def decode_gpu_instances(archive_hash: str, master_name_hash: int,
+                         decode: StaticMasterDecode,
+                         hash_lookup: Path = Path("hash_lookup.json"),
+                         max_instances: int | None = None, *,
+                         want_lightmap: bool = False,
+                         nverts_by_mesh: dict | None = None,
+                         selected: set | None = None) -> GpuInstanceDecode:
+    """One pass over the GPU `instancedata` region -> transforms (+ lightmap).
+
+    OOM-safe in the same way `decode_gpu_transforms` always was: reads only the
+    primary tail (to resolve the GPU base G from the GPU resource table /
+    header1) plus the [instancedata|instancetypedata] window of the GPU sibling,
+    and drops both as soon as they are consumed.
+
+    ⚠ `want_lightmap=True` accumulates ~8 B per instance-vertex -- 50.4 MiB on
+    station_front. It is opt-in for exactly that reason.
     """
     from le_oodle import chunk_table, decompress_range
     from le_archive_decode import (
@@ -336,7 +506,25 @@ def decode_gpu_transforms(archive_hash: str, master_name_hash: int,
         m = decode.mesh_for_instance(i)
         off = instance_record_offset(typetable[m], i - decode.instanceoffsets[m])
         transforms.append(decode_instance_transform(region, off))
-    return G, typetable, transforms
+
+    instlm = None
+    if want_lightmap:
+        instlm = decode_instance_lightmap(
+            region, decode, typetable, nverts_by_mesh=nverts_by_mesh,
+            selected=selected, max_instances=max_instances)
+    del region
+    return GpuInstanceDecode(G=G, typetable=typetable, transforms=transforms,
+                             lightmap=instlm)
+
+
+def decode_gpu_transforms(archive_hash: str, master_name_hash: int,
+                          decode: StaticMasterDecode,
+                          hash_lookup: Path = Path("hash_lookup.json"),
+                          max_instances: int | None = None):
+    """Back-compat wrapper: (G, typetable, transforms). See `decode_gpu_instances`."""
+    d = decode_gpu_instances(archive_hash, master_name_hash, decode,
+                             hash_lookup, max_instances)
+    return d.G, d.typetable, d.transforms
 
 
 def main() -> None:

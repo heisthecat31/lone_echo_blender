@@ -6,7 +6,8 @@ four table descriptors (count + data_off) that the loader-order parser
 Oodle + archive-framing concerns in the extractor lets this module be unit
 tested with synthetic bytes and imported inside Blender unchanged.
 
-Struct offsets below match the on-disk record layout.
+Struct offsets below are `name-confirmed` against the engine's own type
+names and stream-validated by the reference exporters.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ from .vertex_format import (
     VertexElement,
     read_vertex_format,
     decode_vertex_buffer,
+    lightmap_uv_attr_name,
+    lightmap_uv_type_agrees,
+    texcoord_slots,
     DecodedAttribute,
 )
 
@@ -43,6 +47,32 @@ M_NUMLOBES = 0x74      # u32, lightmap SG lobe count (4 on 1221/1221 shipped)
 M_OUTLINEMODE = 0x7C
 
 # --- CGRenderParams (0x68) field offsets ------------------------------------
+# ★ `CGRenderParams` OPENS with an `SSceneSetMask` (0x28 bytes, `mincount` at
+# +0x20) — the whole 0x00..0x27 head of the record, which this decoder read as
+# nothing until 2026-08-05. It is the SECOND, mesh-level LOD system, and the one
+# a two-part CHARACTER uses:
+#
+#   * mesh-list chain (`lodchildindices` + `lod_primset_idx/children*`) — a level
+#     is a later INDEX RANGE of the same mesh. Liv's BODY uses it.
+#   * ★ scene sets — a level is a DIFFERENT MESH, selected by a bit in this mask.
+#     `liv_head` ships 19 meshes / 27 renderparams and an EMPTY `lodchildindices`;
+#     its masks partition the draws 0-9 -> bit 0, 10-17 -> bit 1, 18 -> bit 2,
+#     and the actor's `ComponentLOD` component names those three sets
+#     `lod0`/`lod1`/`lod2` with ranges [0,1) [1,3) [3,5)
+#     (`SComponentLODCD::SLODEntry`, `name-confirmed`;
+#     `stream-confirmed` on `CComponentLODCRWin7 956a00b1a4b3c37e`).
+#   Runtime: `CModelCS::ActivateSceneSet` / `DeactivateSceneSet` (offsets
+#   0x11a060 / 0x11afa0) and `CGSceneSetsData::LookupSet` (0x101ec0) in the
+#   shipped game executable are the matching pair (`name-confirmed`).
+#
+# ⛔ The bit -> set-NAME mapping is the model's own `CGSceneSetsData` order and is
+# NOT in the mesh-list, so "bit 0 == lod0" is `inferred` — strongly corroborated
+# (vertex counts fall monotonically with bit index on every character checked,
+# and the ComponentLOD rows name exactly lod0..lod3). `scene_set_bit()` returns
+# the LOWEST set bit, which is the level index under that reading.
+RP_SCENEMASK = 0x00        # SSceneSetMask: 32 bytes of bits, then mincount
+RP_SCENEMASK_BYTES = 0x20
+RP_SCENEMASK_MINCOUNT = 0x20
 RP_MATERIALIDX = 0x28
 RP_SHADERSETIDX = 0x2C
 RP_PRIMTYPE = 0x40     # 4 == triangle list
@@ -62,7 +92,7 @@ IB_NUMINDICES = 0x04
 IB_INDEXSIZE = 0x08
 IB_PAD = 0x0C
 
-# --- CGMeshData::EFlags -----------------------------------------------------
+# --- CGMeshData::EFlags (`name-confirmed`) -----------------------------------
 MESH_FLAGS = [
     (0x000001, "eCastsShadow"), (0x000002, "eShadowOnly"),
     (0x000004, "eLightUVTangent"), (0x000008, "eSampleIrradiance"),
@@ -105,10 +135,24 @@ class Draw:
     lod_children_count: int
     material_key: str = ""   # resolved by the extractor (shaderset/material hash)
     lod_level: int = 0       # 0 = highest detail; filled in by `assign_lod_levels`
+    scene_mask: int = 0      # SSceneSetMask bits, little-endian over 32 bytes
+    scene_set_min_count: int = 0
 
     @property
     def is_triangles(self) -> bool:
         return self.primtype == PRIMTYPE_TRIANGLES
+
+    @property
+    def scene_set_bit(self) -> int:
+        """Index of the LOWEST set bit of `scene_mask`, or -1 when the mask is 0.
+
+        A mask of 0 means "no scene set gates this draw", i.e. it always draws —
+        which is what every LEVEL mesh in this corpus carries. Only characters
+        (and anything else with a `ComponentLOD`) set bits here.
+        """
+        if not self.scene_mask:
+            return -1
+        return (self.scene_mask & -self.scene_mask).bit_length() - 1
 
     @property
     def is_lod_parent(self) -> bool:
@@ -150,12 +194,34 @@ class MeshObject:
     index_size: int
     draws: list[Draw] = field(default_factory=list)
     # `CGMeshData.numlobes @0x74` -- the lightmap's spherical-gaussian lobe count.
-    # Reads 4 on 1221/1221 shipped meshes, while the colour lightmap array holds
-    # 5 slices per page, so 5 == numlobes + 1. Which of "4 lobes + 1 extra" or
-    # "a 5-lobe bake whose numlobes means something else" is correct is still
-    # unresolved -- see `le_mesh/lightmap.py`. Defaulted so the dangling-reference
-    # path and any older caller keep working.
+    # Reads 4 on 1221/1221 shipped meshes (`stream-confirmed`), while the
+    # colour lightmap array is 5 slices per page (`shader-confirmed`),
+    # so 5 == numlobes + 1. Which of "4 lobes + 1 extra" or "a 5-lobe bake whose
+    # numlobes means something else" is correct is still `unresolved` -- see
+    # docs/LIGHTING.md. Defaulted so the dangling-reference path and
+    # any older caller keep working.
     numlobes: int = 0
+
+    @property
+    def lightmap_uv(self) -> str | None:
+        """The attribute holding this mesh's LIGHTMAP UV set, or None.
+
+        Resolved from `SVertexElement.slot == 4` (`shader-confirmed`),
+        NEVER from the appearance-order `uvN` names — on stride-56 objects with
+        texcoord slots (0, 1, 4) the lightmap set is `uv2` and `uv1` is the
+        material's second texture UV set. See `vertex_format.lightmap_uv_attr_name`.
+        """
+        return lightmap_uv_attr_name(self.elements)
+
+    @property
+    def lightmap_uv_type_agrees(self) -> bool | None:
+        """Corroboration only: is the slot-4 texcoord `eU16n`? None = no slot 4."""
+        return lightmap_uv_type_agrees(self.elements)
+
+    @property
+    def texcoord_slots(self) -> dict:
+        """{attribute name -> semantic slot} for this mesh's texcoord elements."""
+        return texcoord_slots(self.elements)
 
     @property
     def shadow_only(self) -> bool:
@@ -181,7 +247,11 @@ def _read_draws(primary: bytes, rp_table: Table, rp_idx: int, rp_count: int) -> 
         if gi >= rp_table.count:
             break
         base = rp_table.data_off + gi * RENDERPARAM_STRIDE
+        mask = int.from_bytes(
+            primary[base + RP_SCENEMASK:base + RP_SCENEMASK + RP_SCENEMASK_BYTES], "little")
         draws.append(Draw(
+            scene_mask=mask,
+            scene_set_min_count=_u32(primary, base + RP_SCENEMASK_MINCOUNT),
             renderparam_index=gi,
             material_index=_u32(primary, base + RP_MATERIALIDX),
             shaderset_index=_u32(primary, base + RP_SHADERSETIDX),
@@ -234,6 +304,31 @@ def assign_lod_levels(draws: list, lodchildindices: list, rp_base: int) -> None:
             child = by_local.get(lodchildindices[k])
             if child is not None:
                 child.lod_level = level
+
+
+def scene_set_lod_levels(objects: list) -> dict:
+    """`{mesh_index -> level}` from the SCENE-SET masks, or `{}` when unused.
+
+    Returns `{}` unless at least two DISTINCT non-zero masks occur across the
+    mesh-list — one mask (or none) means the resource has no scene-set LOD and
+    every mesh always draws. The level of a mesh is the lowest set bit any of its
+    draws carries; `-1` (no bit) is treated as level 0 ("ungated, always drawn"),
+    which keeps eyes/teeth/anything the artist left out of the LOD sets visible.
+
+    ⚠ Level == bit index is `inferred` (see `RP_SCENEMASK`). What is
+    `stream-confirmed` is the PARTITION: on `liv_head` the bits split the 19
+    meshes 10 / 8 / 1 with monotonically falling vertex counts, and its
+    `ComponentLOD` names exactly `lod0`/`lod1`/`lod2`.
+    """
+    masks = {d.scene_mask for o in objects for d in o.draws if d.scene_mask}
+    if len(masks) < 2:
+        return {}
+    levels = {}
+    for o in objects:
+        bits = [d.scene_set_bit for d in o.draws]
+        live = [b for b in bits if b >= 0]
+        levels[o.mesh_index] = min(live) if live else 0
+    return levels
 
 
 def build_objects(primary: bytes, gpu: bytes, gpu_base: int, *,

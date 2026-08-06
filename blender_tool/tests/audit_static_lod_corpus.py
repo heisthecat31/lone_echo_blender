@@ -2,7 +2,7 @@
 
 READ-ONLY. The `SGStaticInstanceLODData` claim set was derived from exactly TWO
 static-scatter masters (`942c829457a04a62` station_front, `4c47d84c1e52447a`
-min_itc). This walks EVERY archive in the archive manifest, pulls its populated
+min_itc). This walks EVERY archive in the the reference manifest, pulls its populated
 `CGStaticInstanceResourceWin7` master with the OOM-safe ranged reader, runs the
 shipped decoder, and tries to BREAK each load-bearing claim:
 
@@ -23,7 +23,7 @@ shipped decoder, and tries to BREAK each load-bearing claim:
   Q3  `visstrlookup` is constant per LOD group, a bijection onto `0..ngroups-1`,
       and `numvisentries` equals its distinct count.
 
-FALSIFIED here, so counted rather than asserted (see docs/LOD.md):
+FALSIFIED here, so counted rather than asserted (see the finding's corrections):
 
   T1  "per LOD group, TOTAL triangles are NON-INCREASING with level" — true on
       station_front and min_itc, false on 196 of 72,004 groups corpus-wide.
@@ -36,11 +36,11 @@ re-reading the archives; `--save-blobs DIR` writes each master's primary bytes s
 every later pass runs under plain `python3` with no archive access at all.
 
 MUST run under Windows Python (python.exe) so le_oodle can load the Oodle DLL,
-from the repository root with a RELATIVE hash_lookup path:
+from LE_ROOT with a RELATIVE hash_lookup path:
 
     python.exe blender_tool/tests/audit_static_lod_corpus.py --dump /tmp/lodaudit
 
-Heavy: one archive at a time, freed between (memory guard). Never parallel.
+Heavy: one archive at a time, freed between (WSL OOM guard). Never parallel.
 Not named `test_*.py`, so `tests/run_tests.py` never imports it.
 """
 
@@ -49,7 +49,6 @@ from __future__ import annotations
 import argparse
 import csv
 import gc
-import os
 import json
 import math
 import struct
@@ -58,28 +57,13 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-# Windows consoles default to cp1252 and argparse echoes this module's docstring
-# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
-# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
-        pass
-
 THIS = Path(__file__).resolve()
-REPO_ROOT = THIS.parents[2]
-for p in (str(REPO_ROOT / "scripts"), str(REPO_ROOT / "blender_tool")):
+LE_ROOT = THIS.parents[2]
+for p in (str(LE_ROOT / "scripts"), str(LE_ROOT / "blender_tool")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-# The corpus list: one row per archive, with an `archive` column. Generate it for
-# your own copy of the game data, or point `LONE_ECHO_SCAN_ROOT` at wherever you
-# keep it. Not shipped — it is derived from game data.
-MANIFEST_TSV = Path(os.environ.get(
-    "LONE_ECHO_ARCHIVE_MANIFEST",
-    str(Path(os.environ.get("LONE_ECHO_SCAN_ROOT", str(REPO_ROOT / "scan_inputs")))
-        / "archive_mesh_manifest.tsv")))
+MANIFEST_TSV = LE_ROOT / "generic_rebuilds" / "archive_mesh_manifest_all.tsv"
 
 MESH_STRIDE = 0x80
 RP_STRIDE = 0x68
@@ -315,7 +299,7 @@ def audit_master(archive: str, blob: bytes, name_hash: int, detail: dict) -> lis
         nz = [(i, lod.nodes[i][3]) for i in range(len(lod.nodes)) if lod.nodes[i][3] != 0.0]
         fails.append(f"Q1 nodes[i].w NOT all zero: {len(nz)} rows, first {nz[:4]}")
 
-    # --- Q2: hierlods = {parent, firstchild, numchildren}  -------
+    # --- Q2: hierlods = {parent, firstchild, numchildren} (the engine's own type names) -------
     hl = lod.hierlods
     detail["hierlods"] = [list(h) for h in hl]
     if any(h[0] != i for i, h in enumerate(hl)):
@@ -430,7 +414,7 @@ def main() -> int:
 
     names = load_hash_lookup(Path("hash_lookup.json"))
     if not names:
-        print("WARN: hash_lookup.json resolved empty — run from the repository root with a "
+        print("WARN: hash_lookup.json resolved empty — run from LE_ROOT with a "
               "RELATIVE path (an absolute one silently yields {})")
         return 2
 

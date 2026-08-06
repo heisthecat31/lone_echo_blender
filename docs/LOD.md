@@ -1,22 +1,45 @@
 # Level of detail
 
-Lone Echo ships **two independent LOD systems**, and both are populated in retail
-data. Both are decoded, carried through the package formats, and selectable at
-import; the default on both import paths is **LOD 0 (highest detail)**.
+Lone Echo ships **three independent LOD systems**, and all three are populated in
+retail data. All three are decoded, carried through the package formats, and
+selectable at import; the default on every import path is **LOD 0 (highest
+detail)**.
 
 Conflating them is the trap — they live in different structures, encode a level
-differently, and are selected differently.
+differently, and are selected differently. A reader who treats a scene-set mask as
+an LOD chain makes the exact mistake that removed a character's arm.
 
-| | **A. static-instance LOD** | **B. mesh-list LOD chain** |
-|---|---|---|
-| structure | `SGStaticInstancesData.lod` (`SGStaticInstanceLODData`) + `lodfadelookup` | `CGRenderParams.lodprimsetidx` / `lodchildrenstart` / `lodchildrencount` + `CGMeshListData.lodchildindices` |
-| a level is | **a different mesh**, with its own instances at the same world position | **a later index range of the same index buffer** of one mesh |
-| scope | static scatter (levels and their props) | any mesh-list |
-| how common | 5,779 LOD groups in one level (`station_front`) alone | **11 of 1,240** mesh-lists — rare, but real |
-| decoded by | `le_mesh.static_lod` | `le_mesh.meshlist.assign_lod_levels` |
-| selected by | `scatter_reader.filter_by_lod` (`.lescatter`) | `package_reader.select_lod_draws` (`.lemesh`) |
+| | **A. static-instance LOD** | **B. mesh-list LOD chain** | **C. scene-set mask** |
+|---|---|---|---|
+| structure | `SGStaticInstancesData.lod` (`SGStaticInstanceLODData`) + `lodfadelookup` | `CGRenderParams.lodprimsetidx` / `lodchildrenstart` / `lodchildrencount` + `CGMeshListData.lodchildindices` | the leading `SSceneSetMask` of each `CGRenderParams` + the model's `CGSceneSetsData`, driven by the actor's `ComponentLOD` |
+| a level is | **a different mesh**, with its own instances at the same world position | **a later index range of the same index buffer** of one mesh | **a bit in a per-draw mask**, selecting whole meshes |
+| scope | static scatter (levels and their props) | any mesh-list | characters, and anything else carrying a `ComponentLOD` |
+| how common | 5,779 LOD groups in one level (`station_front`) alone | **11 of 1,240** mesh-lists — rare, but real | every roster character; `0` (ungated) on every level mesh in the corpus |
+| decoded by | `le_mesh.static_lod` | `le_mesh.meshlist.assign_lod_levels` | `le_mesh.meshlist.scene_set_lod_levels` |
+| selected by | `scatter_reader.filter_by_lod` (`.lescatter`) | `package_reader.select_lod_draws` (`.lemesh`) | `package_reader.select_lod_objects` (`.lemesh`) |
 
-A third variant exists for *dynamic* instances
+**A and B are documented in full below. C is the character system, and its full
+treatment lives in [CHARACTERS.md](CHARACTERS.md) §2** — it belongs beside
+character assembly, the variant-draw collapse and the rig roster rather than
+beside scatter instancing. Here is what it is:
+
+A character's mesh-list ships **every level as a separate mesh** and selects
+between them with the leading `SSceneSetMask` of each `CGRenderParams`; there is
+no `lodchildindices` chain at all, and a mask of `0` means no scene set gates that
+draw, so it always draws. ⛔ **The bits are not always a detail ladder.** On **4 of
+12 roster mesh-lists** they partition the body in *space* — one set is the torso,
+another the arms, another the hands — so reading them as levels and asking for
+"level 2" deletes a character's left arm and both hands, silently, in an import
+that otherwise looks completely normal. `scene_lod_is_geometric_chain` therefore
+asks whether the sets really are successively coarser *and* co-located before
+treating them as a ladder, and **draws everything** when they are not: over-draw is
+visible and reversible, a missing limb is silent. The separation is measured, not a
+taste — over those 12 mesh-lists `min(volume_ratio, coverage)` is **≥ 0.845 on
+every accepted chain and ≤ 0.233 on every refused one**, so the 0.5 threshold sits
+in a gap with no borderline case on either side. Selection then goes through the
+same [ladder rule](#selecting-a-level-one-ladder-rule) system B uses.
+
+A dynamic-instance analogue of system A also exists
 (`SGDynamicInstancesData.lods : CTable<SGDynamicInstanceLODData>`, a 20-byte record
 `{u16 meshindex, u16 nummeshes, f32 nearfadestart, nearfadeend, farfadestart,
 farfadeend}`). It has been decoded but **this tool does not consume it** — see
@@ -189,6 +212,62 @@ system B never appears inside a scatter master.
 
 ---
 
+## Selecting a level: one ladder rule
+
+Systems B and C both answer the same question — *given a requested level, which
+rung of this asset's ladder do I emit?* — and ★ **a ladder on disk is neither dense
+nor zero-based.** Both facts cost a defect apiece:
+
+| defect | the ladder on disk | what the importer did |
+|---|---|---|
+| **D2** | `3cee9f282bf0807f` partitions its gated meshes into levels `{3, 4}` | the default `level = 0` asked for a rung nothing carries, and the importer produced **nothing** |
+| **D13** | `2fd6839161785e9c_ff91757c910ea7b6` (Liv's body) partitions its six meshes into `{0, 3}` | levels 1 and 2 fell in a **hole between the rungs** and imported **nothing at all** — the whole character disappeared |
+
+★ **Both are fixed in 0.4.0.** `package_reader.snap_to_ladder` is the whole rule,
+in one expression: **snap DOWN to the greatest present rung `<= level`; snap UP to
+the finest rung only when the request is below the whole ladder.** That subsumes
+D2's floor and the old ceiling, so there is one rule rather than three — and
+`select_lod_draws` (system B) and `select_lod_objects` (system C) *share* it, so
+the hole cannot land twice in two modules that clamp the same thing.
+
+Why it snaps **down**, toward the nearest *finer* rung:
+
+1. **It is the bias the module already commits to.** `scene_lod_is_geometric_chain`
+   refuses on the grounds that over-draw is visible and reversible while a missing
+   limb is silent. A finer rung is more geometry — the same bias — so the failure
+   mode is a model heavier than asked for, never a model that is not there.
+2. **It is what a threshold ladder does.** `ComponentLOD` switches rungs at distance
+   thresholds, and between two rungs the one still on screen is the finer one.
+   Snapping *up* would answer a request for LOD 1 with LOD 3 — a **coarser** model
+   than asked for, which no ladder semantics produces.
+3. **It stays monotone.** Selected detail never increases as `level` rises, so an
+   LOD sweep still reads as a ladder rather than a sawtooth.
+
+Measured on the package the defect was found on: `2fd6839161785e9c_ff91757c910ea7b6`
+levels 1–2 now select **5 of 6** meshes, **was 0 of 6**. Pinned by
+`blender_tool/tests/test_lod_ladder_hole.py`, which asserts three laws — **never
+empty**, **never coarser than asked**, **monotone** — over every subset of levels
+0–5 and over every extracted package on disk.
+
+⛔ Refusing — returning every object, the `scene_lod_is_geometric_chain` response —
+was the third option and is **rejected here.** That refusal exists for a partition
+whose *meaning* is in doubt; a hole in a ladder casts no doubt on the rungs that
+are present. Stacking all six of Liv's meshes to answer "LOD 1" would draw her LOD 3
+proxy on top of her LOD 0, which is a rendering error, where snapping down is merely
+a rounding.
+
+⚠ On the system-B path the rule is currently a **no-op**: no mesh-list chain on
+disk is sparse or non-zero-based (container: `blender_tool/exports`, coverage: 301
+manifests / 913 objects, **0 sparse and 0 non-zero-based** draw ladders). It is
+shared anyway, because that is the cheapest guarantee the two selectors cannot
+drift apart.
+
+System A does not need it — its levels are rebased per group so the finest *drawn*
+level is 0 (see [Rebasing](#rebasing-why-the-finest-level-is-not-always-index-0)),
+and `lod_group_levels` lets a consumer clamp per group without a group table.
+
+---
+
 ## Caveats — read before quoting a number
 
 ### Triangle counts are *usually*, not *always*, non-increasing
@@ -269,12 +348,17 @@ unused radius is **undetermined**; nothing on disk distinguishes them.
 Both import operators expose a **LOD Level** dropdown, defaulting to *LOD 0
 (highest detail)*:
 
-* `.lescatter` — `LOD 0 … LOD 4`, `Coarsest`, `All levels (stacked)`.
-* `.lemesh` — `LOD 0 … LOD 3`, `All levels (stacked)`.
+* `.lescatter` — `LOD 0 … LOD 4`, `Coarsest`, `All levels (stacked)`. Drives
+  system A.
+* `.lemesh` — `LOD 0 … LOD 3`, `All levels (stacked)`. Drives systems B and C at
+  once, both through the same [ladder rule](#selecting-a-level-one-ladder-rule).
 
 Placed scatter objects are tagged with `le_lod_group`, `le_lod_level` and
 `le_lod_group_levels` custom properties; imported `.lemesh` objects get
 `le_lod_level` and `le_lod_levels`.
+
+`All levels (stacked)` (`level < 0`) bypasses selection entirely on every path, so
+each defect above stays reproducible for an A/B.
 
 ### From the render harness
 

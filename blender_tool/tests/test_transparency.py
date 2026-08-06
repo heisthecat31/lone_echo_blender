@@ -1,13 +1,13 @@
 """Transparency / emissive ground-truth tests.
 
-Pure stdlib (no oodle, no bpy). These lock in facts established by cracking
-CSymbol64 preimages against the game's own authored material vocabulary and by
-decoding shipped material slices — NOT by guessing.
+Pure stdlib (no oodle, no bpy). These lock in facts that were established by
+cracking CSymbol64 preimages against the engine's own ubermaterial parameter
+names and by decoding shipped material slices — NOT by guessing.
 
-Why this file exists: ten entries in `le_mesh.materials.INPUTNAME_ROLE` were
-*fabricated* labels that do not hash to the key they are filed under.
-`test_no_fabricated_role_names` is the regression guard;
-`test_cracked_inputname_preimages` is the replacement truth. See docs/MATERIALS.md.
+Why this file exists: ten entries in `le_mesh.materials.INPUTNAME_ROLE` (and the
+matching entries in the repo's hash_lookup.json) were *fabricated* labels that do
+not hash to the key they are filed under. `test_no_fabricated_role_names` is the
+regression guard; `test_cracked_inputname_preimages` is the replacement truth.
 """
 
 import struct
@@ -101,7 +101,7 @@ def test_alpha_and_emissive_scalar_preimages():
     for name, want in expected.items():
         assert msc.symbol64(name) == want
 
-    # observed in shipped bytes (archive 0703fd2acd5803e9)
+    # observed in shipped bytes (fixture 0703fd2acd5803e9/e4b04c7873d7a3f7)
     assert f"{msc.symbol64('layer1_blend_mask_scale'):016x}" == "823cd9897f5d6113"
 
 
@@ -126,10 +126,10 @@ def test_name_table_resolves_shipped_props():
 
 
 # ---------------------------------------------------------------------------
-# 3. Enum tables match the engine's own enumerations
+# 3. Enum tables match the engine's own enum names
 # ---------------------------------------------------------------------------
 
-def test_mattype_enum_matches_engine():
+def test_mattype_enum_matches_pdb():
     assert len(amm.MATTYPE_NAMES) == 17            # kNumMatTypes
     assert amm.MATTYPE_NAMES[0] == "eMTDeferredOpaque"
     assert amm.MATTYPE_NAMES[2] == "eMTForwardTransparent"
@@ -139,7 +139,7 @@ def test_mattype_enum_matches_engine():
     assert amm.MATTYPE_NAMES[16] == "eMTTransparentPostAA"
 
 
-def test_blendmode_enum_matches_engine():
+def test_blendmode_enum_matches_pdb():
     assert len(amm.BLENDMODE_NAMES) == 18          # kNumBlendModes
     assert amm.BLENDMODE_NAMES[0] == "eBlendOpaque"
     assert amm.BLENDMODE_NAMES[7] == "eBlendTransparent"
@@ -148,12 +148,12 @@ def test_blendmode_enum_matches_engine():
 
 
 # ---------------------------------------------------------------------------
-# 4. Serialized SGMaterialData layout (confirmed by slice-size arithmetic)
+# 4. Serialized SGMaterialData layout (stream-confirmed by slice-size arithmetic)
 # ---------------------------------------------------------------------------
 
-# (slice_size, n_props, n_propoffsets, n_uvsets, n_perms, n_auxinputs) rows measured
-# on the shipped materials of archive 0703fd2acd5803e9.
-# size == 0x160 + 4n_props + 16n_offs + 8n_uv + 16n_perm + 32n_aux
+# (slice_size, n_props, n_propoffsets, n_uvsets, n_perms, n_auxinputs) rows taken
+# from generic_rebuilds/material_slice_probe.tsv (archive
+# 0703fd2acd5803e9). size == 0x160 + 4n_props + 16n_offs + 8n_uv + 16n_perm + 32n_aux
 SHIPPED_SLICE_SHAPES = [
     (424, 0, 0, 1, 0, 2),
     (444, 1, 1, 1, 0, 2),
@@ -170,7 +170,7 @@ def test_material_slice_size_arithmetic():
         assert computed == size, f"{computed} != {size}"
 
 
-def test_header_offsets_match_layout():
+def test_header_offsets_match_pdb():
     assert msc.OFF_BAKECOLOR == 0x008
     assert msc.OFF_BAKEEMISSIVECOLOR == 0x018
     assert msc.OFF_BLENDMODE == 0x028
@@ -216,10 +216,10 @@ def test_emissive_intensity_without_bake_emissive_color():
     bakeemissivecolor stays (0,0,0).
 
     `is_emissive` used to be `any(bakeemissivecolor.rgb)`, which is False for
-    EVERY genuinely emissive material inspected (19 of 19 decoded fixture
-    materials, 8 of which carry a non-zero layer0_emissive_intensity). The gate
-    is now the authored per-layer emissive state; the old bake-time signal is
-    preserved as `bake_emissive_nonzero`.
+    EVERY genuinely emissive material inspected (`stream-confirmed`: 19 of 19
+    decoded fixture materials, 8 of which carry a non-zero
+    layer0_emissive_intensity). The gate is now the authored per-layer emissive
+    state; the old bake-time signal is preserved as `bake_emissive_nonzero`.
     """
     s = msc.decode_material_scalars(_slice(
         emissive=(0.0, 0.0, 0.0, 1.0),
@@ -231,17 +231,17 @@ def test_emissive_intensity_without_bake_emissive_color():
 
 
 # ---------------------------------------------------------------------------
-# 6. The three previously-unresolved texture-input hashes
+# 6. The three "unresolved" texture-input hashes
 # ---------------------------------------------------------------------------
 
 def test_pom_height_map_preimage():
-    """`602e82b525713c1c` is `pom_height_map` — recovered, not guessed.
+    """`602e82b525713c1c` is `pom_height_map` — cracked, not guessed.
 
-    The missing axis was the non-layer parameter GROUPS: the uber-material
-    declares a parallax-occlusion group alongside `layer0..layer3`, and that
-    group declares a `height_map` sampler — so the input is `pom_<member>`,
-    exactly like `layer0_<member>`. `symbol64` reproduces the shipped hash
-    exactly, which is the only reason the name is accepted.
+    The missing axis was the non-layer `[PREFIXPROPERTY]` groups: ubermaterial
+    declares `:pom := (MaterialPOMProperties)` alongside `:layer0..:layer3`
+    and `MaterialPOMProperties` declares `:height_map := (Sampler2D)` — so the
+    input is `pom_<member>`, exactly like `layer0_<member>`.  `name-confirmed`
+    name, `stream-confirmed` hash (shaderset fb61974eb8ae68d9 slot 23).
     """
     assert f"{msc.symbol64('pom_height_map'):016x}" == "602e82b525713c1c"
     assert amm.build_name_table()[0x602e82b525713c1c] == "pom_height_map"
@@ -253,8 +253,8 @@ def test_two_remaining_unknowns_are_scan_artifacts_not_names():
     Each equals the *shaderset's own hash* and appears once, at entry_offset 768
     with slot=0 type=0 layer=1032 engineresource=4096 and denormal uscale/vscale
     (1.6e-36 / 5.7e-42) — the scanner mistook the shaderset name field for an
-    input entry. They are the only two rows anywhere in the scan where
-    `inputname_hash == shaderset_hash`.
+    input entry (`stream-confirmed`, shaderset_texture_scan.tsv: the
+    only two rows in the file where inputname_hash == shaderset_hash).
 
     Guard: they must never acquire a "cracked" name. A name may only be added
     here when symbol64(name) reproduces the hash exactly.

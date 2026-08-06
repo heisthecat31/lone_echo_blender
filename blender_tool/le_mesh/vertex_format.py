@@ -4,13 +4,19 @@ Pure stdlib (struct/math only). No Oodle, no bpy, no numpy — so it can be unit
 tested with plain `python3` and imported unchanged inside Blender's bundled
 Python.
 
-Ground truth:
+Ground truth (`name-confirmed` against the engine's own type names):
   struct CGVertexFormat::SVertexElement  (8 bytes each)
     +0x00 uint8 usage         (EUsage)
     +0x01 uint8 offset        byte offset of this attribute WITHIN the vertex stride
     +0x02 uint8 type          (EType) component format
     +0x03 uint8 count         number of components (1..4)
     +0x04 uint8 slot          semantic index (e.g. which UV / color set)
+                              ★ LOAD-BEARING: the engine binds UV sets by THIS,
+                              not by element order. The baked lightmap reads
+                              slot 4 — `shader-confirmed`:
+                              `vsinput.lightmapuv = vertexbuffers.vb_texcoord4[vertexid];`
+                              See `lightmap_uv_attr_name` at the bottom of this
+                              module; do NOT infer it from the `uvN` names.
     +0x05 uint8 size          AUTHORITATIVE byte footprint of this element on disk
     +0x06 uint8 stream        vertex stream index (0..3)
     +0x07 uint8 instancerate  instancing step rate (0 = per-vertex)
@@ -34,10 +40,10 @@ buffers across 9 archives (incl. the skinned character archive 0703fd2acd5803e9)
 and found ONLY eF32 (position/texcoord), eS16n (normal/tangent), eU8n (color/
 skin-weights), eU16n (lightmap uv) and eU8 (skin-indices). The packed types
 eCmp(7)/eSphN(9)/eSphT(10) did NOT appear on any usage, renderable or otherwise.
-So their (undocumented) bit layout is left `packed_unresolved` and decoding its
-exact bit layout is NOT warranted for this corpus. When a packed element IS
+So their (undocumented) bit layout is left `packed_unresolved` and byte-verifying
+it via disassembly is NOT warranted for this corpus. When a packed element IS
 encountered, we still record its raw on-disk footprint (`raw_byte_stride`) so no
-information is silently dropped; decoding it remains a labelled TODO.
+information is silently dropped; decoding it remains a labelled needs-disasm TODO.
 """
 
 from __future__ import annotations
@@ -46,7 +52,7 @@ import struct
 from dataclasses import dataclass
 
 
-# --- CGVertexFormat::EUsage -------------------------------------------------
+# --- CGVertexFormat::EUsage (`name-confirmed`) -------------------------------
 class EUsage:
     ePosition = 0
     eColor = 1
@@ -69,7 +75,7 @@ USAGE_NAMES = {
 }
 
 
-# --- CGVertexFormat::EType --------------------------------------------------
+# --- CGVertexFormat::EType (`name-confirmed`) --------------------------------
 class EType:
     eU8 = 0     # uint8 integer
     eU8n = 1    # uint8 normalized -> [0,1]  (/255)
@@ -80,8 +86,8 @@ class EType:
     eF16 = 6    # half float (IEEE binary16)
     eCmp = 7    # packed vector (use `size`) — bit layout not decoded
     eF32 = 8    # float32
-    eSphN = 9   # spherical/octahedral normal (packed) — not decoded (unused in M3 probe)
-    eSphT = 10  # spherical/octahedral tangent (packed) — not decoded (unused in M3 probe)
+    eSphN = 9   # spherical/octahedral normal (packed) — needs-disasm (unused in M3 probe)
+    eSphT = 10  # spherical/octahedral tangent (packed) — needs-disasm (unused in M3 probe)
 
 
 TYPE_NAMES = {
@@ -208,33 +214,147 @@ def _decode_component(buf: bytes, off: int, etype: int, count: int,
 
 # Canonical attribute-name assignment ----------------------------------------
 
-def attribute_key(elem: VertexElement, seen: dict[int, int]) -> str | None:
-    """Map an element to a stable canonical attribute name.
+def _key_for_usage(usage: int, seen: dict[int, int]) -> str | None:
+    """The appearance-order naming rule, on a bare `usage` int.
 
-    Multi-set usages (color / texcoord) get a numeric suffix by appearance
-    order: color0/color1, uv0/uv1/uv2. Returns None for usages we do not import.
+    Factored out of `attribute_key` so the slot resolvers below can replay the
+    exact same numbering against `raw_vertex_format` manifest dicts (which have
+    no `VertexElement`) without a second, drift-prone implementation.
     """
-    u = elem.usage
-    if u in _SKIP_USAGES:
+    if usage in _SKIP_USAGES:
         return None
-    if u == EUsage.ePosition:
+    if usage == EUsage.ePosition:
         return "position"
-    if u == EUsage.eNormal:
+    if usage == EUsage.eNormal:
         return "normal"
-    if u == EUsage.eTangent:
+    if usage == EUsage.eTangent:
         return "tangent"
-    if u == EUsage.eSkinIndices:
+    if usage == EUsage.eSkinIndices:
         return "skin_indices"
-    if u == EUsage.eSkinWeights:
+    if usage == EUsage.eSkinWeights:
         return "skin_weights"
-    if u == EUsage.eColor:
+    if usage == EUsage.eColor:
         n = seen.get(EUsage.eColor, 0)
         seen[EUsage.eColor] = n + 1
         return f"color{n}"
-    if u == EUsage.eTexCoord:
+    if usage == EUsage.eTexCoord:
         n = seen.get(EUsage.eTexCoord, 0)
         seen[EUsage.eTexCoord] = n + 1
         return f"uv{n}"
+    return None
+
+
+def attribute_key(elem: VertexElement, seen: dict[int, int]) -> str | None:
+    """Map an element to a stable canonical attribute name.
+
+    Multi-set usages (color / texcoord) get a numeric suffix by APPEARANCE
+    ORDER: color0/color1, uv0/uv1/uv2. Returns None for usages we do not import.
+
+    ⚠ These names are a transport convention ONLY. `uvN` means "the N-th
+    eTexCoord element in the element table", NOT "semantic slot N", and the two
+    disagree on real data — see `lightmap_uv_attr_name` below. Never pick the
+    lightmap UV set by the name `uv1`; resolve it from `slot`.
+    """
+    return _key_for_usage(elem.usage, seen)
+
+
+# --- the lightmap UV set: SEMANTIC SLOT, never appearance order --------------
+
+#: The texcoord SEMANTIC SLOT (`SVertexElement.slot @+0x04`) the engine samples
+#: the baked lightmap with.
+#:
+#: `shader-confirmed` — the engine's own vertex shader reads:
+#:     vsinput.lightmapuv = vertexbuffers.vb_texcoord4[vertexid];
+#: i.e. the lightmap UV is texcoord slot 4 SPECIFICALLY. It is not "the second
+#: texcoord element", and on 4 corpus objects those two readings disagree.
+LIGHTMAP_TEXCOORD_SLOT = 4
+
+#: CORROBORATION ONLY — never the primary discriminator. `export-validated`
+#: (archive `0703fd2acd5803e9` + the 214 manifests under `blender_tool/exports/`):
+#: the slot-4 texcoord element is `eU16n` on 504/504 objects that carry
+#: texcoords, and the module docstring's M3 probe already annotates eU16n as
+#: "(lightmap uv)". Agreement raises confidence; DISagreement is a loud signal
+#: that the element table is being misread — it must never silently override the
+#: slot, which is what the engine actually indexes.
+LIGHTMAP_UV_TYPE = EType.eU16n
+
+
+def _field(elem, name: str, default=None):
+    """Read `name` off a `VertexElement` OR a `raw_vertex_format` manifest dict.
+
+    The manifest's `raw_vertex_format` is `VertexElement.as_dict()`, so both
+    shapes carry `usage`/`slot`/`type`. Accepting both is what lets a package
+    written before these keys existed still be resolved correctly.
+    """
+    if isinstance(elem, dict):
+        return elem.get(name, default)
+    return getattr(elem, name, default)
+
+
+def attribute_names(elements) -> list:
+    """Canonical attribute name per element, in element order.
+
+    `None` at a position means "element not imported" (stream-out / instancing).
+    Accepts `VertexElement`s or `raw_vertex_format` manifest dicts.
+    """
+    seen: dict[int, int] = {}
+    return [_key_for_usage(_field(e, "usage", -1), seen) for e in elements]
+
+
+def texcoord_slots(elements) -> dict:
+    """{attribute name -> semantic slot} for every imported eTexCoord element.
+
+    e.g. a stride-56 `0703fd2acd5803e9` object reads
+    `{"uv0": 0, "uv1": 1, "uv2": 4}` — the mapping the appearance-order names
+    throw away.
+    """
+    out = {}
+    for name, e in zip(attribute_names(elements), elements):
+        if name is not None and _field(e, "usage") == EUsage.eTexCoord:
+            out[name] = _field(e, "slot")
+    return out
+
+
+def lightmap_uv_attr_name(elements) -> str | None:
+    """Which imported attribute holds the LIGHTMAP UV set, by semantic slot.
+
+    Returns the canonical attribute name (`"uv1"`, `"uv2"`, ...) of the
+    eTexCoord element whose `slot == LIGHTMAP_TEXCOORD_SLOT`, or `None` when the
+    format carries no slot-4 texcoord (that mesh has no lightmap UV set at all —
+    the caller must NOT substitute a different UV set).
+
+    This is the ONLY correct way to pick the lightmap UV set. The name is a
+    function of the element table, not a constant:
+      * texcoord slots `(0, 4)`   -> `"uv1"`  (119/123 distinct corpus objects)
+      * texcoord slots `(0, 1, 4)` -> `"uv2"` (4/123; the literal `"uv1"` there
+        is the material's SECOND texture UV set, not the bake)
+    `export-validated` over the 214 manifests under `blender_tool/exports/`
+    (archives `0703fd2acd5803e9` + `942c829457a04a62`).
+
+    Accepts `VertexElement`s or `raw_vertex_format` manifest dicts. First match
+    wins; no corpus object carries two slot-4 texcoords (504/504 carry exactly
+    one).
+    """
+    for name, e in zip(attribute_names(elements), elements):
+        if name is None or _field(e, "usage") != EUsage.eTexCoord:
+            continue
+        if _field(e, "slot") == LIGHTMAP_TEXCOORD_SLOT:
+            return name
+    return None
+
+
+def lightmap_uv_type_agrees(elements) -> bool | None:
+    """Corroboration: is the slot-4 texcoord the expected `eU16n`?
+
+    `None` when there is no slot-4 texcoord (nothing to corroborate). `False`
+    means the slot says "lightmap UV" but the component type does not — report
+    it, do not act on it: `lightmap_uv_attr_name` still follows the slot,
+    because the slot is what the engine's own vertex shader indexes.
+    """
+    for e in elements:
+        if (_field(e, "usage") == EUsage.eTexCoord
+                and _field(e, "slot") == LIGHTMAP_TEXCOORD_SLOT):
+            return _field(e, "type") == LIGHTMAP_UV_TYPE
     return None
 
 
@@ -247,7 +367,7 @@ class DecodedAttribute:
     packed_unresolved: bool
     element: VertexElement
     data: list            # flat, row-major: len == vertex_count * comps
-    # For packed elements: raw on-disk bytes per vertex, so the
+    # For packed (needs-disasm) elements: raw on-disk bytes per vertex, so the
     # undecoded footprint is recorded rather than silently dropped. None for
     # normally-decoded attributes. See the module docstring / M3 probe.
     raw_byte_stride: int | None = None
@@ -276,7 +396,7 @@ def decode_vertex_buffer(gpu: bytes, gpu_base: int, rel_gpu: int, stride: int,
         flat: list = []
         packed = elem.is_packed
         if packed:
-            # Store nothing decoded; record presence + raw footprint
+            # Store nothing decoded; record presence + raw footprint (needs-disasm)
             # so callers/manifest note it and no bytes are silently dropped.
             attrs[key] = DecodedAttribute(key, elem.usage, elem.count, is_integer,
                                           True, elem, [], raw_byte_stride=elem.size)

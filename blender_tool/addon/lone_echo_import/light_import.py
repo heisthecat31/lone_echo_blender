@@ -1,6 +1,6 @@
 """Import a `lights.json` sidecar (`le_lights`) as Blender lamps.
 
-⛔ READ THIS BEFORE ENABLING IT ⛔
+⛔ READ THIS BEFORE ENABLING IT ⛔  (`stream-confirmed`)
 -----------------------------------------------------------------------------
 Lone Echo is a **hybrid**, not a baked-only game, and it is not a realtime-only
 game either. 86 of the 87 shipped "lit surface" shaders bind BOTH the baked
@@ -24,7 +24,7 @@ importing every light **double-lights the scene**. Therefore:
 
 The lights are also **not sufficient** for visual fidelity on their own — the
 bake is 101.8 MB of irradiance SH + HDR lightmaps against 108 KB of light
-records (936x). See `docs/LIGHTING.md` and the lightmap importer.
+records (936x). See docs/LIGHTING.md §0 and the lightmap importer.
 
 -----------------------------------------------------------------------------
 Headless use (no operator, like `import_lemesh` / `import_lescatter`):
@@ -49,7 +49,7 @@ arithmetic against `le_mesh.lights` AND against the `blender` block of a real
 extractor sidecar, so the two can never drift.
 
 -----------------------------------------------------------------------------
-UNITS — read out of the engine's own lighting maths
+UNITS — `shader-confirmed` against the engine's own lighting shaders
 -----------------------------------------------------------------------------
     primarycolor  linear HDR RGB, intensity PRE-MULTIPLIED (no intensity float)
     color        = primarycolor / max(primarycolor)          both sides linear
@@ -84,7 +84,7 @@ from pathlib import Path
 
 SIDECAR_FORMAT = "le_lights"
 
-# --- ELightOptions -- only the bits this module acts on ---------------------
+# --- ELightOptions (`name-confirmed`) -- only the bits this module acts on --
 eEnableDiffuse = 1 << 0
 eEnableSpecular = 1 << 1
 eCastShadows = 1 << 2
@@ -92,7 +92,7 @@ eCastLevelShadows = 1 << 3
 eLightEnabled = 1 << 8
 ePrimaryDirLight = 1 << 20
 
-# ELightType -> Blender lamp type
+# ELightType (`name-confirmed`) -> Blender lamp type
 BLENDER_TYPE = {0: "POINT", 1: "SPOT", 2: "SUN"}
 TYPE_NAME_TO_ENUM = {"ePointLight": 0, "eSpotLight": 1, "eDirectionalLight": 2}
 
@@ -126,8 +126,8 @@ DEFAULT_OPTS = {
     "use_custom_distance": True,   # clip at attenuation.z
     "cycles_falloff_nodes": True,  # Light Falloff node when attenmethod != 2
     "exposure_scale": 1.0,         # USER calibration only; 1.0 == the raw
-                                   # unit conversion. Not a fudge factor -- the
-                                   # game auto-exposes and we cannot.
+                                   # shader-confirmed conversion. Not a fudge
+                                   # factor -- the game auto-exposes, we cannot.
     "scene_filter": None,          # scene_hash or scene_name; None = all scenes
     "collection_name": None,
 }
@@ -257,7 +257,7 @@ def axis_rows(y_up_to_z_up: bool = True):
     A pure +90 deg rotation about X, determinant +1, NO mirror. Identical to
     `mesh_builder._axis_matrix` and `scatter_reader.basis_matrix()` — a light rig
     rotated relative to the geometry is a silent, expensive bug, so this must
-    never be a second convention.
+    never be a second convention. See AXIS_CALIBRATION.md.
     """
     if not y_up_to_z_up:
         return ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
@@ -291,8 +291,8 @@ def light_matrix_rows(rec, y_up_to_z_up: bool = True):
     * `pos`/`orientation` are ALREADY world — there is no `CTransformCR` join and
       no parent chain for scene lights (`cachedjointidx`/`jointoffsetidx` are
       0xFFFFFFFF on 118/118), and they live in the same world space as the
-      static-instance scatter (cross-checked: station_front's 47 lights all fall
-      inside the 21,394-instance scatter bounding box).
+      static-instance scatter (`export-validated`: station_front's 47 lights all
+      fall inside the 21,394-instance scatter bbox).
     * `A` is the mesh basis (see `axis_rows`).
     * `Rx(180 deg)` is the lamp-forward flip: the engine's forward is the light's
       local **+Z** (`direction == R(q)*(0,0,1)`, 118/118, max err 1.95e-07) while
@@ -351,9 +351,22 @@ def blender_spot(rec):
 
 
 def light_range(rec) -> float:
-    """`attenuation.z` — THE range (== `farp` on 118/118)."""
+    """`attenuation.z` — THE range (== `farp` on 118/118), used as the hard CULL
+    radius by the engine's irradiance-bake shader (`shader-confirmed`). Not the
+    curve's offset."""
     a = rec.get("attenuation") or (1.0, 0.0, 0.0, 0.0)
     return float(a[2]) if len(a) > 2 else 0.0
+
+
+def maxfadedistance(rec) -> float:
+    """`attenuation.w` — the distance the attenuation curve is offset to reach
+    zero at. `shader-confirmed`; see `le_mesh.lights.LightRecord.maxfadedistance`
+    for the shader quotes and the r15/r14 era caveat. Falls back to the range
+    when absent, which is what 107/118 shipped records carry anyway."""
+    a = rec.get("attenuation") or (1.0, 0.0, 0.0, 0.0)
+    if len(a) > 3 and float(a[3]) > 0.0:
+        return float(a[3])
+    return light_range(rec)
 
 
 def attenmethod(rec) -> float:
@@ -368,9 +381,12 @@ def falloff_is_physical(rec) -> bool:
 
 
 def range_offset(rec) -> float:
-    """The shader's runtime `faderangeoffset` = `1/range^attenmethod`.
-    NOT on disk (`SGForwardLight::SetFromLight` computes it) — `inferred`."""
-    r = light_range(rec)
+    """The shader's runtime `faderangeoffset` = `1/maxfadedistance^attenmethod`.
+
+    ★ The argument is `attenuation.w`, not `.z` — see
+    `le_mesh.lights.range_offset`, which this MUST agree with
+    (`tests/test_light_import.test_range_offset_matches_le_mesh_lights`)."""
+    r = maxfadedistance(rec)
     if r <= 0.0:
         return 0.0
     m = attenmethod(rec)
@@ -440,7 +456,7 @@ def blender_params(rec, opts=None) -> dict:
             "le_options_raw": _int_prop(ow),
             "le_primarycolor": [float(c) for c in rec.get("primarycolor", (0, 0, 0))],
             "le_attenuation": [float(c) for c in a],
-            "le_attenuation_w_unresolved": float(a[3]) if len(a) > 3 else 0.0,
+            "le_attenuation_maxfadedistance": maxfadedistance(rec),
             "le_attenmethod": attenmethod(rec),
             "le_range": light_range(rec),
             # NOT DERIVABLE / no Blender equivalent -- never used by the importer
@@ -493,8 +509,8 @@ def _apply_cycles_falloff(light_data, params):
     """`attenmethod != 2` has no native Blender equivalent — approximate it with
     a Cycles **Light Falloff** node and flag the import LOSSY.
 
-    `attenmethod` is the exponent m in `1/d^m` (a Maya-style decay rate, stored
-    as a float). Blender lamps are hard-wired to m == 2, so:
+    `attenmethod` is the exponent m in `1/d^m` (the Maya decay rate, stored as a
+    float; `shader-confirmed`). Blender lamps are hard-wired to m == 2, so:
       m == 1  -> Light Falloff `Linear`   (12/118 shipped lights)
       m == 0  -> Light Falloff `Constant`
       m == 3  -> no equivalent at all; left native and reported as lossy.
@@ -725,7 +741,7 @@ if _HAVE_BPY:                                              # pragma: no cover
         exposure_scale: FloatProperty(
             name="Exposure Scale", default=1.0, min=0.0, soft_max=10.0,
             description="USER calibration multiplied onto every energy. 1.0 is the "
-                        "raw unit conversion — the game auto-exposes and "
+                        "raw shader-confirmed conversion — the game auto-exposes and "
                         "tonemaps, which we do not reproduce")   # type: ignore
         scene_filter: StringProperty(
             name="Scene", default="",

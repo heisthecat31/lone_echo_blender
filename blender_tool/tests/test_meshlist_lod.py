@@ -3,7 +3,7 @@
 Distinct from the static-scatter system (`test_static_lod.py`): here the coarser
 levels are extra `CGRenderParams` covering LATER slices of the SAME index buffer of
 ONE mesh, and `CGMeshListData.lodchildindices` names them by mesh-local renderparam
-index. Modelled on the shipped shape of `4a405738bee7a74b` /
+index. Modelled on the stream-confirmed shape of `4a405738bee7a74b` /
 `001e3b0be3b357af` (root rp0 [0,17262) 5,754 tris; children [1, 2] = rp1
 [17262,28824) 3,854 tris and rp2 [28824,34518) 1,898 tris).
 """

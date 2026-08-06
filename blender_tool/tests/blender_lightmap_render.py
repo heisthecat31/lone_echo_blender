@@ -1,17 +1,16 @@
-"""PICTORIAL verification of the baked-lightmap path on MATCHED bytes.
+"""A11 — PICTORIAL verification of the baked-lightmap path on MATCHED bytes.
 
     blender.exe --background --factory-startup --python <ABS WINDOWS PATH>\\blender_lightmap_render.py
 
 NOT named `test_*` on purpose: `tests/run_tests.py` imports every `test_*.py`
 under plain `python3`, and this file needs `bpy`.
 
-★ What is new here versus `blender_lightmap_probe.py`
+★ What is new here versus `blender_lightmap_probe.py` (A9)
 ----------------------------------------------------------
-That probe verified the colour space, the 13x5 page model, the DX10 array split and the
+A9 verified the colour space, the 13x5 page model, the DX10 array split and the
 SG5 sum **numerically**, but every *picture* it made was a bridge-archive mesh
 sampled through the station_front atlas — wiring, not artwork
-- no shipped mesh package had a `uv1` into the extracted atlas.  This file runs
-on the matched pair:
+(docs/LIGHTING.md §6.1).  This file runs on the matched pair:
 
     exports/station_lm/942c829457a04a62_942c829457a04a62.lemesh
         obj000 page 3 | obj001 page 3 | obj002 page 6 | obj003 page 10
@@ -61,9 +60,7 @@ from lone_echo_import import lightmap_builder as LB       # noqa: E402
 import lone_echo_import                                   # noqa: E402
 from render_engine_util import resolve_render_engine      # noqa: E402
 
-# Renders go under `exports/` (gitignored): they are game-derived imagery and
-# must never land in a tracked directory.
-VERIFY = BLENDER_TOOL / "exports" / "lightmap_renders"
+VERIFY = BLENDER_TOOL / "fixtures" / "verify"
 VERIFY.mkdir(parents=True, exist_ok=True)
 TMP = Path(os.environ.get("TEMP", "/tmp")) / "le_lightmap_render"
 TMP.mkdir(parents=True, exist_ok=True)
@@ -76,7 +73,7 @@ CACHE = REAL / "_lmslices"
 
 ATLAS = 1024
 #: pages actually referenced by the package, plus page 0 as the "wrong page"
-#: control (it is what a broken importer renders for every mesh).
+#: control (it is what a broken importer renders for every mesh — A9 §3.1).
 PAGES = (0, 3, 6, 10)
 WRONG_PAGE = 0
 
@@ -561,7 +558,7 @@ def pictures_atlas(flipped, plain, truth):
             isl = [(data[n]["uv"], data[n]["tris"],
                     MAGENTA if i == 0 else CYAN, f"isl{i}")
                    for i, n in enumerate(sorted(names)) if n in data]
-            atlas_picture(page, isl, f"lm_atlas_p{page}_{tag}.png",
+            atlas_picture(page, isl, f"a11_atlas_p{page}_{tag}.png",
                           label=f"WHOLE page {page} + uv1 island outlines of "
                                 f"{', '.join(sorted(names))} ({tag})")
         # zoomed crop, per object
@@ -572,7 +569,7 @@ def pictures_atlas(flipped, plain, truth):
                 uv, tris = data[n]["uv"], data[n]["tris"]
                 bb = bbox_of(uv)
                 atlas_picture(page, [(uv, tris, MAGENTA, "isl")],
-                              f"lm_crop_{n[:6]}_p{page}_{tag}.png", rect=bb,
+                              f"a11_crop_{n[:6]}_p{page}_{tag}.png", rect=bb,
                               label=f"CROP on {n}'s uv1 bbox, page {page} ({tag})")
                 # A footprint wider than ~8:1 is unreadable as one strip: the
                 # shipped bake packs these objects' charts into a band ~1000 x 35
@@ -588,7 +585,7 @@ def pictures_atlas(flipped, plain, truth):
                                min(1.0, cx + zw / 2), bb[3])
                         atlas_picture(
                             page, [(uv, tris, MAGENTA, "isl")],
-                            f"lm_zoom_{n[:6]}_p{page}_{tag}_u{j}.png", rect=sub,
+                            f"a11_zoom_{n[:6]}_p{page}_{tag}_u{j}.png", rect=sub,
                             label=f"DEEP ZOOM {j+1}/3 (~48 texels wide) into "
                                   f"{n}'s uv1 band, page {page} ({tag})")
 
@@ -603,7 +600,7 @@ def pictures_wrong_page(flipped, truth):
             if pg not in _pages:
                 continue
             atlas_picture(pg, [(uv, tris, MAGENTA, "isl")],
-                          f"lm_crop_{name[:6]}_{tag}{pg}.png", rect=bbox_of(uv),
+                          f"a11_crop_{name[:6]}_{tag}{pg}.png", rect=bbox_of(uv),
                           label=f"{name} uv1 island over page {pg} "
                                 f"({'OWN' if pg == own else 'WRONG'})")
 
@@ -801,24 +798,24 @@ def main():
     own = truth.get
     if want("mesh"):
         # all four, each on its own page, SG5
-        mesh_picture("lm_mesh_all_ownpage_sg5.png", lambda n: own(n, 0), "sg5",
+        mesh_picture("a11_mesh_all_ownpage_sg5.png", lambda n: own(n, 0), "sg5",
                      label="all four objects, EACH on its OWN page, SG5", exr=True)
-        mesh_picture("lm_mesh_all_page0_sg5.png", lambda n: WRONG_PAGE, "sg5",
-                     label=f"all four forced to page {WRONG_PAGE} (the page bug)")
-        mesh_picture("lm_mesh_all_ownpage_sg5_flipOFF.png", lambda n: own(n, 0),
+        mesh_picture("a11_mesh_all_page0_sg5.png", lambda n: WRONG_PAGE, "sg5",
+                     label=f"all four forced to page {WRONG_PAGE} (the bug A9 fixed)")
+        mesh_picture("a11_mesh_all_ownpage_sg5_flipOFF.png", lambda n: own(n, 0),
                      "sg5", flip=False, label="own pages, SG5, flip_v OFF")
         for name in sorted(truth):
             short = name[:6]
-            mesh_picture(f"lm_mesh_{short}_ownpage{truth[name]}_sg5.png",
+            mesh_picture(f"a11_mesh_{short}_ownpage{truth[name]}_sg5.png",
                          lambda n: own(n, 0), "sg5", only=name,
                          label=f"{name} alone, own page {truth[name]}, SG5", exr=True)
-            mesh_picture(f"lm_mesh_{short}_wrongpage{WRONG_PAGE}_sg5.png",
+            mesh_picture(f"a11_mesh_{short}_wrongpage{WRONG_PAGE}_sg5.png",
                          lambda n: WRONG_PAGE, "sg5", only=name,
                          label=f"{name} alone, WRONG page {WRONG_PAGE}, SG5")
-            mesh_picture(f"lm_mesh_{short}_ownpage{truth[name]}_single.png",
+            mesh_picture(f"a11_mesh_{short}_ownpage{truth[name]}_single.png",
                          lambda n: own(n, 0), "single", only=name,
                          label=f"{name} alone, own page {truth[name]}, single lobe 0")
-            mesh_picture(f"lm_mesh_{short}_ownpage{truth[name]}_sg5_flipOFF.png",
+            mesh_picture(f"a11_mesh_{short}_ownpage{truth[name]}_sg5_flipOFF.png",
                          lambda n: own(n, 0), "sg5", only=name, flip=False,
                          label=f"{name} alone, own page {truth[name]}, SG5, flip_v OFF")
             # x8 exposure — two of these four objects sit in genuinely dim parts
@@ -828,7 +825,7 @@ def main():
             for tag, pg, fl in (("ownpage%d" % truth[name], own(name, 0), True),
                                 ("wrongpage%d" % WRONG_PAGE, WRONG_PAGE, True),
                                 ("ownpage%d_flipOFF" % truth[name], own(name, 0), False)):
-                mesh_picture(f"lm_mesh_{short}_{tag}_sg5_x8.png",
+                mesh_picture(f"a11_mesh_{short}_{tag}_sg5_x8.png",
                              (lambda p: (lambda n: p))(pg), "sg5", only=name,
                              flip=fl, intensity=8.0,
                              label=f"{name}, {tag}, SG5, EXPOSURE x8")

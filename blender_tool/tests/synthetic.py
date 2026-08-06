@@ -1,8 +1,8 @@
 """Build a synthetic in-memory CGMeshListData (primary + GPU bytes) with the
-stride-44 vertex layout, for testing the decode core without any
+name-confirmed stride-44 vertex layout, for testing the decode core without any
 game files or Oodle.
 
-Stride-44 element set (archive 455295a65f8dbb6d):
+Stride-44 element set (stream-confirmed, archive 455295a65f8dbb6d):
   ePosition eF32 x3 @0   | eColor eU8n x4 @12 | eTexCoord(UV0) eF32 x2 @16
   eTexCoord(UV1) eU16n x2 @24 | eNormal eS16n x4 @28 | eTangent eS16n x4 @36
 """

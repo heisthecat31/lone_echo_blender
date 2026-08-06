@@ -14,17 +14,31 @@ returns the durable scalar knobs the Blender addon needs:
       double_sided:      bool,        # flags & eDoubleSided
       # extras (audit / consumers that want them):
       mattype, flags, flag_names, materialfx, is_emissive, named_scalars,
-      # added for the transparency / emissive work:
+      # added for the transparency/emissive front:
       layers, emissive_scale, alpha_threshold, refractive_index,
       mattype_name, blend_mode_name, named_scalars_resolved,
       emissive_layer_indices, bake_emissive_nonzero, scalar_defaults_applied
     }
 
-Disk layout:
+Evidence labels used in the comments below:
+`name-only` (the engine's own struct / enum names, nothing shipped exercises
+them) · `shader-confirmed` (matches the arithmetic the engine's own shaders and
+material schema perform) · `stream-confirmed` (decoded from shipped archive
+bytes) · `inferred`.
+
+Disk layout (`name-confirmed` against the engine's own type names; framing
+stream-validated by the reference exporters):
 
   [0x000 .. 0x160)  SGMaterialData header (direct memory image)
      +0x000 u64   materialfx (CSymbol64)
-     +0x008 4×f32 bakecolor (RGBA base-color multiplier)
+     +0x008 4×f32 bakecolor -- the authored `k_hardware_color`, UI "Bake Color"
+                  (the material asset schema). ⛔ NOT a runtime multiplier: the
+                  symbol appears in the authoring schema and in ZERO engine
+                  shader. RGB only; its 4th float has no `:a` widget in
+                  the schema and is unauthored (0.0 on 27/100 level materials and
+                  8/11 of character c6bc.._64b4b5b2..). Consumed as a flat
+                  FALLBACK when no base-colour map resolves --
+                  `material_builder.base_color_fallback`.
      +0x018 4×f32 bakeemissivecolor (RGBA; RGB != 0 => emissive)
      +0x028 u16   blendmode
      +0x02a u16   mattype
@@ -44,21 +58,23 @@ Disk layout:
 
 A materialpropoffsets entry maps a property-name hash -> a byte offset into the
 materialprops word array (offset/4 = word index).  The pointed-at u32 word
-reinterpreted as a float32 is the scalar value.  Multi-word parameters (colour4,
-range) are read as `arity` CONSECUTIVE words starting at that index — that
-packing is inferred from the parameter's declared type, and no colour-valued
-materialprop has turned up in any shipped material decoded so far.
+reinterpreted as a float32 is the scalar value (stream-confirmed).  Multi-word
+parameters (WidgetColor4, range) are read as `arity` CONSECUTIVE words starting
+at that index — `inferred` from the authored parameter type, not yet
+stream-confirmed (no colour-valued materialprop appears in any shipped material
+decoded so far).
 
 Only *authored overrides* are serialized: shipped materials carry 0-8
-materialprops out of the several hundred declarable parameters, so an absent
-parameter means "left at the authored default" (see AUTHORED_DEFAULTS_*).
+materialprops out of the several hundred declarable parameters
+(`stream-confirmed`), so an absent parameter means "left at the authored
+default" (see AUTHORED_DEFAULTS_*).
 """
 
 from __future__ import annotations
 
 import struct
 
-# --- SGMaterialData::EFlags -------------------------------------------------
+# --- SGMaterialData::EFlags (`name-confirmed`) -------------------------------
 EFLAGS = {
     "eDoubleSided":               0x001,
     "eCastShadows":               0x002,
@@ -72,8 +88,8 @@ EFLAGS = {
 }
 E_DOUBLE_SIDED = 0x001
 
-# --- CGMaterial::EMaterialType (kNumMatTypes = 17) --------------------------
-# Values marked (*) have been seen in shipped bytes.
+# --- NRadEngine::CGMaterial::EMaterialType (name-only, kNumMatTypes = 17) -----
+# Values marked (*) have been seen in shipped bytes (stream-confirmed).
 MATTYPE_NAMES = {
     0: "eMTDeferredOpaque", 1: "eMTForwardOpaque",       # (*) 1
     2: "eMTForwardTransparent",                          # (*)
@@ -86,8 +102,8 @@ MATTYPE_NAMES = {
     16: "eMTTransparentPostAA",                          # (*)
 }
 
-# --- EBlendMode (kNumBlendModes = 18) ---------------------------------------
-# 0, 7, 8 and 12 have been seen in shipped bytes.
+# --- NRadEngine::EBlendMode (name-only, kNumBlendModes = 18) ------------------
+# 0, 7, 8, 12 stream-confirmed.
 BLENDMODE_NAMES = {
     0: "eBlendOpaque", 1: "eBlendAdditive", 2: "eBlendSubtractive",
     3: "eBlendMultiply", 4: "eBlendDarken", 5: "eBlendLighten", 6: "eBlendScreen",
@@ -114,9 +130,10 @@ OFF_AUXINPUTS_IUSED     = 0x150
 SIZEOF_SHADERINPUTDATA  = 0x20
 MAX_REASONABLE          = 10_000
 
-# The uber-material declares exactly four material layers (`layer0 .. layer3`).
-# `layers[]` is always at least this long so a consumer can index the layer its
-# texture role named without a bounds check.
+# The ubershader declares exactly four material layers
+# (`:layer0 .. :layer3 := UberMaterialLayer`, `name-confirmed` in the material
+# asset schema).  `layers[]` is always at least this long so a consumer
+# can index the layer its texture role named without a bounds check.
 N_DECLARED_LAYERS = 4
 MAX_LAYER = 8            # how far the name table is generated (defensive)
 
@@ -157,15 +174,15 @@ def symbol64(text: str) -> int:
 # ---------------------------------------------------------------------------
 # Authored parameter vocabulary
 #
-# The engine's uber-material declares its parameters by name, and every material
-# scalar on disk is keyed by `symbol64(name)`. The lists below are that
-# vocabulary. Every name, once prefixed, is used ONLY as a preimage CANDIDATE: a
-# name is accepted for a hash iff `symbol64(name) == hash` exactly, so a stale or
-# wrong entry can never produce a fabricated label — which is the defect
-# `tests/test_transparency.py::test_no_fabricated_role_names` guards against.
+# Extracted from the engine's own material asset schema -- the UberMaterial
+# declaration and the base material schema it derives from (`name-confirmed`).
+# Every name below, once prefixed, is used ONLY as a CSymbol64 preimage
+# candidate: a name is accepted for a hash iff symbol64(name) == hash exactly, so
+# a stale or wrong entry can never produce a fabricated label (that is the defect
+# `tests/test_transparency.py::test_no_fabricated_role_names` guards).
 # ---------------------------------------------------------------------------
 
-# Every member of a material layer: `layer0 .. layer3` -> `layerN_<name>`.
+# `:layer0 .. :layer3 := UberMaterialLayer` -> every member is `layerN_<name>`.
 LAYER_PARAMS = (
     "additive_thin_map", "albedo_map", "albedo_tint_color", "alpha_map",
     "ambient_specular_spread", "anisotropicrotation", "anisotropy", "ao_lighting_scale",
@@ -218,15 +235,15 @@ LAYER_PARAMS = (
     "uvoffsetu", "uvoffsetv", "uvscalepivotu", "uvscalepivotv", "uvscaleu", "uvscalev",
     "uvset", "uvtransformregions", "velvet_fresnel", "velvet_front_spec", "wrinkle_map0",
     "wrinkle_map1", "wrinkle_map2", "wrinkle_map3", "wrinkle_map_intensity",
-    # names carried over from an earlier hand-curated table; kept so the generated
-    # table never shrinks.  (Several of these are really group members — see
-    # GROUP_PARAMS — and simply never match as `layerN_*`.)
+    # names carried over from the hand-curated the reference table; kept so the
+    # generated table never shrinks.  (Several of these are really group members
+    # — see GROUP_PARAMS — and simply never match as `layerN_*`.)
     "detail_uvscale", "flow_map_map", "height_map", "height_scale", "mip_fade_end",
     "mip_fade_start", "masks", "parallax_scale", "pooling", "roughness", "scale",
     "spec_intensity", "fade", "normal_bevel", "normal_fade", "weights_map",
 )
 
-# Uber-material parameters that are NOT layer- or group-scoped.
+# `ubermaterial:parameters` members that are NOT layer- or group-scoped.
 GLOBAL_PARAMS = (
     "enable_composite_texture_streaming", "k_alpha", "k_alpha_threshold",
     "k_ao_volume_dynlight_scale", "k_baked_occlusion_dynlight_scale", "k_brdf", "k_brdf1",
@@ -243,9 +260,9 @@ GLOBAL_PARAMS = (
     "blendingoptions", "materialtype", "materialfx", "materialswf",
 )
 
-# Non-layer parameter GROUPS (parallax-occlusion mapping, blood, scorch, ...).
-# Members are named `<group>_<name>`. This axis is what recovered `pom_height_map`
-# — see `build_name_table`.
+# Non-layer `[PREFIXPROPERTY]` groups: `:pom := (MaterialPOMProperties)` etc.
+# (the material asset schema and its UI).  Members are `<group>_<name>`.
+# This axis is what recovered `pom_height_map` — see `build_name_table`.
 GROUP_PARAMS = {
     "pom": ("height_map", "max_steps", "min_steps", "mip_fade_end", "mip_fade_start",
             "parallax_scale", "amount"),
@@ -260,18 +277,19 @@ GROUP_PARAMS = {
 }
 
 # Suffixes the material compiler appends to a sampler parameter to expose its UV
-# transform as a scalar.  `_uoffset` / `_voffset` appear in shipped bytes
-# (`layer1_emissive_map_voffset`, `layer0_albedo_map_uoffset`), as does
-# `_scrollspeed` (`layer1_alpha_map_scrollspeed`).
+# transform as a scalar.  `_uoffset` / `_voffset` are stream-confirmed
+# (`layer1_emissive_map_voffset`, `layer0_albedo_map_uoffset`); `_scrollspeed` is
+# `stream-confirmed` from the shipped compiled-shader matparamcb variable
+# `layer1_alpha_map_scrollspeed`.
 SUFFIXED = ("_uoffset", "_voffset", "_uscale", "_vscale", "_intensity", "_scale",
             "_offset", "_scrollspeed")
 
 # Material-level auxillaryinputs seen in shipped SShaderInputData tables.
 AUX_INPUT_NAMES = ("cutting_cut_decal", "cutting_scorch_decal")
 
-# Parameter word count.  A colour4 -> 4 words, a `range` -> 2 (low, high), a
-# 3-vector -> 3; everything else 1.  The type comes from the parameter's own
-# declaration; the CONSECUTIVE-word packing is inferred.
+# Parameter word count.  WidgetColor4/Color4 -> 4 words, `range` -> 2 (l, h),
+# Real3 -> 3; everything else 1.  Type read from the material asset schema
+# (`name-confirmed`); the CONSECUTIVE-word packing is `inferred`.
 PARAM_ARITY = {
     "albedo_tint_color": 4, "arbitrary_emissive_far_fade": 2,
     "arbitrary_emissive_near_fade": 2, "back_lighting_tint_color": 4, "blood_color": 4,
@@ -286,30 +304,31 @@ PARAM_ARITY = {
     "subsurface_amount": 4,
 }
 
-# The engine's own authored defaults, for the parameters this decoder falls back
-# on. NOTHING here is invented.
+# Authored defaults, read straight out of the engine's own material asset
+# schema.  NOTHING here is invented — every value is the default that schema
+# declares for the parameter (`name-confirmed`).
 AUTHORED_DEFAULTS_GLOBAL = {
-    "k_alpha": 1.0,
-    "k_emissive_scale": 1.0,
-    "k_transparent_alpha_threshold": 0.0001,
-    "k_alpha_threshold": 0.5,
-    "k_refractive_index": 1.0,
-    "k_refraction_amount": 1.0,
-    "k_depth_fade_distance": 0.25,
-    "k_skirt_normal_blend_amt": 1.0,
-    "k_bake_emissive_intensity": 1.0,
+    "k_alpha": 1.0,                             # UberMaterial
+    "k_emissive_scale": 1.0,                    # UberMaterial
+    "k_transparent_alpha_threshold": 0.0001,    # UberMaterial
+    "k_alpha_threshold": 0.5,                   # UberMaterial
+    "k_refractive_index": 1.0,                  # UberMaterial
+    "k_refraction_amount": 1.0,                 # UberMaterial
+    "k_depth_fade_distance": 0.25,              # UberMaterial
+    "k_skirt_normal_blend_amt": 1.0,            # UberMaterial
+    "k_bake_emissive_intensity": 1.0,           # base material schema
 }
 AUTHORED_DEFAULTS_LAYER = {
-    "emissive_intensity": 1.0,
-    "emissive_tint_color": (1.0, 1.0, 1.0, 1.0),
-    "opacity_tint_color": (1.0, 1.0, 1.0, 1.0),
-    "back_lighting_intensity": 1.0,
+    "emissive_intensity": 1.0,                       # UberMaterialLayer
+    "emissive_tint_color": (1.0, 1.0, 1.0, 1.0),     # UberMaterialLayer
+    "opacity_tint_color": (1.0, 1.0, 1.0, 1.0),      # UberMaterialLayer
+    "back_lighting_intensity": 1.0,                  # UberMaterialLayer
 }
 # back-compat alias for consumers that just want "the k_ defaults"
 AUTHORED_DEFAULTS = AUTHORED_DEFAULTS_GLOBAL
 
 
-# Named scalar hashes we care about; every name is its key's exact preimage.
+# Named scalar hashes we care about (stream-confirmed names).
 HASH_K_ALPHA = symbol64("k_alpha")
 HASH_K_ALPHA_THRESHOLD = symbol64("k_alpha_threshold")
 HASH_K_TRANSPARENT_ALPHA_THRESHOLD = symbol64("k_transparent_alpha_threshold")
@@ -332,9 +351,9 @@ _NAME_TABLE_CACHE: dict[int, dict[int, str]] = {}
 def build_name_table(max_layer: int = MAX_LAYER) -> dict[int, str]:
     """hash -> authored parameter name.
 
-    Every entry is a *candidate preimage generated from the parameter
-    vocabulary*; because the key IS symbol64(name), any hit is a verified
-    preimage by construction.  Cached per `max_layer` (the build costs ~0.3 s).
+    Every entry is a *candidate preimage generated from the authoring source*;
+    because the key IS symbol64(name), any hit is a verified preimage by
+    construction.  Cached per `max_layer` (the build costs ~0.3 s).
     """
     cached = _NAME_TABLE_CACHE.get(max_layer)
     if cached is not None:
@@ -482,8 +501,9 @@ def decode_material_scalars(slice_bytes: bytes) -> dict:
       layer0-wins-unconditionally value and is 12.5x too dim on shipped material
       `0613ef69c99cbbc6`.  A `None` field means the author left it at
       `AUTHORED_DEFAULTS_LAYER[...]`.
-    * `Emission Strength = layers[L]["emissive_intensity"] * emissive_scale`.
-      There is no unit-conversion constant; the factor is 1.0.
+    * `Emission Strength = layers[L]["emissive_intensity"] * emissive_scale`
+      (`shader-confirmed` in the engine's ubershader).  There is no
+      unit-conversion constant; the factor is 1.0.
     * `alpha_threshold` / `emissive_scale` / `refractive_index` are always
       populated: the decoded override when present, otherwise the authored
       default (which parameters fell back is listed in
@@ -625,11 +645,12 @@ def decode_material_scalars(slice_bytes: bytes) -> dict:
         "flag_names": flag_names(flags),
         "materialfx": materialfx,
         # `bakeemissivecolor` is the BAKE-TIME emissive and ships (0,0,0) for
-        # every genuinely emissive material inspected, so it must NOT gate
-        # emission.  The gate is a non-zero authored per-layer emissive intensity
-        # or a non-black authored emissive tint.  The presence of an emissive
-        # *map* is texture-role information the caller holds, not this decoder —
-        # a caller with a routed emissive map should treat that as emissive too.
+        # every genuinely emissive material inspected (`stream-confirmed`), so it
+        # must NOT gate emission.  The gate is a non-zero authored per-layer
+        # emissive intensity or a non-black authored emissive tint.  The presence
+        # of an emissive *map* is texture-role information the caller holds, not
+        # this decoder — a caller with a routed emissive map should treat that as
+        # emissive too.
         "is_emissive": bool(emissive_layers),
         "bake_emissive_nonzero": any(v != 0.0 for v in emissive[:3]),
         "named_scalars": {f"{k:016x}": float(v) for k, v in props.items()},

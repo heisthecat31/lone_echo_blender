@@ -1,12 +1,16 @@
-"""Specular / F0: the engine's BRDF, its two samplers, and the Blender mapping.
+"""Specular / F0: the RAD BRDF, its two samplers, and the Blender mapping.
 
-Supersedes the earlier "specular is not representable" verdict, which was
+A10. Supersedes the A7 "specular is not representable" verdict, which was
 overturned by measurement, not by argument. Everything here is pure Python and
 runs without Blender; the parts that need a renderer live in
-`tests/blender_material_probe.py`.
+`tests/blender_material_probe.py` and docs/MATERIALS.md.
 
-THE ENGINE SIDE
----------------
+Evidence labels: `shader-confirmed` (matches the arithmetic the engine's own
+shaders perform) · `stream-confirmed` (decoded shipped archive bytes) ·
+`engine-confirmed` (Blender RNA read-back / measured render) · `inferred`.
+
+THE ENGINE SIDE (`shader-confirmed`)
+------------------------------------
 `layers[i].specalbedo[0]` is the Schlick F0 term::
 
     Fresnel(specalbedo, v, h, l)
@@ -30,14 +34,14 @@ THE ENGINE SIDE
 Two samplers feed the one `specalbedo` slot, with DIFFERENT scales::
 
     composite_specular : specalbedo = .xyz * .w ; specintensity = .w
-    specular_map       : specalbedo = enable_specular * specular_tint_color *
-                                      specular_map.xyz * fresnel
-                         specintensity = fresnel
+    specular_map       : specalbedo = k_enable_specular * speculartint *
+                                      specular_map.xyz * k_fresnel
+                         specintensity = k_fresnel
 
-`fresnel` is authored 0.010.
+`k_fresnel` is authored 0.010 in the engine's ubermaterial.
 
-THE BLENDER SIDE (measured on 5.1.1, Cycles and EEVEE Next)
------------------------------------------------------------
+THE BLENDER SIDE (`engine-confirmed`, 5.1.1, Cycles and EEVEE Next)
+-------------------------------------------------------------------
 Principled's dielectric normal-incidence reflectance is
 
     F0 = F0(IOR) * 2 * `Specular IOR Level` * `Specular Tint`
@@ -104,20 +108,20 @@ def _sat(x):
 
 
 def rad_fresnel3(f0, ldoth):
-    """The engine's Fresnel, float3 overload."""
+    """The engine's `Fresnel` (float3 overload)."""
     p = (1.0 - _sat(ldoth)) ** 5.0
     cut = _sat(sum(f0) * 333.0)
     return [(c + (1.0 - c) * p) * cut for c in f0]
 
 
 def rad_fresnel1(f0, ldoth):
-    """The engine's Fresnel, float overload (used for `specintensity`)."""
+    """The engine's `Fresnel` (float overload, used for `specintensity`)."""
     p = (1.0 - _sat(ldoth)) ** 5.0
     return (f0 + (1.0 - f0) * p) * _sat(f0 * 1000.0)
 
 
 def rad_ggx_specular(m, ndoth, ndotl, ndotv):
-    """The engine's GGX specular term. `m` is `roughness == sqrtroughness ** 2`."""
+    """The engine's `GGX_Specular`. `m` is `roughness` == `sqrtroughness ** 2`."""
     def v1(a2, nx):
         return 1.0 / (nx + math.sqrt(a2 + (1.0 - a2) * nx * nx))
     m2 = m * m
@@ -140,7 +144,7 @@ def rad_geometry(phi_deg, theta_deg):
 
 
 def rad_radiance(dif, spec, sint, sqrtrough, phi=0.0, theta=0.0):
-    """Outgoing radiance under a unit white parallel light — the engine's BRDF."""
+    """Outgoing radiance under a unit white parallel light. The engine's `GGX_BRDF`."""
     g = rad_geometry(phi, theta)
     if g["ndotl"] <= 0.0 or g["ndotv"] <= 0.0:
         return [0.0, 0.0, 0.0]
@@ -174,7 +178,7 @@ def test_rad_ggx_peak_matches_closed_form():
 
 def test_rad_radiance_reference_values():
     """Regression lock on the reference the Blender measurements were scored
-    against; the measured counterparts are in tests/blender_material_probe.py."""
+    against (`engine-confirmed` counterparts in docs/MATERIALS.md."""
     # pure Lambert, albedo 1, head-on -> 1/pi
     assert abs(rad_radiance((1, 1, 1), (0, 0, 0), 0.0, 0.3)[0] - 1.0 / math.pi) < 1e-9
     # shipped-p50-like F0 = 0.345
@@ -189,7 +193,7 @@ def test_current_unwired_state_was_not_neutral():
     """Leaving the channel unwired is not "no specular": Principled's default
     `Specular IOR Level` 0.5 pins F0 at 0.04 for every material.
 
-    Head-on radiance ratios vs the engine reference (measured in Cycles,
+    Head-on radiance ratios vs the RAD reference (`engine-confirmed` in Cycles,
     reproduced here on the reference side):
       F0 0.345 -> 6.0x too DARK · F0 0.85 -> 19.7x too DARK · F0 0.01 -> 4.0x too BRIGHT
     """
@@ -264,7 +268,7 @@ def test_specintensity_is_not_double_counted():
     """`.w` has two engine roles and Principled covers both from ONE number.
 
     `specalbedo = .xyz * .w` (F0) and the diffuse lobe is scaled by
-    `(1 - Fresnel(specintensity))`. Principled attenuates
+    `(1 - Fresnel(specintensity))` in the engine's `GGX_BRDF`. Principled attenuates
     its diffuse lobe by `(1 - F)` from the same F0, so setting F0 = specalbedo
     reproduces the diffuse term too whenever `.xyz` is white (specalbedo == .w).
     Feeding `.w` to `Specular IOR Level` AS WELL would square it.
@@ -303,8 +307,7 @@ def _corpus_materials():
 
 
 def test_corpus_specular_roles_and_the_six_no_albedo_panels():
-    """Measured over a 51-package / 100-material fixture export (skipped when
-    that gitignored export is absent):
+    """`stream-confirmed`, exports/fixtures_mat3 (51 packages, 100 materials):
     28 materials resolve a `specular` channel -- 19 `layer0_composite_specular`,
     1 `layer1_composite_specular`, 8 `layer0_specular_map`. SIX of the eight
     carry no `base_color` at all; every one of those six is `eMTForwardTransparent`
@@ -333,7 +336,7 @@ def test_corpus_specular_roles_and_the_six_no_albedo_panels():
 def test_corpus_never_overrides_the_specular_scalars():
     """No shipped material serialises `fresnel` / `specular_tint_color` /
     `specular_gloss` / `enable_specular`, so every `specular_map` material in the
-    corpus runs on the authored defaults. That is what makes
+    corpus runs on the authored defaults (`stream-confirmed`). That is what makes
     `k_fresnel = 0.010` the right constant to hard-wire.
     """
     mats = _corpus_materials()

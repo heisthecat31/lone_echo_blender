@@ -19,9 +19,10 @@ grouping lives here. Import every instance and you stack all LOD levels of every
 prop on top of each other (61.3 % of station_front's 21,394 instances are
 lower-LOD duplicates).
 
-Disk grammar, read out of shipped bytes and validated on **all 62 populated
-static-instance masters** of a 102-archive corpus (the other 40 archives bake no
-populated master):
+Disk grammar (LE-Win7 stream-confirmed on **all 62 populated masters** in the
+the reference manifest — 40 of its 102 archives bake no populated master;
+`name-confirmed` names and order against the engine's own `SGStaticInstancesData`,
+`SGStaticInstanceLODData` and `SHierLOD`)
 
     ---- SGStaticInstancesData.lod : SGStaticInstanceLODData ----------------
     nodes             CTableA<CReal4,16>  u32 count, 12 B pad, count*16   (vec4, w==0)
@@ -31,7 +32,7 @@ populated master):
     nodelookup        CTable<u16>         u32 count, count*2   (per LOD -> node)
     totalnumlods      u64                 (8-aligned)
     ---- then the rest of SGStaticInstancesData ---------------------------
-    meshlist          CGMeshListData      inline (see `le_meshlist_decode`)
+    meshlist          CGMeshListData      inline (see le_meshlist_decode)
     instancescount    CTable<u32>   num_meshes
     instanceoffsets   CTable<u32>   num_meshes   (prefix sum of instancescount)
     irrsamplelocs     CTable<C3Vector>  num_meshes
@@ -84,21 +85,22 @@ strongly):
   `3c157c98a146325a` stores `nodelookup[0:12] = 0..10, 9`. The descent is inside
   the `hierlods` parent region and no instance references it.
 
-`visstrlookup` (measured on 62/62 masters): per instance, the index of
+`visstrlookup` (`stream-confirmed`, 62/62 masters): per instance, the index of
 its LOD GROUP's visibility entry. It is CONSTANT across every instance of a
 group, a BIJECTION group <-> value, its values are exactly `0..numgroups-1`, and
 the tail scalar `numvisentries` equals its distinct count. It is NOT the identity
 permutation over instances (station_front first diverges at instance 16).
 
-`lodfadeslopeoffs` semantics are UNRESOLVED. Its four floats are carried through
-verbatim as audit metadata — do NOT present them as switch distances. What IS
-pinned, from disassembling the shipped instanced vertex/pixel shader pair: the VS
-reads the packed instance record's `lodfadeidx` (== `lodfadelookup[i]`), indexes
-a `Buffer<float4>` of per-view fade amounts at `view*stride + lodfadeidx`, takes
+`lodfadeslopeoffs` is carried through verbatim as audit metadata; its four floats
+are labelled `inferred` — do NOT present them as switch distances. What IS now
+pinned, DXBC-confirmed from the shipped instanced vertex shaders
+(`0ba36df7805485cd` / `5109c3131191ad81` in archive `0703fd2acd5803e9`): the VS
+reads `SGPackedInstanceData.lodfadeidx` (+0x28, == `lodfadelookup[i]`), indexes
+`k_instlodfadeamounts` (`Buffer<float4>` t3) at `view*stride + lodfadeidx`, takes
 ONLY `.x`, and passes it to the PS, which turns it into an alpha-to-coverage
-DITHER mask. So the per-LOD value the GPU consumes is a per-frame CPU-computed
-SCALAR in [0,1]; `lodfadeslopeoffs` is that scalar's CPU-side input and never
-reaches the GPU as a vec4. See `docs/LOD.md` for what has been ruled out.
+DITHER mask (`oMask = (1 << (alpha*fade)/(1/(n+1))) - 1`, `discard_z`). So the
+per-LOD value the GPU consumes is a per-frame CPU-computed SCALAR in [0,1], and
+`lodfadeslopeoffs` is its CPU-side input — it never reaches the GPU as a vec4.
 """
 
 from __future__ import annotations

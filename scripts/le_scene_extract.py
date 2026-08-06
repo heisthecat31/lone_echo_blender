@@ -57,7 +57,25 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
 # ---------------------------------------------------------------------------
 
 PACKAGE_FORMAT = "le_scatter"
-PACKAGE_VERSION = 3
+#: v1 base · v2 per-mesh `draws` · v3 `blobs/instance_lod.bin`
+#: v4 per-mesh `uv1` blob + the three `CGMeshData` lightmap ids
+#:    (`lightmap_index`/`lm_slice_index`/`numlobes`) + the master's
+#:    `lightmap` resource binding.
+#: v5 (this) the `instance_lightmap` section: the PER-INSTANCE baked lightmap
+#:    stream (page + per-vertex UVs) read out of `SGPackedInstanceData`.
+#:    ⛔ This, not the per-mesh `uv1` blob, is the level's lightmap UV input for
+#:    instanced statics -- 1046 of station_front's 1050 `uv1` blobs are entirely
+#:    zero because the engine overrides that slot per instance
+#:    (docs/LIGHTING.md §8.3). The section is OPT-IN
+#:    (`--instance-lightmap`) because it is ~52 MB on station_front.
+#: Purely ADDITIVE at every step: every v1..v4 key keeps its name, type and byte
+#: layout, so an older reader loads a v5 package unchanged and a v5 reader loads
+#: an older one (the new keys are absent, and absent means "no lightmap UV / no
+#: lightmap id / not extracted", never a different value).
+PACKAGE_VERSION = 5
+
+#: `CGMeshData.lightmapindex @0x6C` / `lmsliceindex @0x70` sentinel.
+LIGHTMAP_NONE = 0xFFFFFFFF
 
 
 @dataclass
@@ -81,6 +99,21 @@ class SceneMesh:
     # MESH-RELATIVE positions into this mesh's own `indices` (see le_mesh.meshlist
     # / mesh_builder). draws[0] mirrors the top-level (matidx, shdidx).
     draws: list = field(default_factory=list)
+    # --- v4: the baked-lightmap inputs -------------------------------------
+    # `uv1` is the LIGHTMAP UV set (stride-44 layout: uv1 = u16n x2 @0x18,
+    # `stream-confirmed`, README "Confirmed format facts"). Same flat
+    # f32 u,v * nverts layout and same optional-key convention as `uv0`.
+    # Without it no baked lightmap can ever be sampled on a level render.
+    uv1: list | None = None
+    # `CGMeshData.lightmapindex @0x6C` — which row of the bound
+    # CGLightMapResourceWin7 table this mesh reads (0xFFFFFFFF == unlit).
+    lightmap_index: int = LIGHTMAP_NONE
+    # `CGMeshData.lmsliceindex @0x70` — the PAGE within that row's texture array.
+    lm_slice_index: int = LIGHTMAP_NONE
+    # `CGMeshData.numlobes @0x74` — SG lobe count of the bake (4 on 1221/1221
+    # shipped meshes; the colour array is 5 slices per page, and which of
+    # "4 + 1 extra" / "5-lobe bake" is right is `unresolved` — le_mesh/lightmap.py).
+    numlobes: int = 0
 
     @property
     def nverts(self) -> int:
@@ -124,12 +157,102 @@ def _levels_histogram(instances: list[SceneInstance]) -> dict:
     return dict(sorted(hist.items(), key=lambda kv: int(kv[0])))
 
 
+def _lightmap_stats(meshes: list[SceneMesh]) -> dict:
+    """Manifest-level readout of the v4 lightmap ids (cheap sanity check)."""
+    lit = [m for m in meshes if m.lightmap_index != LIGHTMAP_NONE]
+    slices = sorted({m.lm_slice_index for m in lit
+                     if m.lm_slice_index != LIGHTMAP_NONE})
+    lobes = sorted({m.numlobes for m in lit})
+    return {
+        "meshes_lightmapped": len(lit),
+        "meshes_unlit": len(meshes) - len(lit),
+        "meshes_with_uv1": sum(1 for m in meshes if m.uv1),
+        "slice_indices": slices,
+        "numlobes_values": lobes,
+    }
+
+
+#: v5 `instance_lightmap` blob names. Fixed (not per-mesh) because the stream is
+#: one flat array in GLOBAL instance order.
+INSTLM_UV_BLOB = "blobs/instance_lm_uv.bin"
+INSTLM_OFFSETS_BLOB = "blobs/instance_lm_uvoff.bin"
+INSTLM_COUNTS_BLOB = "blobs/instance_lm_count.bin"
+INSTLM_PAGE_BLOB = "blobs/instance_lm_page.bin"
+
+#: what goes in `instance_lightmap.reason` when the section is absent.
+INSTLM_REASON_OFF = ("not extracted: pass --instance-lightmap (the stream is "
+                     "~52 MB on station_front and breaks mesh-datablock sharing)")
+
+
+def _instance_lightmap_section(out_dir: Path, instlm, *,
+                               instancedatasize: int | None = None,
+                               subset: bool = False) -> dict:
+    """Write the four v5 blobs and return the `instance_lightmap` manifest dict.
+
+    ⚠ ORDER INVARIANT: `offsets`/`counts`/`page` are PARALLEL to
+    `blobs/instances.bin` — index `i` is the same instance `read_instances()[i]`
+    is. `uv_blob` is their concatenation in that same order.
+
+    `flip_v_applied` is always **False**: the UVs are copied verbatim off disk,
+    exactly as `uv0`/`uv1` are, and flipping V is the consumer's job.
+    """
+    if instlm is None:
+        return {"present": False, "reason": INSTLM_REASON_OFF}
+    (out_dir / INSTLM_UV_BLOB).write_bytes(bytes(instlm.uv_bytes))
+    (out_dir / INSTLM_OFFSETS_BLOB).write_bytes(_pack_u32(instlm.offsets))
+    (out_dir / INSTLM_COUNTS_BLOB).write_bytes(_pack_u32(instlm.counts))
+    (out_dir / INSTLM_PAGE_BLOB).write_bytes(_pack_u32(instlm.pages))
+    section = {
+        "present": True,
+        "count": int(instlm.count),
+        "uv_blob": INSTLM_UV_BLOB,
+        "offsets_blob": INSTLM_OFFSETS_BLOB,
+        "counts_blob": INSTLM_COUNTS_BLOB,
+        "page_blob": INSTLM_PAGE_BLOB,
+        "total_uv_pairs": int(instlm.total_uv_pairs),
+        "flip_v_applied": False,
+        # --- self-describing byte contract (so a consumer needs no other doc) ---
+        "order": "global instance order — parallel to instances_blob",
+        "uv_dtype": "float32",
+        "uv_record": "u,v float32 pair; offsets/counts are in PAIRS, not bytes",
+        "index_dtype": "uint32",
+        "source": ("SGPackedInstanceData: page = u16 @rec+0x1a, UVs = "
+                   "C2Vector[nverts] @rec+0x2c, stride 44+8*nverts"),
+        "uv_bytes": len(instlm.uv_bytes),
+        "page_histogram": {str(k): v for k, v in instlm.page_histogram().items()},
+        "warnings": list(instlm.warnings),
+    }
+    # The arithmetic self-check: 44*C + 8*Σcounts must reproduce the master's
+    # `instancedatasize` EXACTLY. A non-zero residual means a mis-strided read.
+    section["predicted_instancedatasize"] = int(instlm.predicted_instancedatasize)
+    if instancedatasize is not None:
+        section["instancedatasize"] = int(instancedatasize)
+        section["instancedata_residual"] = (
+            int(instlm.predicted_instancedatasize) - int(instancedatasize))
+    if subset:
+        section["subset"] = True
+    return section
+
+
 def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
-                  instances: list[SceneInstance]) -> Path:
+                  instances: list[SceneInstance],
+                  lightmap: dict | None = None,
+                  instance_lightmap=None,
+                  instancedatasize: int | None = None,
+                  subset: bool = False) -> Path:
     """Write a `<name>.lescatter/` package (manifest.json + blobs/) to `out_dir`.
 
     Archive-independent: takes fully-decoded Python data and serialises the pinned
     contract. Returns the package directory path.
+
+    `lightmap` (v4, optional) is the MASTER-level resource binding — see
+    `extract_scene` / `le_mesh.lightmap.lightmap_resource_name_for_scene`. Omitted
+    entirely when the caller cannot see it, rather than guessed.
+
+    `instance_lightmap` (v5, optional) is a
+    `le_static_scatter.InstanceLightmap` — the per-instance baked lightmap
+    stream. `None` writes `{"present": false, "reason": ...}` so a consumer can
+    tell "not extracted" from "not available".
     """
     out_dir = Path(out_dir)
     blobs = out_dir / "blobs"
@@ -160,6 +283,10 @@ def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
             "positions": pos_name,
             "indices": idx_name,
             "proxy": bool(mesh.proxy),
+            # --- v4 lightmap ids (always present; sentinel == not lightmapped) ---
+            "lightmap_index": int(mesh.lightmap_index) & 0xFFFFFFFF,
+            "lm_slice_index": int(mesh.lm_slice_index) & 0xFFFFFFFF,
+            "numlobes": int(mesh.numlobes),
         }
         if mesh.normals:
             nrm_name = f"blobs/m{mesh.index}_nrm.bin"
@@ -169,6 +296,12 @@ def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
             uv_name = f"blobs/m{mesh.index}_uv0.bin"
             (out_dir / uv_name).write_bytes(_pack_f32(mesh.uv0))
             entry["uv0"] = uv_name
+        # v4: the lightmap UV set. Same naming/layout convention as uv0 so a
+        # reader can stream it with the identical code path.
+        if mesh.uv1:
+            uv1_name = f"blobs/m{mesh.index}_uv1.bin"
+            (out_dir / uv1_name).write_bytes(_pack_f32(mesh.uv1))
+            entry["uv1"] = uv1_name
         mesh_entries.append(entry)
 
     # instances.bin -- N records, GLOBAL order, 44 B each, LE:
@@ -209,7 +342,16 @@ def write_package(out_dir: Path, master: str, meshes: list[SceneMesh],
             "max_level": max((i.lod_level for i in instances), default=0),
             "levels_histogram": _levels_histogram(instances),
         },
+        # v4: per-mesh lightmap id readout. The per-mesh ids themselves live on
+        # each mesh entry; this is only a summary.
+        "lightmap_stats": _lightmap_stats(meshes),
+        # v5: the per-instance baked lightmap stream (page + per-vertex UVs).
+        "instance_lightmap": _instance_lightmap_section(
+            out_dir, instance_lightmap,
+            instancedatasize=instancedatasize, subset=subset),
     }
+    if lightmap is not None:
+        manifest["lightmap"] = lightmap
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1),
                                            encoding="utf-8")
     return out_dir
@@ -267,6 +409,9 @@ class ExtractStats:
     aabb_out: int = 0
     with_normals: int = 0
     with_uv0: int = 0
+    with_uv1: int = 0
+    lightmapped_meshes: int = 0
+    lightmap_resource: str | None = None
     nonf32_position: int = 0
     dangling: int = 0
     total_verts: int = 0
@@ -275,7 +420,72 @@ class ExtractStats:
     capped_to: int | None = None
     lod_groups: int = 0
     lod_max_level: int = 0
+    # v5 per-instance lightmap stream
+    instance_lightmap: bool = False
+    instance_lm_uv_pairs: int = 0
+    instance_lm_bytes: int = 0
+    instance_lm_residual: int | None = None
+    instance_lm_pages: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
+
+
+#: `CGLightMapResourceWin7` resource-TYPE hash (hash_lookup.json).
+LIGHTMAP_TYPE_WIN7 = 0x6665BEDFEADF8B79
+
+
+def resolve_master_lightmap(archive_hash: str, master_name_hash: int) -> dict:
+    """The master's `CGLightMapResourceWin7` binding, or an explicit unresolved.
+
+    Mechanism (`stream-confirmed`, `le_mesh.lightmap`): a scene's
+    mesh-list / scene / static-instance / lightmap resources all carry the SAME
+    resource name hash — `CGScene.lightmapresource` is a sibling `CResourceInstanceT`
+    and `CGSceneData` stores no id for it. So the static-instance master's own
+    name IS the lightmap resource name (`lightmap_resource_name_for_scene` is
+    deliberately an identity function that names the mechanism).
+
+    We do not guess: the returned dict says `present` only when a resource of
+    type `CGLightMapResourceWin7` with that exact name is actually in the master
+    archive's contents table. The OTHER join mechanism —
+    `SGDynamicInstancesData.lightmapsid` (the trailing CSymbol64 of a
+    `CGDynamicInstanceResourceWin7`) — does not apply here: a static-instance
+    master is not a dynamic-instance resource, so it is reported as N/A rather
+    than searched for.
+    """
+    from le_oodle import chunk_table, decompress_range
+    from le_archive_decode import ARCHIVE_PRIMARY, parse_header, entry_at
+    from le_mesh.lightmap import lightmap_resource_name_for_scene
+
+    want = lightmap_resource_name_for_scene(master_name_hash)
+    out = {
+        "resource_name": f"{want:016x}",
+        "mechanism": "sibling-by-name (CGScene.lightmapresource)",
+        "dynamic_lightmapsid": None,          # N/A for a static-instance master
+        "present": False,
+        "slice": None,
+        "confidence": "stream-confirmed",
+    }
+    try:
+        raw = (ARCHIVE_PRIMARY / archive_hash).read_bytes()
+        uncomp_total, _ = chunk_table(raw)
+        prelude = decompress_range(raw, 0, 64)
+        primary_size = struct.unpack_from("<Q", prelude, 0)[0]
+        extra_skip = struct.unpack_from("<Q", prelude, 24)[0]
+        header0_off = 32 + extra_skip + primary_size
+        tail = decompress_range(raw, header0_off, uncomp_total)
+        del raw
+        hdr = parse_header(tail, 0)
+        for _ in range(2):
+            for i in range(hdr.contents.count):
+                th, nh, val = struct.unpack_from("<QQQ", tail, hdr.contents.off + i * 24)
+                if th == LIGHTMAP_TYPE_WIN7 and nh == want and val < hdr.entries.count:
+                    pos, size = entry_at(tail, hdr, val)
+                    out["present"] = True
+                    out["slice"] = {"pos": int(pos), "size": int(size)}
+                    return out
+            hdr = parse_header(tail, hdr.end)
+    except Exception as exc:            # noqa: BLE001
+        out["error"] = str(exc)
+    return out
 
 
 def _find_meshlist(blob: bytes, gpudatasize: int, num_meshes: int, hint: int = 369032):
@@ -293,25 +503,31 @@ def _find_meshlist(blob: bytes, gpudatasize: int, num_meshes: int, hint: int = 3
 
 def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
                   hash_lookup: Path = Path("hash_lookup.json"),
-                  progress=print) -> ExtractStats:
+                  progress=print, instance_lightmap: bool = False) -> ExtractStats:
     """Decode the static-scatter master + inline meshlist and write a `.lescatter`.
 
     `subset`: if set, keep only the top-`subset` mesh-types by instance count (ALL
     of their instances). Otherwise emit every mesh + every instance.
+
+    `instance_lightmap`: also emit the v5 per-instance baked lightmap stream
+    (page + per-vertex UVs). Default OFF — it is ~52 MB on station_front and
+    forces per-instance mesh copies downstream, which must be the user's choice.
     """
     from le_oodle import decompress_range
     from le_archive_decode import ARCHIVE_GPU
     from le_static_scatter import (
-        load_master_blob, decode_static_master, decode_gpu_transforms,
+        load_master_blob, decode_static_master, decode_gpu_instances,
     )
     from le_mesh.vertex_format import (
         read_vertex_format, decode_vertex_buffer, EUsage,
+        lightmap_uv_attr_name,
     )
     from le_mesh.meshlist import (
         MESH_STRIDE, M_NAME, M_VBINDEX, M_IBINDEX, M_RENDERPARAMIDX,
         M_NUMRENDERPARAMS, M_AABB, RENDERPARAM_STRIDE, RP_MATERIALIDX,
         RP_SHADERSETIDX, RP_IDXSTART, RP_IDXCOUNT, INDEXBUFFER_STRIDE,
         IB_OFFSET, IB_NUMINDICES, IB_INDEXSIZE,
+        M_LIGHTMAPINDEX, M_LMSLICEINDEX, M_NUMLOBES,
     )
     from le_mesh.vertex_format import VB_RECORD_STRIDE
 
@@ -358,23 +574,55 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
     progress(f"meshlist @prim[{mstart}]: meshes={meshes_t.count} rp={rps_t.count} "
              f"vb={vbs_t.count} ib={ibs_t.count}")
 
-    # per-instance transforms (all of them) + resolve G
-    G, _typetable, transforms = decode_gpu_transforms(
-        archive_hash, name_hash, d, hash_lookup)
+    # --- pick the mesh-type set to emit (needed BEFORE the GPU pass so the v5
+    # per-instance lightmap arrays stay parallel to the emitted instances) ---
+    order = list(range(d.num_meshes))
+    if subset is not None and subset < d.num_meshes:
+        order = sorted(order, key=lambda m: d.instancescount[m], reverse=True)[:subset]
+        stats.capped_to = subset
+    selected = set(order)
+
+    # Per-mesh vertex counts, read from the PRIMARY vertex-buffer records only
+    # (no GPU bytes): `SGStaticInstanceTypeData.stride` must equal
+    # `44 + 8*nverts`, and this is what makes that assertion checkable.
+    nverts_by_mesh: dict[int, int] = {}
+    if instance_lightmap:
+        for mi in range(d.num_meshes):
+            mm = meshes_t.data_off + mi * MESH_STRIDE
+            vbi = struct.unpack_from("<I", blob, mm + M_VBINDEX)[0]
+            if vbi >= vbs_t.count:
+                continue
+            _els, _st, _rel, vc = read_vertex_format(
+                blob, vbs_t.data_off + vbi * VB_RECORD_STRIDE)
+            nverts_by_mesh[mi] = vc
+
+    # per-instance transforms (all of them) + resolve G (+ optional lightmap)
+    gi = decode_gpu_instances(
+        archive_hash, name_hash, d, hash_lookup,
+        want_lightmap=instance_lightmap,
+        nverts_by_mesh=nverts_by_mesh or None,
+        selected=selected if subset is not None else None)
+    G, transforms, instlm = gi.G, gi.transforms, gi.lightmap
     progress(f"G={G}  decoded {len(transforms)} transforms")
+    if instlm is not None:
+        stats.instance_lightmap = True
+        stats.instance_lm_uv_pairs = instlm.total_uv_pairs
+        stats.instance_lm_bytes = len(instlm.uv_bytes)
+        stats.instance_lm_residual = instlm.predicted_instancedatasize - ids
+        stats.instance_lm_pages = instlm.page_histogram()
+        for w in instlm.warnings[:8]:
+            stats.notes.append(f"instlm-warn: {w}")
+        progress(f"instance lightmap: {instlm.count} instances, "
+                 f"{instlm.total_uv_pairs} UV pairs, "
+                 f"{len(instlm.uv_bytes)} B, "
+                 f"instancedatasize residual={stats.instance_lm_residual} "
+                 f"(0 == the 44+8*nverts model reproduces the shipped size)")
 
     # decompress the geometry window [G, G+ido) once (~85 MiB)
     gpu_raw = (ARCHIVE_GPU / archive_hash).read_bytes()
     geo = decompress_range(gpu_raw, G, G + ido)
     del gpu_raw
     progress(f"geometry window: {len(geo)} bytes (== ido? {len(geo) == ido})")
-
-    # --- pick the mesh-type set to emit ---
-    order = list(range(d.num_meshes))
-    if subset is not None and subset < d.num_meshes:
-        order = sorted(order, key=lambda m: d.instancescount[m], reverse=True)[:subset]
-        stats.capped_to = subset
-    selected = set(order)
 
     def read_mesh_header(mi):
         m = meshes_t.data_off + mi * MESH_STRIDE
@@ -385,6 +633,12 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
             "rp_idx": struct.unpack_from("<I", blob, m + M_RENDERPARAMIDX)[0],
             "rp_n": struct.unpack_from("<I", blob, m + M_NUMRENDERPARAMS)[0],
             "aabb": struct.unpack_from("<6f", blob, m + M_AABB),
+            # v4 lightmap ids — same CGMeshData layout as a standalone mesh-list
+            # (MESH_STRIDE 0x80); the inline static-instance meshlist is not a
+            # different struct. `stream-confirmed`.
+            "lightmap_index": struct.unpack_from("<I", blob, m + M_LIGHTMAPINDEX)[0],
+            "lm_slice_index": struct.unpack_from("<I", blob, m + M_LMSLICEINDEX)[0],
+            "numlobes": struct.unpack_from("<I", blob, m + M_NUMLOBES)[0],
         }
 
     def first_draw_mat_shd(rp_idx, rp_n):
@@ -421,7 +675,7 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
         inst_cnt = d.instancescount[mi] if mi < len(d.instancescount) else 0
 
         proxy = False
-        positions = normals = uv0 = None
+        positions = normals = uv0 = uv1 = None
         indices: list = []
 
         if h["vbi"] >= vbs_t.count or h["ibi"] >= ibs_t.count:
@@ -452,6 +706,21 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
                     ua = attrs.get("uv0")
                     if ua is not None and ua.data and not ua.packed_unresolved:
                         uv0 = _first_k(ua.data, ua.comps, 2, vcount)
+                    # The scatter package's `uv1` blob is THE LIGHTMAP UV SET.
+                    # Pick it by SEMANTIC SLOT 4 (`shader-confirmed`, the
+                    # engine's `vb_texcoord4`), NOT by the
+                    # appearance-order attribute name: on a (0, 1, 4) object the
+                    # attribute called `uv1` is a copy of the albedo UV set
+                    # docs/LIGHTING.md. Resolved against the FULL
+                    # element table; decoded from the same `sub` list that
+                    # already covers eTexCoord — no extra buffer read.
+                    # (Filtering `elements` to `sub` does not change texcoord
+                    # numbering — the counter is per usage — but `elements` is
+                    # the authoritative table, so resolve against it.)
+                    lm_key = lightmap_uv_attr_name(elements)
+                    u1 = attrs.get(lm_key) if lm_key else None
+                    if u1 is not None and u1.data and not u1.packed_unresolved:
+                        uv1 = _first_k(u1.data, u1.comps, 2, vcount)
 
             if not proxy:
                 # index buffer
@@ -488,7 +757,7 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
 
         if proxy:
             positions, indices = box_proxy(aabb_min, aabb_max)
-            normals = uv0 = None
+            normals = uv0 = uv1 = None
             stats.meshes_proxied += 1
         else:
             stats.meshes_decoded += 1
@@ -496,6 +765,8 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
                 stats.with_normals += 1
             if uv0:
                 stats.with_uv0 += 1
+            if uv1:
+                stats.with_uv1 += 1
 
         stats.total_verts += len(positions) // 3
         stats.total_indices += len(indices)
@@ -517,7 +788,14 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
             aabb_min=aabb_min, aabb_max=aabb_max,
             instance_offset=inst_off, instance_count=inst_cnt,
             positions=positions, indices=indices, normals=normals, uv0=uv0,
-            proxy=proxy, draws=draws))
+            proxy=proxy, draws=draws,
+            uv1=uv1,
+            # The ids come from the mesh header and are emitted even for a
+            # proxied mesh: the id is a property of the mesh, not of whether we
+            # managed to decode its vertex buffer.
+            lightmap_index=h["lightmap_index"],
+            lm_slice_index=h["lm_slice_index"],
+            numlobes=h["numlobes"]))
 
     del geo
 
@@ -538,8 +816,23 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
             lod_group=g, lod_level=lv, lod_group_levels=gl))
     stats.num_instances_emitted = len(scene_instances)
     stats.meshes_emitted = len(scene_meshes)
+    stats.lightmapped_meshes = sum(1 for m in scene_meshes
+                                   if m.lightmap_index != LIGHTMAP_NONE)
 
-    write_package(out_dir, archive_hash, scene_meshes, scene_instances)
+    # v4: the MASTER-level lightmap resource binding. Reachable from here (the
+    # master's own name hash IS the binding), so it is emitted rather than left
+    # to the consumer to guess.
+    lm_binding = resolve_master_lightmap(archive_hash, name_hash)
+    stats.lightmap_resource = (lm_binding["resource_name"]
+                               if lm_binding.get("present") else None)
+    progress(f"lightmap: resource {lm_binding['resource_name']} "
+             f"present={lm_binding['present']}; "
+             f"{stats.lightmapped_meshes}/{len(scene_meshes)} meshes lightmapped, "
+             f"{stats.with_uv1} with uv1")
+
+    write_package(out_dir, archive_hash, scene_meshes, scene_instances,
+                  lightmap=lm_binding, instance_lightmap=instlm,
+                  instancedatasize=ids, subset=subset is not None)
     progress(f"wrote {out_dir}  ({stats.meshes_emitted} meshes, "
              f"{stats.num_instances_emitted} instances)")
     return stats
@@ -552,10 +845,14 @@ def main() -> None:
     ap.add_argument("--subset", type=int, default=None,
                     help="cap to the top-N mesh-types by instance count")
     ap.add_argument("--hash-lookup", type=Path, default=Path("hash_lookup.json"))
+    ap.add_argument("--instance-lightmap", action="store_true",
+                    help="emit the v5 per-instance baked lightmap stream (page + "
+                         "per-vertex UVs). ~52 MB on station_front; default OFF")
     args = ap.parse_args()
 
     stats = extract_scene(args.hash, args.out, subset=args.subset,
-                          hash_lookup=args.hash_lookup)
+                          hash_lookup=args.hash_lookup,
+                          instance_lightmap=args.instance_lightmap)
     print("\n=== extract summary ===")
     print(f"  meshes total={stats.num_meshes_total} emitted={stats.meshes_emitted} "
           f"decoded={stats.meshes_decoded} proxied={stats.meshes_proxied}"
@@ -563,10 +860,20 @@ def main() -> None:
     print(f"  aabb: exact={stats.aabb_exact} contained={stats.aabb_contained} "
           f"out={stats.aabb_out}")
     print(f"  attrs: with_normals={stats.with_normals} with_uv0={stats.with_uv0} "
+          f"with_uv1={stats.with_uv1} "
           f"nonf32_pos={stats.nonf32_position} dangling={stats.dangling}")
+    print(f"  lightmap: resource={stats.lightmap_resource} "
+          f"lightmapped_meshes={stats.lightmapped_meshes}")
     print(f"  totals: verts={stats.total_verts} indices={stats.total_indices} "
           f"instances={stats.num_instances_emitted}")
     print(f"  lod: groups={stats.lod_groups} levels=0..{stats.lod_max_level}")
+    if stats.instance_lightmap:
+        print(f"  instance lightmap: {stats.instance_lm_uv_pairs} UV pairs, "
+              f"{stats.instance_lm_bytes} B, "
+              f"instancedatasize residual={stats.instance_lm_residual}")
+        print(f"    page histogram: {stats.instance_lm_pages}")
+    else:
+        print("  instance lightmap: not extracted (pass --instance-lightmap)")
     for note in stats.notes[:12]:
         print(f"  note: {note}")
     if len(stats.notes) > 12:

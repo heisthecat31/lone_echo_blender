@@ -328,10 +328,6 @@ def section_fixtures(fixtures_dir, limit):
                 with_channels.append((pkg, spec))
     print(f"  {len(pkgs)} packages, {len(with_channels)} materials WITH channels; "
           f"probing {min(limit, len(with_channels))}")
-    if not with_channels:
-        # A clean checkout has no extracted packages; that is not a failure.
-        print(f"  SKIP — no extracted .lemesh packages under {fixtures_dir}")
-        return
     check("fixture corpus has textured materials", bool(with_channels))
 
     n_img = n_packed = n_straight = 0
@@ -361,8 +357,8 @@ def section_fixtures(fixtures_dir, limit):
             src = _linked_from(b.inputs["Roughness"])
             if MB.roughness_is_sqrt(spec, chans["roughness"]):
                 # ⚠ REGRESSION GUARD, do not "fix" this back to a POWER node.
-                # The engine's GGX alpha = sqrtroughness^2 and Blender's is
-                # Roughness^2; therefore
+                # RAD alpha = sqrtroughness^2 (`shader-confirmed`); Blender
+                # alpha = Roughness^2; therefore
                 # Roughness IS components.x, raw. Squaring it here gave alpha
                 # = sqrtroughness^4 and a peak highlight 2.4x-920x too bright.
                 check("Roughness takes components.x RAW (no POWER node)",
@@ -440,15 +436,9 @@ def section_synthetic():
     pkg, bc = _find_channel_file("composite_diffuse", "base_color")
     if pkg is None:
         pkg, bc = _find_channel_file("", "base_color")
-    if bc is None:
-        # No extracted package to borrow a real DDS from. The cases below all
-        # need one, so say so and move on rather than crash.
-        print(f"  SKIP — no extracted .lemesh package under {FIXTURES_MAT}; "
-              f"extract one to exercise the synthetic specs")
-        return
     check("found a real base-colour DDS to build against", bc is not None)
 
-    # (a) k_alpha only, no map
+    # (a) k_alpha only, no map -- B1
     mat = MB.build_material({"key": "syn_kalpha", "alpha": 0.25}, BLENDER_TOOL, {})
     b = _bsdf(mat)
     check("k_alpha=0.25 lands on the Alpha socket",
@@ -629,7 +619,8 @@ def section_vertex_color():
 # 6. layer compositing -- layerN_blend_mask gates the layers above 0
 # ---------------------------------------------------------------------------
 
-# The findings' worked example, and the material the gap was measured on.
+# The worked example in docs/MATERIALS.md, and the material the gap was
+# measured on.
 BRIDGE_PKG = "0703fd2acd5803e9_a487d3d7bce351eb.lemesh"
 BRIDGE_KEY = "b964375c606d812f__0613ef69c99cbbc6"
 
@@ -638,10 +629,10 @@ BRIDGE_KEY = "b964375c606d812f__0613ef69c99cbbc6"
 # `layerN_blend_mask_offset` prop at all), gating a full layer-1 composite set.
 LIVE_MASK_KEY = "1f517a5a067f6c8f__6e92391dc748a44a"
 
-# specular subjects.
-# `composite`: layer0_composite_specular `d1f2417d17e180a1` -- the map the earlier
+# A10 specular subjects.
+# `composite`: layer0_composite_specular `d1f2417d17e180a1` -- the map the A7
 #   verdict measured; specalbedo (= F0) p50 0.345 / p90 0.852 / max 1.0 in
-#   linear space, 65.5% of texels above the 0.08 "ceiling".
+#   linear space, 65.5% of texels above the 0.08 "ceiling" (`stream-confirmed`).
 # `panel`: one of the SIX no-base-colour `layer0_specular_map` panels; its only
 #   colour texture is the specular map, and it is also the BRIDGE material.
 SPEC_COMPOSITE_KEY = "91f6e49da7ae6b7b__956dc3d61e5cfe3b"
@@ -700,7 +691,7 @@ def section_layer_blend():
           f"offset={blend['mask_offset']} mode={blend['blend_mode_name']} "
           f"gates={blend['gated_channels']}")
     check("mask channel is RED (k_blend_mask[i].x)", blend["mask_component"] == "R")
-    check("the shipped offset is -1.0", blend["mask_offset"] == -1.0)
+    check("the shipped offset is -1.0 (`stream-confirmed`)", blend["mask_offset"] == -1.0)
     check("the blend gates emission and not the mask itself",
           blend["gated_channels"] == ["emission"])
 
@@ -763,11 +754,11 @@ def section_layer_blend():
     check("[offset 1] Emission Strength is 25.0 (the pre-fix behaviour)",
           abs(b.inputs["Emission Strength"].default_value - 25.0) < 1e-6)
 
-    # (d) the specular verdict -- REVISED, see section_specular()
+    # (d) the specular verdict -- REVISED by A10, see section_specular()
     b = _bsdf(mat)
     lvl = b.inputs["Specular IOR Level"]
     tint = b.inputs["Specular Tint"]
-    check("Specular IOR Level hard_max is 1.0 (the old premise, still true)",
+    check("Specular IOR Level hard_max is 1.0 (the A7 premise, still true)",
           abs(lvl.bl_rna.properties["default_value"].hard_max - 1.0) < 1e-6,
           f"hard_max={lvl.bl_rna.properties['default_value'].hard_max}")
     check("Specular Tint hard_max is UNBOUNDED -> F0 is NOT capped at 0.08",
@@ -807,7 +798,7 @@ def section_layer_blend():
 
 
 # ---------------------------------------------------------------------------
-# 7. specular / F0 -- the old "not representable" verdict, re-measured
+# 7. specular / F0 (A10) -- the A7 "not representable" verdict, re-measured
 # ---------------------------------------------------------------------------
 
 SPEC_F0_TARGETS = (0.01, 0.04, 0.345, 0.85, 1.0)
@@ -883,7 +874,7 @@ def section_specular(tmpdir):
         there is the whole claim.
     (c) The built graphs of the two real shipped role kinds.
     """
-    print("\n== 7. specular / F0 ==")
+    print("\n== 7. specular / F0 (A10) ==")
     mat0 = bpy.data.materials.new("__spec_rna")
     mat0.use_nodes = True
     b0 = next(n for n in mat0.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
@@ -1018,15 +1009,12 @@ def section_specular(tmpdir):
         check(f"[{ch['role_key']}] Specular IOR Level stays neutral",
               abs(bb.inputs["Specular IOR Level"].default_value - 0.5) < 1e-6)
         # the opt-out restores the old look exactly
-        m2 = MB.build_material(dict(s, key=key + "__specoff"), pkg,
+        m2 = MB.build_material(dict(s, key=key + "__a10off"), pkg,
                                {"wire_specular": False})
         b2 = _bsdf(m2)
         check(f"[{ch['role_key']}] wire_specular=False leaves it unwired",
               not b2.inputs["Specular Tint"].links
               and bool(m2.get("le_specular_unwired")))
-    if not seen:
-        print("  SKIP — no extracted package carries a specular channel")
-        return
     check("both shipped specular role kinds were exercised", len(seen) >= 2,
           str(sorted(seen)))
 
@@ -1036,10 +1024,10 @@ def _render_specular(outdir):
     and one of the six no-albedo `layer0_specular_map` panels.
 
     Three variants each -- the shipped-today unwired state, the naive
-    `Specular IOR Level` mapping the old verdict warned about (clamped, so it
+    `Specular IOR Level` mapping the A7 verdict warned about (clamped, so it
     cannot exceed F0 = 0.08), and the wired `Specular Tint` result.
     """
-    print(f"\n== specular renders -> {outdir} ==")
+    print(f"\n== A10 specular renders -> {outdir} ==")
     root = FIXTURES_MAT3 if FIXTURES_MAT3.is_dir() else FIXTURES_MAT
     specs = {}
     for mf in sorted(root.glob("*.lemesh/manifest.json")):
@@ -1113,7 +1101,7 @@ def _render_specular(outdir):
                 if not bi.links:
                     bi.default_value = (0.0, 0.0, 0.0, 1.0)
             if tag == "naive_iorlevel":
-                # The mapping the old verdict warned about: `Specular Tint` left
+                # The mapping the A7 verdict warned about: `Specular Tint` left
                 # inside its soft 0..1 range and `Specular IOR Level` pushed to
                 # its hard_max 1.0 -> F0 = 0.08 * specalbedo, i.e. the "12x too
                 # dark" ceiling. Same graph, scale factor 25 -> 1.
@@ -1128,7 +1116,7 @@ def _render_specular(outdir):
             bpy.context.object.data.energy = 300
             bpy.ops.object.camera_add(location=(0, -3.4, 0), rotation=(1.5708, 0, 0))
             scene.camera = bpy.context.object
-            path = outdir / f"spec_{name}_{tag}.png"
+            path = outdir / f"a10_{name}_{tag}.png"
             scene.render.filepath = str(path)
             bpy.ops.render.render(write_still=True)
             b = _bsdf(mat)
@@ -1172,7 +1160,7 @@ def _render_layer_blend(outdir):
             scene.eevee.use_raytracing = True
         except Exception:
             pass
-        scene.view_settings.view_transform = "Standard"     # NEVER AgX: it desaturates highlights
+        scene.view_settings.view_transform = "Standard"     # NEVER AgX
         scene.view_settings.look = "None"
         scene.view_settings.exposure = 0.0
         scene.view_settings.gamma = 1.0
@@ -1276,7 +1264,7 @@ def _render_alpha_mode_pair(outdir):
         ids = [i.identifier for i in scene.render.bl_rna.properties["engine"].enum_items]
         scene.render.engine = ("BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in ids
                                else "BLENDER_EEVEE")
-        scene.view_settings.view_transform = "Standard"     # NOT AgX: it desaturates highlights
+        scene.view_settings.view_transform = "Standard"     # NOT AgX
         scene.view_settings.look = "None"
         scene.render.resolution_x = 512
         scene.render.resolution_y = 1024
@@ -1332,7 +1320,7 @@ def _render_pair(outdir):
         ids = [i.identifier for i in scene.render.bl_rna.properties["engine"].enum_items]
         scene.render.engine = ("BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in ids
                                else "BLENDER_EEVEE")
-        scene.view_settings.view_transform = "Standard"     # NOT AgX: it desaturates highlights
+        scene.view_settings.view_transform = "Standard"     # NOT AgX
         scene.view_settings.look = "None"
         scene.render.resolution_x = scene.render.resolution_y = 512
         scene.render.image_settings.file_format = "PNG"

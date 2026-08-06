@@ -44,7 +44,7 @@ def _mb():
     return mod
 
 
-# --- k_alpha ------------------------------------------------------------------
+# --- k_alpha (B1) ------------------------------------------------------------
 
 def test_k_alpha_default_and_clamp():
     mb = _mb()
@@ -56,14 +56,14 @@ def test_k_alpha_default_and_clamp():
 
 
 def test_k_alpha_under_one_forces_a_blended_pass():
-    """k_alpha=0.25 with no opacity map must not render opaque."""
+    """B1: k_alpha=0.25 with no opacity map must not render opaque."""
     mb = _mb()
     assert mb.resolve_render_mode({"alpha": 0.25}) == "BLEND"
     assert mb.surface_render_method_for(mb.resolve_render_mode({"alpha": 0.25})) == "BLENDED"
     assert mb.resolve_render_mode({"alpha": 1.0}) == "OPAQUE"
 
 
-# --- render mode --------------------------------------------------------------
+# --- render mode (B2/B3) -----------------------------------------------------
 
 def test_render_mode_prefers_explicit_manifest_field():
     mb = _mb()
@@ -77,7 +77,10 @@ def test_render_mode_from_mattype():
     assert mb.resolve_render_mode({"mattype": 9}) == "CLIP"       # eMTAlphaTested
     assert mb.resolve_render_mode({"mattype": 2}) == "BLEND"      # eMTForwardTransparent
     assert mb.resolve_render_mode({"mattype": 16}) == "BLEND"     # eMTTransparentPostAA
-    assert mb.resolve_render_mode({"mattype": 10}) == "OPAQUE"    # eMTSkirt -> opaque+tag
+    # eMTSkirt is the DECAL pass: it reads its diffuse alpha, it is not opaque.
+    # (Was OPAQUE until docs/MATERIALS.md — that is the defect that
+    # rendered Jack's shoulder and thigh patches as solid black cards.)
+    assert mb.resolve_render_mode({"mattype": 10}) == "BLEND"     # eMTSkirt
 
 
 def test_render_mode_falls_back_to_blend_mode():
@@ -134,7 +137,7 @@ def test_alpha_component_follows_the_dxgi_format():
     assert mb.alpha_component_of({"dxgi": 80, "component": "A"}) == "A"
 
 
-# --- opacity vs transmission (findings 3a) -----------------------------------
+# --- opacity vs transmission ------------------------------------------------
 
 def test_opacity_map_is_a_transmission_tint_not_alpha():
     mb = _mb()
@@ -191,7 +194,7 @@ def test_ao_channel_is_green_of_composite_components():
     assert mb.ao_channel_of({"ao_channel": "R"}, None) == "R"
 
 
-# --- emission (findings 4) ---------------------------------------------------
+# --- emission ----------------------------------------------------------------
 
 def test_black_emissive_tint_is_treated_as_no_tint():
     """bakeemissivecolor is (0,0,0) on every genuinely emissive material inspected;
@@ -269,3 +272,183 @@ def test_no_fixture_mesh_sets_ediffusevertexcolor():
                 flagged += 1
     assert total > 0
     assert flagged == 0, f"corpus changed: {flagged}/{total} meshes now set the flag"
+
+
+# ---------------------------------------------------------------------------
+# base_color_factor -- the flat FALLBACK, and its unauthored 4th float
+# ---------------------------------------------------------------------------
+
+def test_base_color_fallback_forces_alpha_to_one():
+    """`bakecolor`'s 4th float is unauthored — `k_hardware_color` is a `Color4`
+    with no `:a` widget in the material asset schema, and no engine shader reads
+    the member. It must never reach a socket verbatim."""
+    mb = _mb()
+    assert mb.base_color_fallback(
+        {"base_color_factor": [0.16612, 0.13933, 0.11532, 0.0]}
+    ) == (0.16612, 0.13933, 0.11532, 1.0)
+    # the two shipped non-zero cases are equally normalised
+    assert mb.base_color_fallback(
+        {"base_color_factor": [0.09163, 0.07908, 0.07286, 0.10113]}
+    ) == (0.09163, 0.07908, 0.07286, 1.0)
+    assert mb.base_color_fallback({"base_color_factor": [1.0, 1.0, 1.0, 1.0]}) \
+        == (1.0, 1.0, 1.0, 1.0)
+
+
+def test_base_color_fallback_defaults_to_white_and_tolerates_short_input():
+    mb = _mb()
+    assert mb.base_color_fallback({}) == (1.0, 1.0, 1.0, 1.0)
+    assert mb.base_color_fallback({"base_color_factor": None}) == (1.0, 1.0, 1.0, 1.0)
+    assert mb.base_color_fallback({"base_color_factor": [0.5, 0.25]}) \
+        == (0.5, 0.25, 1.0, 1.0)
+
+
+def test_base_color_fallback_matches_the_scatter_paths_normalisation():
+    """`scatter_import.py:696` already did `list(...)[:3] + [1.0]` on the v1
+    level path. The mesh path silently did not; the two must not disagree."""
+    mb = _mb()
+    for raw in ([0.2, 0.3, 0.4, 0.0], [0.2, 0.3, 0.4, 1.0], [0.2, 0.3, 0.4, 0.5]):
+        scatter_style = tuple(list(raw)[:3] + [1.0])
+        assert mb.base_color_fallback({"base_color_factor": raw}) == scatter_style
+
+
+def test_the_shipped_corpus_really_does_ship_zero_alpha_bakecolors():
+    """The measurement the rule rests on, asserted rather than only written down
+    (docs/MATERIALS.md recorded 27/100 in prose
+    and no test ever checked it). Skips cleanly if the fixtures are absent."""
+    mb = _mb()
+    if not FIXTURES_MAT.is_dir():
+        return
+    zero = total = 0
+    for mf in sorted(FIXTURES_MAT.rglob("manifest.json")):
+        try:
+            m = json.loads(mf.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        for spec in m.get("materials", []):
+            f = spec.get("base_color_factor")
+            if not f:
+                continue
+            total += 1
+            if float(f[3]) == 0.0:
+                zero += 1
+            # whatever it is, the fallback never passes it through
+            assert mb.base_color_fallback(spec)[3] == 1.0
+    assert total > 0
+    assert zero > 0, "the .a == 0.0 case is what the rule is about"
+
+
+# ---------------------------------------------------------------------------
+# the NORMAL map is gated by its layer's blend mask, like every other channel
+#
+# `output.normal = BlendValue(base.normal, layer.normal, m * normal_blend_alpha,
+# mode)` — `shader-confirmed`.
+#
+# The gate was absent until 2026-08-05 on the premise (a local working file
+# §156) that "the lowest layer wins for `normal` in every corpus material". That
+# premise expired once the corpus role index began naming a layer-1 composite
+# quartet whose layer-0 counterpart stays unrouted, which is exactly Jack's legs.
+# ---------------------------------------------------------------------------
+
+# Jack's legs: `28b682b9af140fbf__2fdd8c946178528d` in `c6bc8607972268c9`.
+# layer1_blend_mask == `jck_body_damage_bubble_a_msk`, `layer1_blend_mask_offset`
+# == -1.0, so the BATTLE-DAMAGE layer is parked at its animated OFF extreme —
+# and it was the only layer whose roles the corpus index could name.
+JACK_LEGS_KEY = "28b682b9af140fbf__2fdd8c946178528d"
+
+
+def _suppressed_normal_spec():
+    """The Jack-legs shape, as a synthetic spec: normal only on a gated layer 1."""
+    normal_ch = {"texture": "15d96c006b692612", "role_key": "layer1_composite_normals",
+                 "dxgi": 83, "colorspace": "Non-Color", "reconstruct_z": True,
+                 "layer": 1, "blend_layer": 1, "file": "textures/x.dds"}
+    return {
+        "key": JACK_LEGS_KEY,
+        "channels": {"normal": dict(normal_ch)},
+        "layers": [{"index": 1, "channels": {"normal": dict(normal_ch)},
+                    "blend": {"layer": 1, "mask": None, "mask_component": "R",
+                              "mask_default": 1.0, "mask_scale": 1.0,
+                              "mask_offset": -1.0, "blend_fade": 1.0,
+                              "blend_mode": 6, "channel_alpha": {},
+                              "gated_channels": ["base_color", "normal",
+                                                 "roughness", "specular"],
+                              "amount_min": 0.0, "amount_max": 0.0,
+                              "amount_constant": 0.0, "suppressed_at_rest": True}}],
+    }
+
+
+def test_a_normal_on_a_gated_layer_reports_its_blend_record():
+    """`blend_for_channel` must answer for `normal` — the builder's gate reads it."""
+    mb = _mb()
+    spec = _suppressed_normal_spec()
+    blend = mb.blend_for_channel(spec, spec["channels"], "normal")
+    assert blend is not None, "normal is in gated_channels; it must be gated"
+    assert blend["layer"] == 1
+    assert mb.channel_blend_alpha(blend, "normal") == 1.0
+
+
+def test_a_suppressed_layers_normal_gate_is_a_hard_zero():
+    """`saturate(mask.R * scale + offset)` with the shipped `offset = -1.0` can
+    never open, so the damage normal must contribute nothing at all — not a
+    dimmed version of itself."""
+    mb = _mb()
+    spec = _suppressed_normal_spec()
+    blend = mb.blend_for_channel(spec, spec["channels"], "normal")
+    scale = mb.blend_mask_scale_for(blend)
+    offset = mb.blend_mask_offset_for(blend, {})
+    assert mb._sat(scale + offset) <= 0.0
+    # the import-time override is the escape hatch, and it must still work
+    assert mb._sat(scale + mb.blend_mask_offset_for(blend, {"layer_blend_mask_offset": 0.0})) > 0.0
+
+
+def test_layer_zero_normal_is_never_gated():
+    """A normal that lives on layer 0 is the base of `BlendLayers()` and has no
+    mask — the fix must not touch the overwhelmingly common case."""
+    mb = _mb()
+    spec = _suppressed_normal_spec()
+    for ch in (spec["channels"]["normal"], spec["layers"][0]["channels"]["normal"]):
+        ch["layer"] = 0
+        ch["blend_layer"] = 0
+    assert mb.blend_for_channel(spec, spec["channels"], "normal") is None
+
+
+def test_flat_tangent_normal_is_the_identity_encoding():
+    """The `base.normal` term of the lerp. (0,0,1) stored unsigned is (.5,.5,1)."""
+    mb = _mb()
+    assert mb.FLAT_TANGENT_NORMAL == (0.5, 0.5, 1.0, 1.0)
+
+
+def test_jacks_legs_carry_a_suppressed_normal_gating_damage_layer():
+    """The shipped measurement the fix rests on, asserted rather than only
+    written down.
+
+    ⚠ Deliberately does NOT assert which layer the MERGED view selects. It
+    asserted `layer1_composite_normals` for about an hour, and then the format
+    rule (`materials.composite_roles_from_format`) named the layer-0 quartet and
+    the merged view moved to layer 0 — correctly. Pinning the broken state would
+    have made the fix look like the regression. What is durable is the shipped
+    layer record: layer 1 gates `normal`, its mask is Jack's battle damage, and
+    `blend_mask_offset = -1.0` parks it at its animated OFF extreme. Skips
+    cleanly when the package is not extracted.
+    """
+    mb = _mb()
+    pkg = BLENDER_TOOL / "exports" / "chars" / \
+        "c6bc8607972268c9_64b4b5b2a0153f7e.lemesh" / "manifest.json"
+    if not pkg.exists():
+        return
+    specs = {s["key"]: s for s in
+             json.loads(pkg.read_text(encoding="utf-8")).get("materials", [])}
+    spec = specs.get(JACK_LEGS_KEY)
+    if spec is None:                      # pre-RDEF extraction of the same asset
+        return
+    blend = mb.layer_blend_of(spec, 1)
+    assert blend is not None, "layer 1 is the damage overlay and must carry a mask"
+    assert "normal" in blend["gated_channels"]
+    assert blend["suppressed_at_rest"] is True
+    assert blend["mask_offset"] == -1.0
+    assert (blend["mask"] or {}).get("texture") == "331bd11a0f032117"
+    # and whichever layer the merged view lands on, the gate must agree with it
+    ch_layer = spec["channels"]["normal"].get("blend_layer")
+    got = mb.blend_for_channel(spec, spec["channels"], "normal")
+    assert (got is None) == (ch_layer is None)
+    if got is not None:
+        assert got["layer"] == ch_layer

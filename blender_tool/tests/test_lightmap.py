@@ -6,9 +6,10 @@ texture-set resolution, the Blender-facing spec, and the synthetic BC6H_UF16
 stand-in used by `tests/blender_lightmap_probe.py`.
 
 Fixtures are SYNTHETIC bytes assembled to the shipped layout, plus the real
-hashes and the real container size measured on station_front `942c829457a04a62`.
-This repository ships no game textures, so the tests that need real lightmap
-bytes skip themselves unless you point them at your own extraction.
+hashes and the real container size recorded for station_front `942c829457a04a62`
+in docs/SCENES.md §4b.  The real lightmap texture *bytes*
+are not reachable from the checked-in fixtures (no DXGI-95 DDS exists in the
+tree) — see docs/LIGHTING.md.
 
 No Oodle, no archive, no `bpy`.  Runs under `python3 tests/run_tests.py` and
 unchanged under pytest.
@@ -27,7 +28,7 @@ from le_mesh import lightmap as LM  # noqa: E402
 
 
 # --- the one fully-resolved shipped row (station_front master, slot 1) -------
-# Measured on the shipped station_front master.
+# `stream-confirmed`, docs/SCENES.md §4b.
 REAL_LIGHTMAPID = 0x0178FA39B1B95D2F     # DXGI 95 BC6H_UF16, 1024^2 HDR colour
 REAL_AO0 = 0x81A8FCF99B655A42            # DXGI 83 BC5_UNORM
 REAL_AO1 = 0x81A8FCF99B655A43            # DXGI 83 BC5_UNORM
@@ -311,7 +312,7 @@ def test_bc6h_out_of_range_endpoint_raises():
 def test_bc6h_reference_decode_matches_the_d3d_unsigned_path():
     # q=0 -> 0.0; q=1023 -> the all-ones clamp; q=462 -> the probe's value,
     # which Blender 5.1.1's own BC6H decoder returns bit-identically
-    # (measured by tests/blender_lightmap_probe.py).
+    # (`engine-confirmed`, tests/blender_lightmap_probe.py).
     assert LM.bc6h_uf16_decode_endpoint(0) == 0.0
     assert abs(LM.bc6h_uf16_decode_endpoint(462) - 0.50048828125) < 1e-9
     assert LM.bc6h_uf16_decode_endpoint(1023) > 1000.0     # 0xffff -> huge half
@@ -374,7 +375,7 @@ def test_fixture_manifests_split_cleanly_into_lightmapped_and_not():
     """The 51 shipped `.lemesh` fixtures: 15 objects carry lightmapindex 0, the
     other 106 carry the 0xffffffff sentinel — and every lightmapped one has uv1.
 
-    Measured on an export; skipped when the fixtures are absent.
+    `export-validated`. Skipped when the fixtures are absent.
     """
     import json
     fx = _ROOT / "exports" / "fixtures_mat"
@@ -430,8 +431,8 @@ def _dx10(path):
 
 
 def test_shipped_colour_map_is_bc6h_uf16_1024_arraysize_65():
-    """Measured on the shipped file: DXGI 95, 1024^2, arraySize 65, one mip, and
-    a payload that divides exactly into 65 x 1 MiB slices."""
+    """`engine-confirmed` on the shipped file: DXGI 95, 1024^2, arraySize 65,
+    one mip, and a payload that divides exactly into 65 x 1 MiB slices."""
     if not REAL_LM_DDS.exists():
         return
     h = _dx10(REAL_LM_DDS)
@@ -454,8 +455,8 @@ def test_shipped_ao_pair_is_bc5_1024_arraysize_13():
 
 def test_colour_array_is_thirteen_pages_of_five_sg_lobes():
     """65 == 13 x 5.  The AO arrays carry exactly one slice per lightmap page,
-    so the colour array's 65 slices are 13 pages x 5 SG lobes — which is exactly
-    how the engine indexes it (`lightmapuv.z = lightmapuv.z * 5 + i`).
+    so the colour array's 65 slices are 13 pages x 5 SG lobes — which is what
+    the engine's lightmap sampler (`lightmapuv.z = lightmapuv.z * 5 + i`) reads.
     """
     if not (REAL_LM_DDS.exists() and REAL_AO0_DDS.exists()):
         return
@@ -476,8 +477,7 @@ def test_sg5_slice_indices_are_page_major():
 
 
 def test_sg5_constants_match_the_shipped_shader_source():
-    """The engine's own SG5 constants: the five lobe directions, kLambdaSG5 and
-    kSG5Scale."""
+    """`shader-confirmed`: `kLobeDirsSG5`, `kLambdaSG5` and `kSG5Scale`."""
     LB = _lightmap_builder()
     assert LB.SG5_LAMBDA == 3.62780595
     assert LB.SG5_SCALE == 0.5
@@ -491,14 +491,14 @@ def test_sg5_constants_match_the_shipped_shader_source():
 
 
 def test_sg5_flat_weights_are_the_measured_ones():
-    """These are the exact weights the Blender node graph used when it
-    reproduced the python reference to 2.4e-05 on real texels — measured by
-    `blender_lightmap_probe.py`, section `[sg5-render]`."""
+    """`engine-confirmed`: these are the exact weights the Blender node graph
+    used when it reproduced the python reference to 2.4e-05 on real texels
+    (`blender_lightmap_probe.py` `[sg5-render]`)."""
     LB = _lightmap_builder()
     got = [round(w, 6) for w in LB.SG5_WEIGHTS_FLAT]
     assert got == [0.027565, 0.082695, 0.137824, 0.192954, 0.248084], got
     # a flat white bake does NOT come back as 1.0 — the engine's own SG
-    # normalisation is deliberately approximate, and its source says so.
+    # normalisation is deliberately approximate, and its own constants say so.
     assert abs(sum(LB.SG5_WEIGHTS_FLAT) - 0.689122) < 1e-6
 
 
@@ -577,7 +577,7 @@ def test_shipped_array_splits_into_five_lobe_files(tmp_path):
 
 
 def test_colourspace_table_is_the_measured_one():
-    """Measured on Blender 5.1.1 against the shipped brightest texel
+    """`engine-confirmed (Blender 5.1.1)` on the shipped brightest texel
     (1.900391, 2.013672, 1.688477):
 
         Non-Color       -> identical
@@ -617,12 +617,13 @@ def test_builder_never_multiplies_the_bc5_colour_output():
 
 # ===========================================================================
 # ★ THE MATCHED PAIR — a station_front mesh-list whose uv1 indexes the
-#   station_front atlas  (exports/station_lm/)
+#   station_front atlas  (exports/station_lm/, added for front A11)
 # ===========================================================================
-# The colour/DXGI/page model can be verified numerically without any texels, but
-# a PICTORIAL control needs a mesh package whose `uv1` actually indexes the
-# extracted atlas. Extract that pair yourself into `blender_tool/exports/
-# station_lm/` and these tests light up; without it they skip cleanly.
+# A9 could verify the colour/DXGI/page model only numerically: no shipped mesh
+# package in the tree had a `uv1` into the extracted atlas
+# (docs/LIGHTING.md §6.1).  This package closes that gap, and these
+# tests lock what makes it usable as a PICTORIAL control.  Each skips cleanly
+# when the export is not checked out.
 #
 # ⚠ Deliberately NOT asserted here: the flip_v / page-registration verdicts.
 # Those need the atlas texels decoded, which needs a BC6H decoder — the shipped
@@ -635,8 +636,8 @@ import json  # noqa: E402
 STATION_LM_PKG = (_ROOT / "exports" / "station_lm" /
                   "942c829457a04a62_942c829457a04a62.lemesh")
 
-#: Measured via the export: every object indexes master row 1 (the one
-#: populated row), and these are its pages.
+#: `stream-confirmed` via the export: every object indexes master row 1
+#: (the one populated row), and these are its pages.
 STATION_LM_PAGES = {
     "obj000_d83dfed24858e022": 3,
     "obj001_294372d551facd97": 3,
@@ -652,7 +653,7 @@ def _station_lm_manifest():
 
 
 def test_station_lm_is_the_matched_mesh_plus_atlas_pair():
-    """The pair this needs: station_front geometry with a real `uv1` and a
+    """The export A9 asked for: station_front geometry with a real `uv1` and a
     non-null `lightmapindex`, from the same archive as the extracted atlas."""
     man = _station_lm_manifest()
     if man is None:
@@ -738,7 +739,7 @@ def test_station_lm_flip_v_is_a_decidable_test_on_this_package():
 
 def test_render_harness_forces_standard_view_transform():
     """Blender 4.0+ defaults to AgX, which desaturates highlights.  Any render
-    used as evidence must force 'Standard' — see findings §2.5."""
+    used as evidence must force 'Standard' — see docs/LIGHTING.md."""
     src = (_ROOT / "tests" / "blender_lightmap_render.py").read_text(encoding="utf-8")
     assert 'view_transform = "Standard"' in src
     assert "AgX" in src            # and says why

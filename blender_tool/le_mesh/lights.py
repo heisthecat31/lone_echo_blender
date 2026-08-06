@@ -4,16 +4,10 @@ Pure stdlib. No Oodle, no bpy, no numpy. Decodes the `lights` member of a
 Lone Echo (Win7) `CGSceneResourceWin7` payload and converts each record into
 Blender light parameters.
 
-⚠ IMPORTING THESE LIGHTS NAIVELY IS WRONG. Most Lone Echo level lights are
-SPECULAR-ONLY and sit on top of a BAKED lightmap, so adding all of them to a
-Blender scene double-lights it. A light importer ships from 0.3.0, but it is
-**off by default** and imports only the `eEnableDiffuse` subset — see
-`select_lights()` below and `docs/LIGHTING.md`.
-
 ==============================================================================
-WHERE THE LIGHTS LIVE
+WHERE THE LIGHTS LIVE  (`stream-confirmed`)
 ==============================================================================
-`CGSceneData` begins
+`CGSceneData` (`name-confirmed`) begins
 
     +0x000 SBVHTreeData                bvhtreedata
     +0x040 CTable<SGLightParams>       lights          <-- THIS MODULE
@@ -34,20 +28,22 @@ payload is
 
 `SGLightParams` stride 0x160 == 352 B is confirmed out of shipped bytes: the
 member walk continues past the lights table with that stride across 28 shipped
-level scenes and lands byte-exactly on the `actors` table.
+level scenes and lands byte-exactly on the `actors` table, whose rows join the
+transform/model manifests.
 
 NOTE (Echo VR divergence): the later engine revision's `SGLightParams` is
 **360 B**, not 352. Do not reuse that stride here.
 
 ==============================================================================
-RECORD LAYOUT — SGLightParams, 352 B
+RECORD LAYOUT — SGLightParams, 352 B  (`name-confirmed` + `stream-confirmed`)
 ==============================================================================
     +0x000 u32    options            CFlagsT<u32>, ELightOptions (see below)
     +0x004 u32    lighttype          ELightType 0=point 1=spot 2=directional
     +0x008 3xf32  pos                WORLD position (scene space == scatter space)
     +0x014 3xf32  primarycolor       LINEAR HDR RGB, intensity PRE-MULTIPLIED IN
     +0x020 3xf32  secondarycolor     (1,1,1) on 118/118 shipped records
-    +0x02c 4xf32  attenuation        (1.0, mean, range, maxrange) -- see notes
+    +0x02c 4xf32  attenuation        (volume-inner, volume-mid, RANGE/cull,
+                                     MAXFADEDISTANCE) -- see notes
     +0x03c 4xf32  orientation        quaternion (x,y,z,w); light forward = R*+Z
     +0x04c f32    fovy               FULL spot cone angle, radians
     +0x050 f32    nearp              shadow-map near plane
@@ -95,19 +91,38 @@ Corpus invariants measured on 118 shipped lights (station_front 47, bridge_night
   * 2*acos(penumbra.y) == fovy                     (106/106 spots)
   * penumbra == (-1,-1)                            (12/12 non-spots)
   * pad@0x154 == 0
-So `attenuation.z` is THE light range (== the shader's MaxRange); `.y` is a
-derived midpoint; `.w` is `unresolved` (a separate cull radius, most likely).
+
+★ ALL FOUR COMPONENTS ARE NOW ACCOUNTED FOR (`shader-confirmed`, Echo r15
+shader corpus `2799580733489822`; see `LightRecord.maxfadedistance` for the
+quotes and the cross-era caveat):
+  * `.z` is the RANGE, used by the offline irradiance baker as a hard cull
+    (`dist > attenuation.z -> continue`) and as the light-offset normaliser. It
+    equals `farp` on 118/118, which is why it is also the shadow far plane.
+  * `.w` is `maxfadedistance` -- the argument the attenuation curve's zero-offset
+    is computed from, at both of the baker's `LightAttenuation` call sites. It is
+    NOT a second cull radius; that guess is now RETIRED.
+  * `.x`/`.y`/`.z` are additionally the three stops of the VOLUME-light ramp
+    `VolumeLightAttenutation(dist, atten, c0, c1)`, which is what
+    makes `.x == 1.0` and `.y == (.x + .z)/2` the invariants they are -- they are
+    an authored inner stop and its midpoint, not padding.
 
 ==============================================================================
-UNITS  (see `docs/LIGHTING.md`)
+UNITS  (`shader-confirmed` against the RAD engine's own HLSL; see
+docs/LIGHTING.md)
 ==============================================================================
-The engine's distance attenuation, restated as pseudocode:
+The engine's lighting shader (RAD Engine 3.0) computes:
 
-    atten(d) = clamp(1 / d**attenmethod - faderangeoffset, 0, 10000)
-    # attenmethod is a Maya-style decay exponent (0, 1, 2 or 3) stored as a float;
-    # faderangeoffset is a runtime constant chosen so atten(range) == 0.
-    # point / spot:  lightcolor = primarycolor * atten(d) * visibility
-    # directional:   lightcolor = primarycolor            (no distance term)
+    float LightAttenuation(float distance, float attenuation,
+                           float faderangeoffset, bool pointlight) {
+        // 1 / d^x (maya supports 0, 1, 2, 3)
+        float atten = rcp(pow(distance, attenuation)) - faderangeoffset;
+        if (attenuation == 0.0f && pointlight)
+            atten = saturate(1.0f - distance / faderangeoffset);
+        return min(atten, 10000.0f);
+    }
+    ...
+    params.lightcolor = PrimaryColor(light) * atten * visibility;   // spot
+    params.lightcolor = PrimaryColor(light);                        // directional
 
 So the irradiance a surface receives is `primarycolor / d^attenmethod` (minus the
 range offset), and `primarycolor` is a LINEAR HDR radiometric scale with the
@@ -126,23 +141,23 @@ import math
 import struct
 from dataclasses import dataclass, field
 
-STRIDE = 0x160          # sizeof(SGLightParams), Lone Echo (Win7 build)
-STRIDE_R15 = 0x168      # the later Echo VR revision -- NOT used here; kept so the
-                        # two strides can never be confused
+STRIDE = 0x160          # sizeof(SGLightParams), Win7 / Lone Echo (r14)
+STRIDE_R15 = 0x168      # Echo VR / Quest (r15) -- NOT used here, documented to avoid mix-ups
 
-# ELightType
+# ELightType (`name-confirmed`)
 ePointLight = 0
 eSpotLight = 1
 eDirectionalLight = 2
 LIGHT_TYPE_NAME = {0: "ePointLight", 1: "eSpotLight", 2: "eDirectionalLight"}
 
-# ELightAttenuation -- `attenmethod` is this enum stored as a FLOAT
+# ELightAttenuation (`name-confirmed`) -- `attenmethod` is this enum stored
+# as a FLOAT
 eNoLightAttenuation = 0
 eLinearLightAttenuation = 1
 eQuadraticLightAttenuation = 2
 eCubicLightAttenuation = 3
 
-# ELightOptions
+# ELightOptions (`name-confirmed`)
 eEnableDiffuse = 1 << 0
 eEnableSpecular = 1 << 1
 eCastShadows = 1 << 2
@@ -192,7 +207,7 @@ NULL_U32 = 0xFFFFFFFF
 # The ONE Y-up -> Z-up basis: a pure +90 deg rotation about X, det +1,
 # game (x, y, z) -> Blender (x, -z, y). Identical to
 # `addon/lone_echo_import/scatter_reader.basis_matrix()` and to
-# `mesh_builder._axis_matrix`; `tests/test_lights.py`
+# `mesh_builder._axis_matrix` (AXIS_CALIBRATION.md); `tests/test_lights.py`
 # asserts the equality against scatter_reader so the two can never drift.
 
 
@@ -276,8 +291,45 @@ class LightRecord:
 
     @property
     def range(self) -> float:
-        """The light's reach = attenuation.z (== farp on 118/118 shipped records)."""
+        """The light's reach = attenuation.z (== farp on 118/118 shipped records).
+
+        This is the CULL radius: the offline irradiance baker skips a receiver
+        outright once `dist > attenuation.z` (`shader-confirmed`) and normalises
+        the light-offset ramp by it. It is NOT the value the attenuation curve
+        is offset by -- that is `maxfadedistance`, below."""
         return self.attenuation[2]
+
+    @property
+    def maxfadedistance(self) -> float:
+        """attenuation.w -- the distance the 1/d^m curve is offset to reach 0 at.
+
+        ★ `shader-confirmed`, and it closes what this file used to carry as
+        `unresolved`.  The offline irradiance baker declares the identical
+        `float4 attenuation` and passes `.w`, not `.z`, as `maxfadedistance`:
+
+            float atten = LightAttenuation(dist, light.attenmethod,
+                                           light.attenuation.w);
+
+            float LightAttenuation(float distance, float attenuation,
+                                   float maxfadedistance) {
+                float offset = 1.0f / pow(abs(maxfadedistance), attenuation);
+                float atten  = (1.0f / pow(distance, attenuation)) - offset;
+                if(attenuation == 0.0f)
+                    atten = saturate(1.0f - distance / maxfadedistance);
+                return min(atten, 10000.0f);
+            }
+
+        The runtime agrees structurally: `SGForwardLight` carries `MaxRange` and
+        `FadeRangeOffset` as two INDEPENDENT fp16 values packed in one word
+        (`shader-confirmed`), so the range and the offset source were never the
+        same field.
+
+        ⚠ ERA: the shader corpus is the Echo r15 dev build `2799580733489822`,
+        not Lone Echo's own r14.  Lone Echo corroborates rather than proves it —
+        `.w == .z` on 107/118 shipped LE lights, which is exactly what an artist
+        leaving the fade at the range produces, and the 11 that differ (e.g.
+        `.z = 1000`, `.w = 5000`) are the ones this distinction is for."""
+        return self.attenuation[3]
 
     @property
     def option_names(self) -> list:
@@ -363,7 +415,7 @@ def decode_lights_table(buf, off: int = 0, max_count: int = 1_000_000):
 
 
 # The three 4-byte holes the 352 B grid leaves unnamed. All zero on the shipped
-# records inspected, so `encode_light` writes zeros there and the round-trip is
+# records we hold, so `encode_light` writes zeros there and the round-trip is
 # byte-exact (tests/test_lights.py::test_encode_light_is_byte_exact_on_real_records).
 PAD_OFFSETS = (0xA4, 0xCC, 0x154)
 
@@ -375,7 +427,8 @@ def encode_light(rec: LightRecord) -> bytes:
     touching an archive (and so `decode(encode(r)) == r` pins the field grid).
     The three unnamed pad words (`PAD_OFFSETS`) are written as zero; they are
     zero on every shipped record inspected, so a re-encode of real bytes is
-    byte-exact. That the pads are always zero is an observation, not a guarantee.
+    byte-exact. `stream-confirmed` for the grid; the pads are
+    `stream-confirmed` zero on the records we hold and `inferred` in general.
     """
     buf = bytearray(STRIDE)
     p = struct.pack_into
@@ -576,9 +629,9 @@ def blender_direction(rec: LightRecord):
 
 def blender_position(rec: LightRecord):
     """World position in Blender space. `pos` is already in the same world space
-    as the static-instance scatter (cross-checked: station_front's 47 lights all
-    fall inside the same level's 21,394-instance scatter bounding box), so there is
-    no transform join and no parent chain to resolve."""
+    as the static-instance scatter (export-validated: station_front's 47 lights
+    all fall inside the 21,394-instance scatter bbox), so there is no
+    CTransformCR join and no parent chain to resolve."""
     return to_blender_vec(rec.pos)
 
 
@@ -590,11 +643,22 @@ def falloff_is_physical(rec: LightRecord) -> bool:
 
 
 def range_offset(rec: LightRecord) -> float:
-    """The shader's `faderangeoffset`, subtracted so the curve reaches 0 at the
-    range: 1/range^attenmethod. UNRESOLVED -- the value is computed by the engine
-    at runtime and is NOT stored on disk; this formula is inferred from the shader's
-    own description of the term and reproduces atten(range) == 0 exactly."""
-    r = rec.range
+    """The shader's `faderangeoffset`: `1 / maxfadedistance^attenmethod`.
+
+    ★ The argument is `attenuation.w`, NOT `.z`.  This used to read `.z` while
+    `.w` sat in `not_derivable()` labelled `unresolved`; the offline irradiance
+    baker settles it — its `LightAttenuation` definition and both of its call
+    sites take `.w` (see `LightRecord.maxfadedistance`).  On the 107/118 shipped
+    LE lights where `.w == .z` nothing changes; on the 11 that differ it does —
+    e.g. a spot with `.z = 1000`, `.w = 5000`, `attenmethod = 1` moves the
+    subtracted offset from 1e-3 to 2e-4, and the light no longer reaches exactly
+    zero at `.z` (the baker CULLS it there instead, which is why the two fields
+    are separate at all).
+
+    Still `inferred` in one respect: the runtime value is packed by
+    `SGForwardLight::SetFromLight` (`name-only`, not in the shader corpus), so the
+    formula is read off the baker rather than off the runtime packer."""
+    r = rec.maxfadedistance
     if r <= 0.0:
         return 0.0
     return 1.0 / (r ** rec.attenmethod) if rec.attenmethod != 0.0 else r
@@ -621,9 +685,9 @@ def blender_matrix_rows(rec: LightRecord, y_up_to_z_up: bool = True):
     * `A` is the ONE axis basis (`mesh_builder._axis_matrix`, +90 deg X, det +1,
       game (x,y,z) -> (x,-z,y)); passing `y_up_to_z_up=False` makes it identity.
       Using the same A the meshes use is what keeps the light rig aligned with
-      the geometry.
+      the geometry -- see AXIS_CALIBRATION.md.
     * `R(orientation)` is the record's own quaternion (x,y,z,w). `pos` and
-      `orientation` are already WORLD (no transform join, no parent chain).
+      `orientation` are already WORLD (no CTransformCR join, no parent chain).
     * `Rx(180 deg)` is the lamp-forward flip: the engine's light forward is its
       local **+Z** (`direction == R(q)*(0,0,1)`, 118/118) while a Blender lamp
       emits along its local **-Z**. Rx(pi) maps -Z to +Z, det +1, no mirror.
@@ -656,14 +720,13 @@ def blender_matrix_rows(rec: LightRecord, y_up_to_z_up: bool = True):
 
 # --- import policy: which lights are safe to import -------------------------
 #
-# Measured on 118 shipped level lights: only 49 set `eEnableDiffuse`
-# (station_front 15/47, bridge_night 28/65) while 112/118 set `eEnableSpecular`.
-# The specular-only majority exists to put highlights on surfaces whose DIFFUSE
-# response is already baked into the lightmap + irradiance volumes (86 of 87
-# lit-surface shaders bind BOTH paths). Blender has neither a specular-only lamp
-# nor the baked diffuse underneath, so importing all of them DOUBLE-LIGHTS the
-# scene — measured 7.06x brighter than the diffuse subset. Default to the
-# diffuse subset; "all" is opt-in.
+# `stream-confirmed`: only 49 of 118 shipped level lights set
+# `eEnableDiffuse` (station_front 15/47, bridge_night 28/65); 112/118 set
+# `eEnableSpecular`. The specular-only majority exists to put highlights on
+# surfaces whose DIFFUSE response is already baked into the lightmap + irradiance
+# volumes (86 of 87 lit-surface shaders bind BOTH paths). Blender has neither a
+# specular-only lamp nor the baked diffuse underneath, so importing all of them
+# DOUBLE-LIGHTS the scene. Default to the diffuse subset; "all" is opt-in.
 LIGHT_SET_DIFFUSE = "diffuse"     # DEFAULT -- eEnableDiffuse only
 LIGHT_SET_ALL = "all"             # opt-in, double-lights (warns)
 LIGHT_SET_ENABLED = "enabled"     # every runtime light, diffuse or not
@@ -707,16 +770,18 @@ def not_derivable(rec: LightRecord) -> dict:
 
     * `filtersize` is a shadow-map PCF filter width in texels -- it is NOT a
       light radius. `SGLightParams` carries no source-size field whatsoever, so
-      `shadow_soft_size` is imported as 0 (a true point source).
+      `shadow_soft_size` is imported as 0 (a true point source). `inferred`.
     * `falloff` is the extra `pow(cos a, falloff)` cone weighting -- Blender's
-      spot has no such exponent. Non-zero on 12/118.
-    * `faderangeoffset` is computed at runtime and never stored; see
-      `range_offset()`.
+      spot has no such exponent. `shader-confirmed`, non-zero on 12/118.
+    * `faderangeoffset` is computed at runtime by `SGForwardLight::SetFromLight`
+      and never stored; see `range_offset()`. `inferred`.
     * `lightmask` / `scenemask` / `visindex` / `qualitylevel` are per-receiver
       and per-scene-set gating with no Blender analogue -- a light with
       `lightmask == 2` lights only receivers carrying bit 1, so importing every
-      light over-lights.
-    * `attenuation.w` is unresolved (== .z on 107/118, differs on 11).
+      light over-lights. `shader-confirmed` (lightmask), `name-only` (the rest).
+    * `attenuation.w` is RESOLVED -- it is `maxfadedistance` and it now drives
+      `range_offset()`. It stays in this dict only as the raw operand of a
+      derived value, under its real name.
     * absolute exposure: the game auto-exposes and tonemaps these HDR values, so
       only RATIOS are meaningful. Calibrate Film Exposure once per level.
     """
@@ -729,7 +794,7 @@ def not_derivable(rec: LightRecord) -> dict:
         "visindex": rec.visindex,
         "qualitylevel": rec.qualitylevel,
         "shadowqualitylevel": rec.shadowqualitylevel,
-        "attenuation_w": rec.attenuation[3],
+        "attenuation_maxfadedistance": rec.maxfadedistance,
         "affects_diffuse": rec.affects_diffuse,
         "affects_specular": rec.affects_specular,
         "lightshaft_intensity": rec.lightshaft["intensity"],
@@ -738,9 +803,9 @@ def not_derivable(rec: LightRecord) -> dict:
 
 
 def range_offset_divergence(rec: LightRecord, fraction: float = 0.5):
-    """Quantify the ONE systematic brightness error: the engine subtracts
-    `faderangeoffset` so attenuation reaches exactly 0 at the range, and Blender
-    has no such term.
+    """Quantify the ONE systematic brightness error (docs/LIGHTING.md
+    §4.5): the engine subtracts `faderangeoffset` so attenuation reaches exactly
+    0 at the range; Blender has no such term.
 
     Returns `(game_over_blender, blender_over_game)` at `fraction * range`.
     For the physical case (`attenmethod == 2`) at half range the engine is at
@@ -748,7 +813,7 @@ def range_offset_divergence(rec: LightRecord, fraction: float = 0.5):
         game/blender  = 0.75  -> the game is 25 % DIMMER than the import
         blender/game  = 1.333 -> the import is 33 % BRIGHTER than the game
     `use_custom_distance` + `cutoff_distance = range` clips the tail but does not
-    fix the shape.
+    fix the shape. `shader-confirmed` formula, `inferred` offset.
     """
     if rec.lighttype == eDirectionalLight:
         return 1.0, 1.0

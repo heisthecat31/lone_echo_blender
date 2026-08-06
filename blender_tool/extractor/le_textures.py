@@ -1,7 +1,7 @@
 """le_textures — extract referenced DDS textures out of an archive by hash.
 
 Stage-1 helper for the Blender tool's M2 material pipeline. Thin wrapper over the
-texture extractors: given a set of CGTextureResource name
+proven texture extractors in `scripts/`: given a set of CGTextureResource name
 hashes, pull each one's DDS out of an archive and write `<out_dir>/<hash>.dds`.
 
 Delegates to `le_cross_archive_texture.extract_from_archive`, which
@@ -11,8 +11,8 @@ handles BOTH storage forms the engine uses:
     the global streaming packfile; the DDS is rebuilt from STextureStreamData +
     a synthesized header.
 
-Most shared character/prop textures are streaming, so the inline-only
-path alone yields empty stubs — hence the streaming delegation.
+Most shared character/prop textures are streaming, so the inline-only path
+alone yields empty stubs — hence the delegation.
 
 MUST run under Windows Python (Oodle is a Windows DLL). It self-loads each named
 archive's primary stream (a few MB; GPU only if an inline texture needs it).

@@ -4,38 +4,33 @@ Archive-side half of `le_mesh.lights` (which owns all decode + unit math and is
 archive-free / unit tested). This module only locates the scene payload inside a
 `CArchiveResourceWin7` primary and hands the lights table to the decoder.
 
-⚠ Decoding lights is NOT the same as importing them. Most Lone Echo level lights
-are specular-only and sit on top of a baked lightmap; adding them all to a
-Blender scene double-lights it. The add-on's light importer is off by default and
-imports only the `eEnableDiffuse` subset. See `docs/LIGHTING.md`.
-
 OOM-SAFE BY CONSTRUCTION: it never decompresses a whole archive. It walks the
-compressed chunk table (`le_oodle.decompress_range`) and touches only
+COMPRESS chunk table (`le_oodle.decompress_range`) and touches only
   * the 40 B archive prelude,
   * the header tables at the end of the primary,
   * four 4-byte probes inside the scene (BVH sizes + the lights count),
   * the lights table itself (count * 352 B).
 A 380 MB-uncompressed level primary costs ~5 chunk decompressions.
 
-Run from the repository root with Windows Python (the Oodle runtime is a Windows
-binary), with a RELATIVE --hash-lookup (an absolute path makes `load_hash_lookup`
-return {}):
+Run from LE_ROOT with Windows Python (the Oodle DLL is a Windows binary), with a
+RELATIVE --hash-lookup (an absolute path makes `load_hash_lookup` return {}):
 
-    python.exe blender_tool\\extractor\\le_lights.py <archive-hash> ^
-        --out blender_tool\\exports\\<name>_lights.json
+    python.exe blender_tool/extractor/le_lights.py 942c829457a04a62 \
+        --out blender_tool/exports/station_front_lights.json
 
 There is also an ARCHIVE-FREE path that runs under plain `python3` and never
 opens a primary — it re-serialises an already-decoded dump (a `lights.json` of
 any version, or an ad-hoc probe dump) into the current sidecar schema, pushing
 every record back through `encode_light`/`decode_light` so the result is
-byte-consistent with the 352 B grid:
+byte-consistent with the 352 B grid. This is how `blender_tool/fixtures/
+station_front_lights.json` is built:
 
-    python3 blender_tool/extractor/le_lights.py \\
-        --from-json <decoded-dump.json> --scene <scene-name> \\
-        --out blender_tool/exports/<name>_lights.json
+    python3 blender_tool/extractor/le_lights.py \
+        --from-json <decoded-dump.json> --scene stn_ext_itc_station_front \
+        --out blender_tool/fixtures/station_front_lights.json
 
-The member walk is read out of shipped bytes: the same scene prefix parses on 28
-shipped level scenes and lands byte-exactly on the following `actors` table.
+Evidence: the member walk is `stream-confirmed` — the same prefix parses
+on 28 shipped scenes and lands byte-exactly on the actors table.
 """
 from __future__ import annotations
 
@@ -45,21 +40,12 @@ import struct
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]          # repository root
+_ROOT = Path(__file__).resolve().parents[2]          # the repository root
 for _p in (str(_ROOT / "scripts"), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 from le_mesh import lights as le_lights  # noqa: E402
-
-# Windows consoles default to cp1252 and argparse echoes this module's docstring
-# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
-# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
-        pass
 
 SCENE_TYPE = "CGSceneResourceWin7"
 
@@ -160,7 +146,7 @@ def summarise(scenes) -> dict:
     """Corpus counts the importer surfaces before it imports anything.
 
     `specular_only` is the number that would DOUBLE-LIGHT a Blender scene if
-    imported naively (see `docs/LIGHTING.md`).
+    imported naively (see docs/LIGHTING.md §0).
     """
     out = {"scenes": len(scenes), "scenes_with_lights": 0, "lights": 0,
            "by_type": {}, "enabled": 0, "diffuse_enabled": 0,
@@ -198,8 +184,7 @@ def write_lights_json(scenes, out_path: Path, archive_hash: str,
       "source":  "archive" | "<provenance>",   # how the records were obtained
       "axis":    "native",               # GAME space (Y-up); the addon applies
                                          # the +90degX basis at import time
-      "record":  "SGLightParams/352",    # the Lone Echo stride -- NOT the 360 B
-                                         # one of the later engine revision
+      "record":  "SGLightParams/352",    # r14 stride -- NOT the r15/Quest 360
       "summary": { ... }                 # see `summarise()`
       "scenes": [ { "scene_hash", "scene_name", "num_lights",
                     "lights": [ <light> ] } ]
@@ -319,7 +304,8 @@ def scenes_from_json(obj):
     and re-decodes it against the 352 B grid -- so a fixture built this way is
     guaranteed consistent with a real decode.
 
-    NO ARCHIVE IS TOUCHED.
+    NO ARCHIVE IS TOUCHED. This is the path used to build
+    `blender_tool/fixtures/*_lights.json` without re-running the extractor.
     """
     scenes = []
 
@@ -365,7 +351,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("hash", nargs="?", default=None,
-                    help="archive hash (16 hex chars); omit with --from-json")
+                    help="archive hash (e.g. 942c829457a04a62); omit with --from-json")
     ap.add_argument("--out", type=Path, default=None, help="lights.json output path")
     ap.add_argument("--hash-lookup", type=Path, default=Path("hash_lookup.json"),
                     help="RELATIVE path (absolute silently yields {})")

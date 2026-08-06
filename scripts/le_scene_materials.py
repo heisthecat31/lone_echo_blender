@@ -321,6 +321,57 @@ def decode_all_material_scalars(mat_hexes: set[str], idx: dict) -> dict[str, dic
 # Main
 # ---------------------------------------------------------------------------
 
+
+def _v1_entry(entry: dict, tex_home: dict | None = None) -> dict:
+    """Project a v2 entry down onto the legacy 11 flat fields.
+
+    DERIVED, never separately computed: v1 and v2 therefore cannot disagree.
+    `owning_archive` is the base-color texture's home archive, looked up in the
+    resolved home index; None when unknown rather than guessed.
+    """
+    spec = entry["spec"]
+    chans = spec.get("channels") or {}
+    bc = chans.get("base_color")
+    nm = chans.get("normal")
+    bc_tex = (bc or {}).get("texture")
+    owning = None
+    if bc_tex and tex_home:
+        home = tex_home.get(bc_tex)
+        owning = home[0] if home else None
+    return {
+        "matidx": entry["matidx"],
+        "shdidx": entry["shdidx"],
+        "material_hash": spec.get("material_hash") or None,
+        "mattype": int(spec.get("mattype", 0)),
+        "base_color": [float(x) for x in spec.get("base_color_factor",
+                                                  [1, 1, 1, 1])[:3]],
+        "basecolor_texture": bc_tex,
+        "basecolor_dds": ((bc or {}).get("file") or None),
+        "basecolor_role": (bc or {}).get("role_key"),
+        "normal_texture": (nm or {}).get("texture"),
+        "owning_archive": owning,
+        "double_sided": bool(spec.get("double_sided", False)),
+    }
+
+
+#: (mattype_name, blendmode_name) pairs the shipped corpus is known to use.
+#: Garbage material slices scatter across impossible combinations, so a coherent
+#: pairing is the cheap validation that cross-archive resolution landed on real
+#: bytes (orchestrator's own check).
+COHERENT_PAIRS = {
+    ("eMTAlphaTested", "eBlendOpaque"),
+    ("eMTSkirt", "eBlendSkirt"),
+    ("eMTForwardOpaque", "eBlendOpaque"),
+    ("eMTDeferredOpaque", "eBlendOpaque"),
+    ("eMTForwardTransparent", "eBlendTranslucent"),
+    ("eMTForwardTransparent", "eBlendTransparent"),
+    ("eMTTransparentPostAA", "eBlendTranslucent"),
+    ("eMTTransparentPostAA", "eBlendTransparent"),
+}
+
+CHANNEL_NAMES = ("base_color", "normal", "roughness", "specular", "emission",
+                 "blend_mask", "opacity", "transmission", "alpha")
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)

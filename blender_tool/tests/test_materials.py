@@ -99,7 +99,7 @@ def test_decode_scalars_defaults_on_short_slice():
 
 
 def test_symbol64_matches_known_hashes():
-    # reference values (from le_symbol_names.symbol64)
+    # stream-confirmed reference values (from le_symbol_names.symbol64)
     assert msc.symbol64("k_alpha") == 0x2fdcb09e52645f8b
     assert msc.symbol64("layer0_emissive_intensity") == 0x31e35f7a5feb8441
     # case-insensitive
@@ -189,13 +189,28 @@ def test_every_role_name_hashes_to_its_own_key():
     """Every INPUTNAME_ROLE entry must be a real recovered preimage.
 
     Ten entries here were once INVENTED labels marked "tentative" — none hashed to
-    its key, and the fakes changed rendering behaviour (a non-existent
-    `layer1_glass_*` family; `layer1_alpha_map`, which is OPACITY, wired to
-    Roughness). This is the guard that stops that recurring: a role name is either
-    the exact CSymbol64 preimage of its key or it does not belong in the table.
+    its key, and the fakes reached corpus/hash_lookup.json and changed rendering
+    behaviour (a non-existent `layer1_glass_*` family; `layer1_alpha_map`, which is
+    OPACITY, wired to Roughness). This is the guard that stops that recurring: a
+    role name is either the exact CSymbol64 preimage of its key or it does not
+    belong in the table.
+
+    The hash is this repository's own `scripts/le_symbol_names.symbol64`, so the
+    check needs nothing outside the checkout.
     """
+    import sys
+    from pathlib import Path as _P
+    from unittest import SkipTest
+    scripts = _P(__file__).resolve().parents[2] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    try:
+        from le_symbol_names import symbol64
+    except ImportError as exc:               # pragma: no cover
+        raise SkipTest(f"scripts/le_symbol_names.py is not importable: {exc}")
+
     bad = [(h, role) for h, (role, _conf) in mat.INPUTNAME_ROLE.items()
-           if "%016x" % msc.symbol64(role) != h]
+           if symbol64(role) != h]
     assert not bad, f"role names that are not their key's preimage: {bad}"
 
     # and no entry may still be labelled tentative

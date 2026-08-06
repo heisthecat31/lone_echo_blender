@@ -22,7 +22,7 @@ MUST run under Windows Python so le_oodle can load the game Oodle DLL:
     python.exe blender_tool/extractor/le_skeleton.py --archive 0703fd2acd5803e9 \
         --skeleton 19557c94c6d17883 --out blender_tool/exports/skel
 
-NOTE on the mesh<->skeleton link:
+NOTE on the mesh<->skeleton link (investigated against the engine's own type names):
   * CGMeshListData (the mesh resource) carries NO skeleton reference -- it is pure
     geometry (meshes/renderparams/vertex+index buffers/LOD/cbuffers). Skin indices
     are bare integers with no embedded skeleton id.
@@ -30,7 +30,7 @@ NOTE on the mesh<->skeleton link:
     (CSymbol64 @+0x00) + skelresource (CResourceInstanceT<CSkeletonResource> @+0x08).
     The anim controller and the model (SModelCD) are sibling components on the same
     actor/entity; the pairing is scene/actor-level data, NOT in the mesh archive.
-    Recovering it authoritatively requires the scene/SncaComponentData graph.
+    Recovering it authoritatively is needs-disasm (scene/SncaComponentData graph).
   * PROXY THAT WORKS: the asset pipeline co-names a skinned mesh and its skeleton --
     they share the exact CSymbol64 asset hash. Measured on archive 0703fd2acd5803e9:
     34/34 CSkeletonResourceWin7 have a same-hash CGMeshListResourceWin7 (the other
@@ -189,7 +189,7 @@ def main() -> int:
 
     # Authoritative binding provenance: scope the mesh<->skeleton link to assets a
     # CModelCR actually references (SModelCD.modelassets[]); the shared-hash co-naming
-    # stays as a safe fallback.
+    # stays as a safe fallback. [le_model_link; stream-confirmed read path]
     th = int(target, 16)
     owners = model_referenced_assets(args.archive, names)
     binding = classify_binding(th, owners, arc.meshlist_hashes)

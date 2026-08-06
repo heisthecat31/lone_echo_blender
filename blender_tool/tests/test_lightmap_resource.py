@@ -1,12 +1,13 @@
 """`CGLightMapResourceWin7` container, join and slice semantics — archive-free.
 
-Every number here was measured against a real game install and is embedded as a
-literal, so the suite runs with no Oodle, no archive and no `bpy`. The module
-docstring of `le_mesh/lightmap.py` records every count.
+Every number here was measured on shipped LE Win7 bytes on 2026-07-31 and is
+embedded as a literal, so the suite runs with no Oodle, no archive and no `bpy`.
+The full write-up is docs/LIGHTING.md.
 
-To re-derive the literals from your own copy of the game, decode the
-`CGLightMapResourceWin7` entries of archives `0703fd2acd5803e9` (a level
-interior) and `942c829457a04a62` (a level exterior) with `le_mesh.lightmap`.
+Sources of the literals:
+  * `blender_tool/exports/lightmap_probe/a8_bridge*.json`   (0703fd2acd5803e9)
+  * `blender_tool/exports/lightmap_probe/a8_station*.json`  (942c829457a04a62)
+  * `blender_tool/exports/lightmap_probe/*.dds`             (the shipped textures)
 """
 
 import struct
@@ -19,13 +20,7 @@ from le_mesh import lightmap as LM
 
 
 # ---------------------------------------------------------------------------
-# Reconstructed table records
-#
-# These are NOT game payload. Each literal is a row count, 0xff null sentinels,
-# and content hashes -- the same 16-hex asset identifiers this project has
-# published since 0.1.0. No texel, vertex, index or shader byte appears here.
-# The record layout is what the tests below assert; the hashes are what makes
-# those assertions checkable against a real install.
+# shipped bytes, verbatim
 # ---------------------------------------------------------------------------
 
 #: `942c829457a04a62` (stn_ext_itc_station_front), master CGLightMapResourceWin7
@@ -112,7 +107,7 @@ def test_station_master_row_one_names_the_five_shipped_textures():
 
 
 def test_dloc_and_poocc_are_distinct_textures():
-    """An earlier reading had these as one texture in both slots; they differ."""
+    """Corrects wave-2's 'the same texture in both slots' — they differ."""
     row = LM.parse_lightmap_table(STATION_MASTER)[1]
     assert row.dloc != row.poocc
     assert f"{row.dloc:016x}" == "bd2f79f78fb557f1"
@@ -301,7 +296,7 @@ def test_colour_slices_per_page_is_loud_when_the_ratio_is_not_whole():
 
 
 def test_colour_slices_are_page_major():
-    """page p owns [5p, 5p+5) — measured 65/65 against lobe-major's 0/65."""
+    """page p owns [5p, 5p+5) — export-validated 65/65 against lobe-major 0/65."""
     assert LM.colour_slice_indices(0, 5) == [0, 1, 2, 3, 4]
     assert LM.colour_slice_indices(7, 5) == [35, 36, 37, 38, 39]
     assert LM.colour_slice_indices(12, 5) == [60, 61, 62, 63, 64]
@@ -332,10 +327,10 @@ def test_dds_payload_arithmetic_closes_for_all_three_extracted_textures():
 # ---------------------------------------------------------------------------
 
 def test_role_name_tables_cover_every_role_exactly():
-    assert set(LM.ROLE_STRUCT_FIELD) == set(LM.ROLES)
+    assert set(LM.ROLE_PDB_FIELD) == set(LM.ROLES)
     assert set(LM.ROLE_RUNTIME_NAME) == set(LM.ROLES)
-    assert LM.ROLE_STRUCT_FIELD["dloc"] == "dlocclusionid"
-    assert LM.ROLE_STRUCT_FIELD["poocc"] == "poocclusionid"
+    assert LM.ROLE_PDB_FIELD["dloc"] == "dlocclusionid"
+    assert LM.ROLE_PDB_FIELD["poocc"] == "poocclusionid"
     assert LM.ROLE_RUNTIME_NAME["dloc"] == "dirlightocclusion"
     assert LM.ROLE_RUNTIME_NAME["poocc"] == "punctualocclusion"
     # slot 0 is a LOBE BASIS, not a plain colour map
@@ -349,7 +344,7 @@ def test_numlobes_offset_and_the_observed_value():
     assert LM.colour_slices_per_page(65, 13) == LM.OBSERVED_NUMLOBES + 1
 
 
-def test_ebasis_type_enum_matches_the_engine_struct():
+def test_ebasis_type_enum_is_the_pdb_one():
     assert LM.EBASIS_TYPE[0] == "eSH4Basis"
     assert LM.EBASIS_TYPE[2] == "eSG5Basis"
     assert len(LM.EBASIS_TYPE) == 8

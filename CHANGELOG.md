@@ -3,6 +3,181 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-08-05
+
+The material binding is read from the shader's own reflection data, roles are
+resolved corpus-wide with a policy that refuses rather than guesses, characters
+import as characters, levels can be placed, normal maps finally run on the
+tangent basis the game ships, and the suite now opens real packages instead of
+only synthetic ones.
+
+### Added
+
+- **RDEF is the binding *and* the name source** (`le_mesh/dxbc.py`). A shaderset
+  with no `SShaderInputData` array is read through its DXBC `RDEF` chunk:
+  `symbol64(rdef_name − "_decl") == textureassetid`, **74 verified / 0
+  mismatched**. This is what fixes array-less shadersets, and it recovers ASSET
+  NAMES rather than only hashes.
+- **A corpus-wide `texture_hash -> role` index** (`le_mesh/role_index.py`) with an
+  explicit unanimity policy. Over 25,694 binds / 2,194 textures, 5.41 % of
+  multiply-declared textures carry more than one role — 4.44 % differ only in the
+  layer index (benign) and 0.96 % in the suffix (real authored ambiguity).
+  **The suffix must be unanimous or nothing is applied.** Generate the index from
+  your own install with the new `scripts/le_role_index.py`; nothing is shipped.
+- **The role ladder** — array → archive → corpus → DXGI `FORMAT`, in that order,
+  with the provenance of every binding recorded per channel. 52.4 % of shadersets
+  ship no array at all, so the ladder is the common path, not the fallback.
+- **Two-lobe specular**, reproduced rather than collapsed to one.
+- **The shipped tangent basis is consumed** (`material_builder._shipped_tangent_normal`,
+  option `shipped_tangent`, default ON). Blender will not accept an authored
+  per-loop tangent — `mesh.loops[].tangent` is read-only and recomputed by
+  mikktspace from the active UV layer — so the TBN is rebuilt in shader nodes:
+  `T' = normalize(T − N·dot(N, T))`, `B = cross(N, T')·sign(w)`,
+  `out = normalize(T'·n.x + B·n.y + N·n.z)`, with an `OBJECT→WORLD` transform on
+  `T` because the stream is in mesh space and `Geometry.Normal` is world space.
+  ⛔ It **degrades and never blackens**: the old `ShaderNodeNormalMap` leg is kept
+  and mixed to wherever `length(le_tangent) < 0.5`, so an object shipping no
+  tangent renders exactly as before, per pixel.
+- **`tangent.w` is fully decoded.** It takes exactly four values (−1.0, −0.5,
+  +0.5, +1.0) over 509,266 vertices — a sign *and* a magnitude. **Sign = the
+  bitangent handedness**, agreeing with the shipped UVs on **397,082 of 397,082
+  vertices (100.00 %)**. **Magnitude tags a duplicated back-face shell**:
+  |w| = 0.5 marks a second copy of every vertex, position-identical to its
+  |w| = 1.0 partner (109,400/109,400) with an exactly negated normal (99.92 %)
+  but a negated tangent on only 65.67 % — the back shell carries its own frame.
+  A fifth value is refused loudly rather than rounded.
+- **`color1` import** on the mesh path.
+- **Character assembly** (`le_mesh/attach.py`) — a character is an actor node plus
+  NAMED components, not a mesh-list.
+- **Scene placement and the parent-level edge** (`le_mesh/scene_build.py`,
+  `le_mesh/level_link.py`), including the level → parent-level upward edge.
+- **Vista fitting** (`le_mesh/vista_fit.py`) — skydome sphere, ring plane and
+  annulus, oblate planetary body — plus `tests/vista_measure.py`, a pure-stdlib
+  report generator over extracted packages.
+- **A camera-framing solver** (`le_mesh/framing.py`).
+- **A lights sidecar schema** (`le_mesh/lights_sidecar.py`).
+- **Reflection probes** (`le_mesh/reflection_probe.py`,
+  `addon/lone_echo_import/probe_builder.py`) — `CGReflectionProbeResourceWin7`
+  decodes to selection boxes, probe points, per-probe BC6H_UF16 cube arrays and
+  DDS writers. 94 resources across 90 archives; the shipped cube is 256² with
+  9 mips. ⚠ Blender has no cube-texture image type, so the importer writes a
+  face strip and an equirect resample rather than a native cubemap, and the mip
+  chain beyond mip 0 is not surfaced.
+- **`.lescatter` package version 5**: per-instance baked lightmap stream (page +
+  per-vertex UVs) out of `SGPackedInstanceData`, opt-in behind
+  `--instance-lightmap`. Purely additive — a v1–v4 package still loads.
+- **`scripts/le_streaming_texture.py`** — the streaming-texture decode path the
+  extractor needs for shared character/prop textures, which are stubs on the
+  inline path.
+- **Tests that open real packages and run the extractor end to end**
+  (`tests/test_real_package_invariants.py`, `tests/test_extractor_e2e.py`), plus
+  a runner that **counts skips, prints every skip reason, and inventories the 25
+  scripts in `tests/` it does not execute**. A green run with silent no-ops is
+  how a real defect survived a whole cycle of green suites.
+- `tests/test_lod_ladder_hole.py` and `tests/test_shipped_tangent.py` pin the two
+  headline fixes below, and `tests/blender_tangent_probe.py` verifies the tangent
+  graph inside Blender by reading the socket layout back.
+
+### Fixed
+
+- ★ **34 tests that could not reach their data were `return`ing, which
+  `unittest` counts as PASSED.** 27 of them executed no assertion at all on a
+  clean checkout while reporting a pass. They now raise `SkipTest` naming the
+  missing artefact and the command that produces it. ⚠ **The clean-checkout pass
+  count therefore FELL, 942 → 905, with nothing removed and nothing broken** —
+  962 tests either way, 0 failed either way. The suite stopped claiming coverage
+  it did not have.
+
+- **Character LOD was three systems, not one.** `SSceneSetMask` bit N == level N
+  is false on 4 of 12 roster mesh-lists, where the bits partition the body in
+  SPACE rather than by detail. Reading them as an LOD chain deleted a character's
+  left arm and hands. A refusal heuristic now draws EVERYTHING when the sets are
+  not a geometric chain — over-draw is visible and reversible; a missing limb is
+  silent.
+- ★ **Every normal map had an inverted green channel.** The importer flips V for
+  Blender, which inverts Blender's UV-derived bitangent: `loop.bitangent_sign`
+  agreed with the shipped `sign(tangent.w)` on **0.0–0.8 % of loops** on 11 of 13
+  measured meshes. The shipped basis never consults the UV derivative, so
+  consuming it removes the inversion at the source. Measured A/B on a character
+  portrait: **18.837 % of pixels differ, 5.706 % by more than 8/255**, against a
+  re-render noise floor of **0.0062 %**; a flat decal sheet moves **0.003 %**,
+  which is at the floor — the asymmetry the fix predicts.
+- ★ **A sparse LOD ladder selected nothing** (was listed as a known limitation of
+  this release and is fixed in it). `2fd6839161785e9c_ff91757c910ea7b6` (Liv's
+  body) partitions its six meshes into levels `{0, 3}`, so levels 1 and 2 fell in
+  a HOLE *between* the rungs and imported nothing at all — the whole character
+  disappeared. `package_reader.snap_to_ladder` is now the single rule, shared by
+  `select_lod_objects` and `select_lod_draws`: **snap DOWN to the greatest present
+  rung `<= level`, and snap UP to the finest rung only from below the ladder.**
+  Levels 1–2 now select **5 of 6** meshes, was **0 of 6**.
+  ⚠ The "nearest rung by distance" fix previously written down here was the
+  **wrong** rule — on a `{0, 3}` ladder it answers level 2 with rung 3, a coarser
+  model than was asked for.
+- LOD selection returned the empty set when the finest scene set was not bit 0.
+- A mesh in no scene set vanished at every level >= 1.
+- Scene-set VARIANT draws (byte-identical index range, different set) were both
+  emitted, putting tens of thousands of co-planar duplicate triangles on a model.
+- **The lightmap UV set is resolved by semantic SLOT, not by the literal
+  `"uv1"`** — the corpus has 64 objects on `uv2` and 29 on `uv3`, and the
+  hardcoded name was wrong on every one of them.
+- **`attenuation.w` is `maxfadedistance`, not a second cull radius.** The range
+  stays `attenuation.z`; only the fade-offset term moves. The two differ on 11 of
+  118 shipped lights, which is the only shape that can tell them apart.
+- Materials, mesh and scatter builders no longer disagree about which draw owns
+  which face on multi-material meshes with scene-set variants.
+
+### Changed
+
+- Add-on version is now `0.4.0`, and its menu entry covers `.lemesh`,
+  `.lescatter` and `.json` lights.
+- Optional scan inputs are consistently located through `LONE_ECHO_SCAN_ROOT`.
+- The role tables, the material scalars vocabulary and the texture-role suffix
+  list all move behind the role ladder; a role only reaches a Principled channel
+  if its suffix is in the curated `CHANNEL_ROLE_SUFFIXES` list.
+- ★ **The evidence vocabulary is defined, and reduced to seven tags.** This
+  repository annotates claims with provenance tags, and until now none of them
+  were defined anywhere public. [docs/FORMATS.md](docs/FORMATS.md) now defines
+  exactly seven — `stream-confirmed`, `corpus-confirmed`, `shader-confirmed`,
+  `name-confirmed` / `name-only`, `engine-confirmed`, `export-validated`,
+  `inferred` — and every site in the tree conforms to them. Tags that named the
+  private reverse engineering rather than the finding are gone; in particular
+  `decl-confirmed` / `decl-only`, which no published release ever used, are
+  replaced by `name-confirmed` / `name-only`, which say the same thing without
+  naming where the declarations were read.
+- ★ **The repository cites the engine by its own symbol names — `kLambdaSG5`,
+  `CGVertexFormat::EUsage`, `NRadEngine::EBlendMode` — and never by a path or
+  line number into a source tree, a debug header or a disassembly listing.**
+  That was already the convention of 0.1.0–0.3.0, which contain zero citations of
+  that class; it is now written down and enforced. `scripts/scrub_gate.py` gains
+  two rules, `engine-source` and `vcs-ref`, both calibrated to **0 findings on
+  published 0.3.0**.
+
+### Deferred to 0.5.0
+
+- **The exterior vista's shading model.** The skydome, ring plane and planetary
+  body are fitted and import (`le_mesh/vista_fit.py`); reproducing what the
+  engine's own shaders do to them is not finished, and the module that exists
+  would ship a set of constants that are a verbatim second copy of a shipped
+  shader's literals. Held, with its tests and its harness, rather than shipped
+  half-ratified. See [docs/TESTING.md](docs/TESTING.md) §5.1.
+
+### Known limitations
+
+- **`eBlendTranslucent` is not implemented.**
+- **A duplicated back-face shell is drawn.** Character meshes ship two shells and
+  the importer emits both, because nothing has yet established whether the engine
+  draws both or culls one. It is now *detectable* — every mesh records
+  `le_tangent_w_states` and `le_tangent_w_has_back_shell` — rather than invisible.
+- **19 of 44 audited materials drop an authored layer.** 18 are provably
+  invisible; **1 is not**.
+- **Reflection-probe mips.** Blender has no cube-texture image type, so only
+  mip 0 of each face reaches a material; the roughness-varying prefilter the
+  probe stores is decoded and written to DDS but not wired.
+- **`.lescatter` imports still carry base colour + normal only** on the material
+  path; the v5 per-instance lightmap stream is extracted but not auto-wired.
+- The specular residual against the engine's Burley-remapped GGX visibility is
+  unchanged from 0.3.0 and is not fixable by wiring.
+
 ## [0.3.0] - 2026-08-01
 
 Materials reach the renderer on the `.lemesh` path, cross-archive resolution stops

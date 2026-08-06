@@ -7,8 +7,8 @@ Decodes EVERY CGMaterialResourceWin7 in one archive and reports:
     (k_alpha / k_alpha_threshold / k_emissive_scale / k_refractive_index / ...)
   * every material whose alpha, emissive or blend state is non-default
 
-MUST run under Windows Python (the Oodle runtime is a Windows binary) from the
-repository root:
+`--archive` MUST run under Windows Python (Oodle DLL) from the
+the repository root:
 
     python.exe blender_tool/tests/audit_material_modes.py --archive 0703fd2acd5803e9
     python.exe blender_tool/tests/audit_material_modes.py --archive 0703fd2acd5803e9 --tsv out.tsv
@@ -22,11 +22,11 @@ stdlib, loads no archive, and is therefore safe to run any time:
     python3 blender_tool/tests/audit_material_modes.py \
         --fixtures blender_tool/exports/fixtures_mat
 
-The name vocabulary is the game's own authored material-parameter vocabulary and
-lives in `le_mesh.material_scalars`, so this tool needs nothing but the archive.
-Every name is a VERIFIED CSymbol64 preimage: a candidate is only ever accepted
-for a hash when `symbol64(name)` reproduces that hash exactly (locked by
-`tests/test_transparency.py`).
+The name vocabulary is recovered from the engine's own ubermaterial and its
+material asset schema and lives in `le_mesh.material_scalars`, so this tool
+needs nothing but the archive. Every
+name is a VERIFIED CSymbol64 preimage: a candidate is only ever accepted for a
+hash when symbol64(name) reproduces that hash exactly.
 """
 
 from __future__ import annotations
@@ -38,33 +38,25 @@ from pathlib import Path
 
 THIS = Path(__file__).resolve()
 BLENDER_TOOL = THIS.parents[1]
-REPO_ROOT = THIS.parents[2]
-for _p in (str(BLENDER_TOOL), str(REPO_ROOT / "scripts")):
+LE_ROOT = THIS.parents[2]
+for _p in (str(BLENDER_TOOL), str(LE_ROOT / "scripts")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 from le_mesh import material_scalars as msc   # noqa: E402
 
-# Windows consoles default to cp1252 and argparse echoes this module's docstring
-# on --help, so any non-ASCII in it raises UnicodeEncodeError the moment stdout
-# is not a console (a pipe, a redirect, CI). Force UTF-8 on the streams we own.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):   # already-wrapped or non-reconfigurable
-        pass
-
 # The enum tables and the authored-parameter vocabulary now live in
 # `le_mesh.material_scalars` so the decoder itself can emit `mattype_name` /
 # `blend_mode_name` / `named_scalars_resolved`.  Re-exported here so this audit
 # tool (and the tests that read `amm.MATTYPE_NAMES`) keep working unchanged.
-MATTYPE_NAMES = msc.MATTYPE_NAMES          # CGMaterial::EMaterialType
-BLENDMODE_NAMES = msc.BLENDMODE_NAMES      # EBlendMode
+MATTYPE_NAMES = msc.MATTYPE_NAMES          # `name-confirmed`: CGMaterial::EMaterialType
+BLENDMODE_NAMES = msc.BLENDMODE_NAMES      # `name-confirmed`: NRadEngine::EBlendMode
 
-# --- authored parameter vocabulary ------------------------------------------
-# Re-exported from le_mesh.material_scalars, where the regenerated lists now
-# live. The regeneration added the non-layer parameter GROUPS
-# (pom_/blood_/scorch_/cutting_) — the axis that recovered `pom_height_map`.
+# --- authored parameter vocabulary (ubermaterial + material asset schema) ---
+# Re-exported from le_mesh.material_scalars, where the name-derived lists now
+# live (they were regenerated straight out of the engine's own declarations,
+# which added the non-layer `[PREFIXPROPERTY]` groups pom_/blood_/scorch_/
+# cutting_ — the axis that recovered `pom_height_map`).
 GLOBAL_PARAMS = msc.GLOBAL_PARAMS
 LAYER_PARAMS = msc.LAYER_PARAMS
 GROUP_PARAMS = msc.GROUP_PARAMS
@@ -146,7 +138,7 @@ def report(rows: list[dict], name_table: dict[int, str]) -> None:
         for h, n in unknown.most_common(20):
             print(f"  {n:5d}  {h}")
 
-    # per-layer emissive knobs + the layer-selection error
+    # per-layer emissive knobs + the layer-selection error (B4)
     print("\nper-layer emissive_intensity distribution")
     per_layer = collections.defaultdict(collections.Counter)
     for r in rows:
@@ -222,8 +214,8 @@ def report_fixtures(mats: list[dict], name_table: dict[int, str]) -> None:
         vals = sorted({round(v, 6) for v in byname[nm]})
         print(f"  {len(byname[nm]):3d}  {nm:34s} {vals}")
 
-    # the emissive layer-selection error, measured
-    print("\nlayer-selection check (routed emissive map vs flat emissive_intensity)")
+    # the layer-selection error, measured
+    print("\nB4 layer-selection check (routed emissive map vs flat emissive_intensity)")
     mismatch = 0
     checked = 0
     for m in decoded:

@@ -56,7 +56,10 @@ def test_manifest_shape_and_contract(tmp_path):
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     assert manifest["format"] == PACKAGE_FORMAT == "le_scatter"
-    assert manifest["version"] == PACKAGE_VERSION == 3
+    # v5 == the per-instance baked lightmap stream, on top of v4's uv1 blob +
+    # CGMeshData lightmap ids + master lightmap binding (purely additive at every
+    # step; see le_scene_extract.PACKAGE_VERSION).
+    assert manifest["version"] == PACKAGE_VERSION == 5
     assert manifest["master"] == "942c829457a04a62"
     assert manifest["axis"] == "native"
     assert manifest["num_meshes"] == 2
@@ -149,7 +152,7 @@ def test_draws_roundtrip_multidraw(tmp_path):
         proxy=False)
     pkg = write_package(tmp_path / "md.lescatter", "H", [mesh], [])
     manifest = json.loads((pkg / "manifest.json").read_text())
-    assert manifest["version"] == 3
+    assert manifest["version"] == 5
 
     m0 = manifest["meshes"][0]
     # top-level pair stays draw[0] (back-compat)

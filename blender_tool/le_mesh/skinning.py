@@ -4,30 +4,30 @@ Pure stdlib (struct only). No Oodle, no bpy. Testable with synthetic bytes and
 importable unchanged inside Blender's Python.
 
 ------------------------------------------------------------------------------
-ON-DISK SERIALIZATION
+EVIDENCE / how this was established
 ------------------------------------------------------------------------------
-The CSkeletonData struct describes an in-*memory* image
+The CSkeletonData struct, as the engine's own type names describe it, is an in-*memory* image
 (name@0x00, usageoffsets CTable@0x08, bindpose SAnimPoseData@0x40, jointhierarchy
 CTable<SSkeletonJoint>@0x160, jointlookup CMap@0x3a8, ...). Those fixed offsets do
 **NOT** match the on-disk archive slice: the resource is serialized as a *stream*
 (counts + inline data, like CGMeshListData), and every CTable's data lives in an
-appended region rather than at its struct offset. On disk each
-`CSkeletonResourceWin7` slice serializes as:
+appended region rather than at its struct offset. This was confirmed by decoding
+34 real `CSkeletonResourceWin7` slices from archive 0703fd2acd5803e9:
 
-  * `name` (CSymbol64, u64 @ +0x00) matches the resource name hash.
+  * `name` (CSymbol64, u64 @ +0x00) matches the resource name hash.            [stream-confirmed]
   * jointlookup is serialized as: u32 count; {u64 name; u32 index; u32 pad=0}[count],
-    where `index` is a permutation of [0,count) -> gives joint name-by-index.
+    where `index` is a permutation of [0,count) -> gives joint name-by-index.   [stream-confirmed, 29/34 slices]
   * jointhierarchy is serialized as: u32 count; SSkeletonJoint[count] (0x18 each:
     u64 name; u32 parent; u32 firstchild; u32 nextsibling; u32 flags), with
     0xFFFFFFFF meaning "none". Where present it forms a valid forest AND its
-    per-index names agree with jointlookup.
+    per-index names agree with jointlookup.                                     [stream-confirmed on the target + several slices]
   * bind pose is serialized as: u32 count; CTransfQ[count] (0x20 each: quaternion
     r[4] x,y,z,w; C3Vector t[3]; float s). The right run has ~unit quaternions
-    and count == joint count; these are LOCAL (parent-relative) transforms.
+    and count == joint count; these are LOCAL (parent-relative) transforms.     [stream-confirmed on the target]
 
 Because the exact *field order* / interleave of the full stream (usageoffsets,
 CTableXT jointgroups, the many CMaps, CMemBlockAttach object/inv-object joints,
-etc.) is undocumented, this module does NOT walk the
+etc.) is undocumented and would need disassembly, this module does NOT walk the
 stream positionally. Instead it **scans** the slice for each of the three
 self-validating tables above and cross-checks them. That is robust to the parts
 we cannot yet frame, and degrades cleanly (name-only) on slices where a table is
@@ -37,17 +37,18 @@ objectjoints / invobjectjoints (CMemBlockAttach objectjoints @CSkeletonData+0x1e
 invobjectjoints @+0x200) ARE now decoded. They do NOT hold raw 3x4/4x4 matrices:
 each serializes as a `CMemBlockAttach` framed as `u32 size_bytes; CTransfQ[N]`
 (N == jointhierarchy count, CTransfQ = 0x20: quat r[4], C3Vector t[3], float s).
-The two blocks are adjacent in the stream:
+The two blocks are adjacent in the stream. Cross-validated on 5 full skeletons of
+archive 0703fd2acd5803e9 (byte-exact, max abs diff 0.000000):
   * objectjoints[i]    == FK accumulation of the LOCAL bind transforms down the
-    parent chain  (object/model-space bind pose).
+    parent chain  (object/model-space bind pose).                    [stream-confirmed]
   * objectjoints[i] @ invobjectjoints[i] == identity, i.e. invobjectjoints is the
     matrix inverse of objectjoints -> the classic per-joint INVERSE-BIND matrix
-    used for skinning.
+    used for skinning.                                               [stream-confirmed]
 So `object_bind` (object-space rest, row-major 4x4) and `inverse_bind` (the
 inverse-bind, row-major 4x4) are emitted per joint when present. They appear only
 where a real jointhierarchy is serialized (never for names-only skeletons).
 
-STILL not decoded (intentionally omitted): joint groups
+STILL not decoded (needs-disasm, intentionally omitted): joint groups
 (CTableXT<SSkeletonGroup>), channel/alias tables. Non-uniform-scale bind
 (transformsnu CTransfQS 0x30, per-axis scale) OCCURS in 20/57 archives (5 shared skeletons;
 `3eff95282bf0807f` fully non-uniform) per the 2026-07-23 corpus scan, and is NOT decoded
@@ -91,7 +92,7 @@ class Joint:
     s: float = 1.0                    # uniform scale
     # object/model-space rest transform (objectjoints) and its inverse
     # (invobjectjoints), each a row-major 4x4 flattened to 16 floats. None until
-    # the object matrix blocks are located + cross-validated.
+    # the object matrix blocks are located + cross-validated. [stream-confirmed]
     object_bind: tuple | None = None
     inverse_bind: tuple | None = None
 
@@ -186,7 +187,7 @@ def _find_jointlookup(blob: bytes):
     permutation of [0,count). Returns (count, {index: name_hash}) or None.
 
     Picks the largest such map (the joint lookup; smaller ones are camera/rig
-    lookups).
+    lookups). [stream-confirmed]
     """
     best = None
     n = len(blob)
@@ -246,7 +247,7 @@ def _valid_forest(records) -> bool:
 
 def _find_jointhierarchy(blob: bytes):
     """Find `u32 count; SSkeletonJoint[count]` forming a valid forest.
-    Returns (count, [(name,parent,fc,ns,flags), ...]) or None.
+    Returns (count, [(name,parent,fc,ns,flags), ...]) or None. [stream-confirmed]
     """
     best = None
     n = len(blob)
@@ -267,7 +268,7 @@ def _find_jointhierarchy(blob: bytes):
 
 def _find_bindpose(blob: bytes, joint_count: int):
     """Find `u32 count; CTransfQ[count]` with count == joint_count and (nearly)
-    unit quaternions. Returns list[(r, t, s)] or None.
+    unit quaternions. Returns list[(r, t, s)] or None. [stream-confirmed]
     """
     if joint_count <= 0:
         return None
@@ -345,7 +346,7 @@ def _read_transfq(blob: bytes, o: int):
 def _find_transfq_size_blocks(blob: bytes, joint_count: int):
     """Find CMemBlockAttach blocks framed as `u32 size_bytes; CTransfQ[joint_count]`
     where `size_bytes == joint_count * 0x20` and every quaternion is ~unit. Returns
-    a list of (data_offset, [(r,t,s), ...]).
+    a list of (data_offset, [(r,t,s), ...]). [stream-confirmed]
 
     The leading u32 is the *byte size* (joint_count*0x20), which distinguishes these
     from the bind-pose `transforms` table (whose leading u32 is the element *count*).
@@ -381,6 +382,7 @@ def _find_object_matrices(blob: bytes, joint_count: int):
     Accept the first adjacent pair for which object[i] @ inverse[i] == identity (the
     defining property of an inverse-bind pair). Returns (object_mats, inverse_mats)
     as parallel lists of row-major 4x4 (16-float) matrices, or (None, None).
+    [stream-confirmed on 5 full skeletons of 0703fd2acd5803e9]
     """
     blocks = _find_transfq_size_blocks(blob, joint_count)
     if len(blocks) < 2:
@@ -410,6 +412,7 @@ def _disk_pose_counts(blob: bytes):
 
     `jh` (jointhierarchy count) makes the names-only verdict authoritative: where it is
     0 the hierarchy is genuinely *absent* on disk (not merely unmatched by the scanner).
+    [stream-confirmed: byte-exact jointhierarchy offset on every full skeleton.]
     """
     try:
         n = len(blob)
@@ -510,7 +513,7 @@ def decode_skeleton(blob: bytes) -> Skeleton:
             f"NON-UNIFORM JOINT SCALE PRESENT: bindpose.transformsnu.count == "
             f"{pose_counts[2]} (CTransfQS 0x30, per-axis scale); the importer decodes "
             f"only the uniform CTransfQ approximation, so per-axis LOCAL scale is "
-            f"DROPPED (only the uniform approximation is imported).")
+            f"DROPPED [gate CSkeletonData.nonuniformjointscale@+0x1d8, name-only]")
     elif pose_counts is None:
         skel.notes.append(
             "transformsnu status UNKNOWN (positional pose walk inconclusive); relying "
@@ -523,7 +526,8 @@ def decode_skeleton(blob: bytes) -> Skeleton:
         if disk_jh == 0:
             skel.notes.append(
                 "jointhierarchy.count == 0 on disk: no hierarchy/bind pose is "
-                "serialized in this resource; names-only is authoritative")
+                "serialized in this resource; names-only is authoritative "
+                "[stream-confirmed]")
         elif disk_jh is not None and lookup is not None and 0 < disk_jh < lookup_n:
             skel.notes.append(
                 f"a smaller {disk_jh}-joint hierarchy IS serialized (< {lookup_n} "
@@ -568,7 +572,8 @@ def decode_skeleton(blob: bytes) -> Skeleton:
             j.object_bind = object_mats[i]
             j.inverse_bind = inverse_mats[i]
         note = ("object/inverse-bind matrices decoded (objectjoints + "
-                "invobjectjoints, CTransfQ blocks); object[i]@inverse[i]==I")
+                "invobjectjoints, CTransfQ blocks); object[i]@inverse[i]==I "
+                "[stream-confirmed]")
         # extra corroboration when a local bind pose + hierarchy are also present
         if skel.has_bindpose and skel.has_hierarchy:
             local = [_mat_from_transfq(j.r, j.t, j.s) for j in skel.joints]

@@ -34,48 +34,83 @@ Both import operators expose a **LOD Level** option; see [docs/LOD.md](docs/LOD.
 ## Status — what works, and what does not
 
 Be clear-eyed about this before you start: the value here is the tooling and the
-dead ends already ruled out, not a claim that everything works.
+dead ends already ruled out, not a claim that everything works. The open defects
+are named below, not buried.
 
 | | state |
 | --- | --- |
-| Geometry, UVs, vertex colors, tangents, skin weights | **works** |
+| Geometry, UVs, vertex colors, **tangents**, **`color1`**, skin weights | **works** |
 | Skeletons / armatures | **works** |
+| **Character assembly** (actor node + named components) | **works** — new in 0.4.0 |
 | Whole-level scatter placement (linked duplicates) | **works** |
+| **Scene placement / level link** | **works** — new in 0.4.0 |
 | Multi-material meshes (one slot per draw) | **works** |
-| **LOD selection**, both systems | **works** — new in 0.2.0 |
+| **LOD selection**, all three systems | **works** — the third is new in 0.4.0 |
 | Base color + normal maps (incl. BC5 normal reconstruction) | **works** |
-| **Transparency, emission, specular/F0, roughness+AO, layer blend masks** | **works on `.lemesh`** — new in 0.3.0 |
+| **Material binding through the shader's RDEF** | **works** — new in 0.4.0 |
+| **Corpus-wide role resolution with a refusal policy** | **works** — new in 0.4.0 |
+| Transparency, emission, specular/F0, roughness+AO, layer blend masks | **works on `.lemesh`** |
 | The same, on `.lescatter` whole-level imports | ⚠ **still base colour + normal only** |
-| **Scene lights** | **imported — off by default**, `eEnableDiffuse` subset — new in 0.3.0 |
-| Baked lightmaps | **decoded, not auto-wired** |
+| **Scene lights** | **imported — off by default**, `eEnableDiffuse` subset |
+| Baked lightmaps (resource + per-instance stream) | **decoded, not auto-wired** |
+| **Reflection probes** | **decoded and written as DDS; only mip 0 reaches a material** |
+| **Normal maps on the shipped tangent basis** | **works** — new in 0.4.0, and it *fixed an inverted green channel on every normal map* |
+| `eBlendTranslucent` | ⛔ **not implemented** |
+| A duplicated back-face shell on characters | ⚠ **decoded and drawn; nothing has decided whether it should be** |
+| The exterior vista's own shading model | ⚠ **deferred to 0.5.0** — see below |
 
-Four of those deserve to be spelled out.
+Seven of those deserve to be spelled out.
 
-**Materials are wired on the `.lemesh` path, not the `.lescatter` one.** An
-end-to-end audit found **nine breaks** in the decoder → manifest → builder → EEVEE
-chain. Two were fixed in 0.2.0 and five more in 0.3.0; the remaining two are both
-in the scatter sidecar, which still writes only base colour and normal. See
+**Normal maps were running on the wrong tangent basis — all of them.** The
+shipped `tangent` stream is decoded on **913 of 913** objects and, until 0.4.0,
+was read by nothing. Because the importer flips V for Blender, Blender's derived
+bitangent agreed with the shipped handedness on **0.0–0.8 % of loops**, which
+inverts the green channel of every tangent-space normal map. 0.4.0 rebuilds the
+TBN from the shipped basis in shader nodes and mixes to the old leg wherever the
+stream is absent, so a mesh that ships no tangent renders exactly as before, per
+pixel. See [docs/MATERIALS.md](docs/MATERIALS.md).
+
+**`eBlendTranslucent` is unimplemented.** Materials that declare it fall back to
+the nearest supported pass, which is visibly wrong on the surfaces that use it.
+
+**The exterior vista's shading is deferred.** The skydome, ring plane and
+planetary body are *fitted* (`le_mesh/vista_fit.py`) and import. Reproducing what
+the engine's own shaders do to them is a separate piece of work that is not
+finished and, in the form it currently exists, would ship a module whose constants
+are a verbatim copy of a shipped shader's literals. Held for 0.5.0 — see
+[docs/TESTING.md](docs/TESTING.md) §5.1 for the rule that decided it.
+
+**19 of 44 audited materials drop an authored layer.** 18 of those drops are
+provably invisible — the layer's blend mask pins it at its OFF extreme, so
+nothing it contributes could reach the frame. **One is not**, and that one is a
+real, unexplained loss of authored content.
+
+**Reflection probes have no cube path in Blender.** The probe resource decodes
+completely (selection volumes, probe points, per-probe BC6H_UF16 cube arrays,
+the per-mip normalisation scalars) and the cubes are written out as DDS. But
+Blender has **no cube-texture image type**, so the importer can only offer a
+six-face strip and an equirectangular resample, and only mip 0 of each face
+reaches a material. The roughness-varying prefilter the probe exists to provide
+is decoded and unused.
+
+**Materials are wired on the `.lemesh` path, not the `.lescatter` one.** The
+scatter sidecar still writes only base colour and normal. See
 [docs/MATERIALS.md](docs/MATERIALS.md).
-
-**Materials and textures do not live in the archive that binds them.** Shadersets
-are 100 % resident, but 88 of 115 texture bindings are external on one reference
-archive, and materials are only ~19 % resident. A resolver that assumes local
-fails *silently*. 0.3.0 fixes it with two corpus-wide indexes you generate once
-from your own game data — see [Build the corpus indexes](#build-the-corpus-indexes-once).
-Without them the extractor still runs, but it warns loudly and finds far less.
 
 **Lights are imported, but off by default.** Most Lone Echo level lights are
 **specular-only** (of 118 decoded records only 49 carry `eEnableDiffuse`; on one
 47-light level only 15 do) and they sit on top of a **baked** lightmap this tool
-does not auto-wire — 86 of the 87 lit shaders bind both paths. Blender has neither,
-so importing them all **double-lights the scene**, measured at **7.06× brighter**.
-The importer therefore ships off, and when enabled it defaults to the
+does not auto-wire — 86 of the 87 lit shaders bind both paths. Blender has
+neither, so importing them all **double-lights the scene**, measured at **7.06×
+brighter**. The importer therefore ships off, and when enabled it defaults to the
 `eEnableDiffuse` subset. See [docs/LIGHTING.md](docs/LIGHTING.md).
 
-**The baked lightmap is decoded but not joined up.** The resource, the mesh binding
-and the node graph all exist and are tested; nothing calls them automatically yet.
-It is an **SG5 array** — 13 pages × 5 lobes, `slice = page*5 + i` — and Blender
-exposes only slice 0 of an array DDS, so the importer splits the slices itself.
+**Materials and textures do not live in the archive that binds them.** Shadersets
+are 100 % resident, but 88 of 115 texture bindings are external on one reference
+archive, and materials are only ~19 % resident. A resolver that assumes local
+fails *silently*. Two corpus-wide indexes you generate once from your own game
+data fix it — see [Build the corpus indexes](#build-the-corpus-indexes-once).
+Without them the extractor still runs, but it warns loudly and finds far less.
 
 ## How it works
 
@@ -103,7 +138,8 @@ folder of JSON and raw binary blobs that anyone can inspect, archive, or re-impo
 
 **For the add-on (Stage 2):**
 
-- Blender **4.1 or newer** (validated on 5.1).
+- Blender **4.1 or newer** (0.4.0 was installed from its own built zip and
+  verified importing both package kinds on **5.1.1**).
 - Nothing else. The add-on is self-contained — no extractor and no external
   packages are needed to import a `.lemesh` or `.lescatter` package.
 
@@ -159,9 +195,11 @@ your data and are not shipped** — generate them once from your own install:
 ```bat
 python.exe scripts\le_texture_archive_index.py
 python.exe scripts\le_material_archive_index.py
+python.exe scripts\le_role_index.py
 ```
 
-They write `texture_archive_index.tsv` and `material_archive_index.tsv` into
+They write `texture_archive_index.tsv`, `material_archive_index.tsv` and
+`role_index.tsv` into
 `%LONE_ECHO_SCAN_ROOT%`. Each decompresses every archive **primary** in turn (the
 much larger GPU files are never touched); run them one at a time. `--priority-only`
 builds a fast partial index from the shared/master archives first.
@@ -289,9 +327,26 @@ Run the archive-free core test suite (no game data required):
 python3 blender_tool/tests/run_tests.py
 ```
 
-398 tests, none of which need game data, an archive, Oodle, or Blender. Several
-sweep an optional fixture export under `blender_tool/exports/` and skip themselves
-when it is absent.
+On a clean checkout — no game data, no archive, no Oodle, no Blender — this is
+**905 passed, 0 failed, 57 skipped** (962 tests over 52 modules).
+
+⚠ **Read the skips, not the count.** They are printed with a reason at the end of
+every run, and each one names what it could not reach and how to enable it. A skip
+here means an assertion did **not** execute: every one of the 57 is a test that
+opens a real extracted package, reads a generated sidecar, or runs the extractor
+end to end, and they can only run once you have extracted something from your own
+copy of the game. With a local export present the same suite runs **915 passed,
+0 failed, 47 skipped**.
+
+⛔ **This number went *down* in 0.4.0, and that is the point.** 27 tests used to
+`return` when their data was absent, which `unittest` counts as **PASSED**. They
+now raise `SkipTest` with the missing artefact named and the command that
+produces it. Nothing was removed and nothing broke; the suite simply stopped
+claiming coverage it did not have. See [docs/TESTING.md](docs/TESTING.md) §2.
+
+The runner also **inventories the 25 scripts in `tests/` that it does not run** —
+the `blender_*` render probes and the `audit_*` corpus audits. Their coverage is
+not included in the counts above, and the runner says so on every run.
 
 Two read-only **corpus audits** re-derive the LOD findings against your own copy of
 the game data, and one does the same for material transparency/emissive state. They
@@ -304,20 +359,33 @@ python.exe blender_tool\tests\audit_lod_fields.py
 python.exe blender_tool\tests\audit_material_modes.py --archive <hash>
 ```
 
-Before publishing any change, run the scrub gate over the tracked tree:
+Before publishing any change, run the scrub gate:
 
 ```bash
-python3 scripts/scrub_gate.py
+# the literals are supplied at run time and stored in no file — a gate that
+# embeds the string it hunts for IS the leak once it is published
+export SCRUB_PRIVATE_LITERALS="<your username>,<your private repo names>"
+python3 scripts/scrub_gate.py --self-test
+python3 scripts/scrub_gate.py --require-literals \
+        --paths $(git ls-files -c -o --exclude-standard)
 ```
+
+⚠ **A bare `python3 scripts/scrub_gate.py` scans only *tracked* files.** Files
+you have added but not yet staged are invisible to it, so a release run that
+skips `--paths` can report PASS while ignoring everything new. Pass the
+tracked-plus-untracked set explicitly, as above.
 
 ## Documentation
 
 | | |
 | --- | --- |
-| [docs/FORMATS.md](docs/FORMATS.md) | The `.lemesh` and `.lescatter` package formats, field by field. |
-| [docs/LOD.md](docs/LOD.md) | Both LOD systems, the numbers, and the caveats. |
+| [docs/FORMATS.md](docs/FORMATS.md) | The `.lemesh` and `.lescatter` package formats field by field, the package versions, and the evidence tags this repository annotates its claims with. |
+| [docs/LOD.md](docs/LOD.md) | The three LOD systems, the numbers, and the caveats. |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | What materials carry, and exactly where the chain to the renderer breaks. |
-| [docs/LIGHTING.md](docs/LIGHTING.md) | The light record, the unit conversion, why the importer is off by default, and the baked SG5 lightmap. |
+| [docs/LIGHTING.md](docs/LIGHTING.md) | The light record, the unit conversion, why the importer is off by default, the baked SG5 lightmap, and the reflection probes. |
+| [docs/CHARACTERS.md](docs/CHARACTERS.md) | Component assembly, the three LOD systems, and the scene-set refusal heuristic. |
+| [docs/SCENES.md](docs/SCENES.md) | Scene placement, the parent-level edge, and vista fitting. |
+| [docs/TESTING.md](docs/TESTING.md) | What the suite does and does not cover, and the open defects it guards. |
 
 ## License
 
