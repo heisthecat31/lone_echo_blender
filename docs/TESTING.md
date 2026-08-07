@@ -13,9 +13,9 @@ python3 blender_tool/tests/run_tests.py --list-probes
 
 Nothing in the default run needs Blender, an archive, Oodle, or game data.
 
-On a clean checkout: **905 passed, 0 failed, 57 skipped**.
-With a full local export: **915 passed, 0 failed, 47 skipped**.
-962 tests over 52 modules, either way.
+On a clean checkout: **977 passed, 0 failed, 57 skipped**.
+With a full local export: **987 passed, 0 failed, 47 skipped**.
+1,034 tests over 53 modules, either way.
 
 ## 2. The blind spot this page exists for
 
@@ -146,6 +146,13 @@ Every fixture in this repository is **constructed**, not extracted:
 
 - light records are packed field by field at literal offsets, independently of
   the decoder's own offset table, so the two must agree or the test fails;
+- the exterior level's own four-light rig, added in 0.5.0, is built the same way
+  — a field dict per record pushed through `le_mesh.lights.record_from_fields`,
+  which encodes to the 352-byte grid and decodes back — and it is **self-checking**:
+  the test asserts `direction == R(orientation)·(0,0,1)` and `farp ==
+  attenuation.z` on every constructed record, the invariants measured on 118/118
+  shipped ones, so a fixture describing a light the engine could not store fails
+  rather than passing quietly;
 - the reflection-probe slice is **synthesised from the documented grammar** —
   23 selection boxes over 16 probes, the measured box → probe histogram, one
   shared parallax volume, a BC6H_UF16 256² cube with 9 mips — with values this
@@ -177,13 +184,34 @@ not a blob. The rule that governs it is *generate, don't dump* — the deriving
 code ships and the reader regenerates against their own install. Two fixtures
 were removed under it for 0.4.0 and rebuilt as constructed ones.
 
+<a id="transcribed-constants"></a>
 **Constants transcribed out of a shipped shader.** A float is a float; nothing
 mechanical can tell a measured coefficient from a compile-time literal copied out
-of a disassembly. ⛔ **0.4.0's call: a module whose values are a verbatim second
-copy of a shipped shader's literals does not ship**, and the exterior-vista
-shading module that motivated the question is **deferred to 0.5.0** for exactly
-that reason. What *is* enforceable is the provenance trail such work leaves, and
-that is now a rule — see below.
+of a disassembly. 0.4.0's call was that a module whose values are a verbatim
+second copy of a shipped shader's literals does not ship, and the exterior-vista
+shading module was deferred on it.
+
+★ **0.5.0 reverses that call, deliberately and only for this module, and pays for
+it in disclosure rather than in silence.** The reversal is a judgement that the
+module is more useful published-with-a-caveat than withheld: without it an
+exterior import is wrong by a factor of fourteen on the planet's albedo and has
+no bright limb at all, and every one of those numbers is now visible and
+falsifiable instead of living only in a private tree. What it costs is real and
+is stated in three places (`le_mesh/vista_shader.py`'s own docstring,
+[MATERIALS.md](MATERIALS.md#vista), and the README status table):
+
+* the constants are **transcribed**, not derived here;
+* the disassembler that produced them is **not** in this repository, so
+  ⛔ **`le_mesh/vista_shader.py` is the one module in the project you cannot
+  reproduce from the public tree alone**;
+* `tests/test_vista_shader.py` re-types every literal independently of the
+  module, which catches a transcription error and **nothing else** — it is a
+  consistency test over a transcription, not a reproduction of one.
+
+⛔ The rest of the call stands unchanged, and this is the boundary: no other
+module may ship on those terms, and one that does must say so at its own top
+rather than relying on this page. What *is* enforceable is the provenance trail
+such work leaves, and that is a rule — see below.
 
 **Paths and line numbers into the game's own source.** Published 0.1.0–0.3.0
 carry **zero** citations of this class; the 0.4.0 candidate arrived with **241**
@@ -207,7 +235,17 @@ python3 blender_tool/build_addon_zip.py
 # then, in Blender: Edit > Preferences > Add-ons > Install from Disk…
 ```
 
-0.4.0 was verified this way on Blender **5.1.1**: install from the built zip,
-enable, all three import operators and menu entries registered, one `.lemesh`
-imported (4 objects / 5,377 vertices / 5 materials) and one `.lescatter` placed
+0.5.0 was verified this way on Blender **5.1.1**: install from the built zip
+(`lone_echo_import-0.5.0.zip`, 123,192 bytes, 10 files), enable, `bl_info`
+reporting `(0, 5, 0)`, all three import operators registered, one `.lemesh`
+imported (4 objects / 5,369 vertices / 3 materials) and one `.lescatter` placed
 (200 instances).
+
+The exterior render harness is verified the same way and separately, because it
+is the file 0.5.0 changed most: `tests/blender_vista_render.py` was run headless
+against a real extracted level at 1600×700 / 16 samples and applied the
+shader-confirmed terms to five of the level's materials, imported the decoded
+four-light rig, selected the `ePrimaryDirLight` and dropped the brighter
+directional light, and took the new `skydome=engine` path. It is **not** part of
+the unit run — it needs `bpy` and your own extracted level — and the runner says
+so in its own probe inventory.

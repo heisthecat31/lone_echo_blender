@@ -57,9 +57,11 @@ are named below, not buried.
 | **Normal maps on the shipped tangent basis** | **works** — new in 0.4.0, and it *fixed an inverted green channel on every normal map* |
 | `eBlendTranslucent` | ⛔ **not implemented** |
 | A duplicated back-face shell on characters | ⚠ **decoded and drawn; nothing has decided whether it should be** |
-| The exterior vista's own shading model | ⚠ **deferred to 0.5.0** — see below |
+| **The exterior vista's shading model** (7 shadersets) | **works** — new in 0.5.0, ⛔ **and it is the one module you cannot reproduce from this repository** — see below |
+| **Which directional light lights an exterior** | **settled** — new in 0.5.0: `ePrimaryDirLight`, not the brightest |
+| The vista's per-frame terms (`fog`, `rim_gain`, `k_world_ambient*`) | ⛔ **not decodable from a level; free parameters at unfitted defaults** |
 
-Seven of those deserve to be spelled out.
+Eight of those deserve to be spelled out.
 
 **Normal maps were running on the wrong tangent basis — all of them.** The
 shipped `tangent` stream is decoded on **913 of 913** objects and, until 0.4.0,
@@ -73,12 +75,35 @@ pixel. See [docs/MATERIALS.md](docs/MATERIALS.md).
 **`eBlendTranslucent` is unimplemented.** Materials that declare it fall back to
 the nearest supported pass, which is visibly wrong on the surfaces that use it.
 
-**The exterior vista's shading is deferred.** The skydome, ring plane and
-planetary body are *fitted* (`le_mesh/vista_fit.py`) and import. Reproducing what
-the engine's own shaders do to them is a separate piece of work that is not
-finished and, in the form it currently exists, would ship a module whose constants
-are a verbatim copy of a shipped shader's literals. Held for 0.5.0 — see
-[docs/TESTING.md](docs/TESTING.md) §5.1 for the rule that decided it.
+**The exterior vista's shading now ships — and it is the one module here you
+cannot reproduce.** 0.4.0 deferred it for four reasons; 0.5.0 ships it, and two
+of those reasons are still true and are stated rather than glossed:
+
+* ⛔ **The constants in `le_mesh/vista_shader.py` are *transcribed* shipped-shader
+  literals, not values this repository derives.**
+* ⛔ **The disassembler that produced them is not part of this repository**, so
+  that one module ships **unreproducible from the public tree alone**. Its 72
+  tests re-type every literal independently of the module, which catches a
+  transcription error and nothing else — a consistency check over a
+  transcription, not a reproduction of it.
+
+Everything else in this project can be re-derived from your own install with the
+code that is here; this cannot, and it says so at its own top. What you get for
+that is the difference between an exterior import that is wrong by **14.2×** on
+the planet's albedo with no bright limb at all, and one that is not. See
+[docs/MATERIALS.md](docs/MATERIALS.md#vista) for the model,
+[docs/LIGHTING.md](docs/LIGHTING.md#primary-dir-light) for which light lights it,
+and [docs/TESTING.md](docs/TESTING.md#transcribed-constants) for the rule this
+release deliberately reverses and the boundary it keeps.
+
+⛔ **The vista's per-frame terms are free parameters, and nothing here is fitted
+to art.** `k_world_ambient`, `k_world_ambient_spec` (which is also `rim_gain`)
+and the whole scene-fog epilogue live in `SGPerFrameConstants` and are in **no**
+level resource. They default to 1.0, 1.0 and **fog off**; any other value is the
+caller's choice and the render harness makes it say so in the log. This matters
+more than it sounds: `measured` against the engine's own reflection probe, at
+least **85 % of the shipped planet disc is fog**, so an unfogged exterior render
+is not slightly bright.
 
 **19 of 44 audited materials drop an authored layer.** 18 of those drops are
 provably invisible — the layer's blend mask pins it at its OFF extreme, so
@@ -138,7 +163,7 @@ folder of JSON and raw binary blobs that anyone can inspect, archive, or re-impo
 
 **For the add-on (Stage 2):**
 
-- Blender **4.1 or newer** (0.4.0 was installed from its own built zip and
+- Blender **4.1 or newer** (0.5.0 was installed from its own built zip and
   verified importing both package kinds on **5.1.1**).
 - Nothing else. The add-on is self-contained — no extractor and no external
   packages are needed to import a `.lemesh` or `.lescatter` package.
@@ -328,14 +353,14 @@ python3 blender_tool/tests/run_tests.py
 ```
 
 On a clean checkout — no game data, no archive, no Oodle, no Blender — this is
-**905 passed, 0 failed, 57 skipped** (962 tests over 52 modules).
+**977 passed, 0 failed, 57 skipped** (1,034 tests over 53 modules).
 
 ⚠ **Read the skips, not the count.** They are printed with a reason at the end of
 every run, and each one names what it could not reach and how to enable it. A skip
 here means an assertion did **not** execute: every one of the 57 is a test that
 opens a real extracted package, reads a generated sidecar, or runs the extractor
 end to end, and they can only run once you have extracted something from your own
-copy of the game. With a local export present the same suite runs **915 passed,
+copy of the game. With a local export present the same suite runs **987 passed,
 0 failed, 47 skipped**.
 
 ⛔ **This number went *down* in 0.4.0, and that is the point.** 27 tests used to

@@ -1,9 +1,13 @@
 # Lighting
 
-**Status (0.4.0): the light importer ships, OFF BY DEFAULT, and imports only the
+**Status (0.5.0): the light importer ships, OFF BY DEFAULT, and imports only the
 `eEnableDiffuse` subset. The resource-level baked lightmap wires automatically
 once you supply the level atlas. The per-instance bake and the reflection probes
-are decoded and are both opt-in.**
+are decoded and are both opt-in. New in 0.5.0: which of a level's directional
+lights an exterior surface is actually lit by is settled — it is the one flagged
+[`ePrimaryDirLight`](#primary-dir-light), not the brightest one — and the
+per-frame [scene-fog term](#scene-fog) that sits after every lit exterior
+shader is documented as the free parameter it is.**
 
 Lone Echo's lighting is three separate systems and this page covers all three, in
 the order they matter: the **runtime lights**, the **baked ambient diffuse** (the
@@ -664,8 +668,109 @@ curve. Only the edges match, not the ramp between them.
 
 ---
 
+<a id="primary-dir-light"></a>
+## Which light lights an exterior — `ePrimaryDirLight`, not the brightest
+
+★ New in 0.5.0, `shader-confirmed` against the exterior level's own shaders and
+`stream-confirmed` against its own light table. It matters because the naive
+answer — "use the brightest directional light" — is wrong on the one level where
+it was checked, and wrong by a factor of eight.
+
+`min_itc_master`, the exterior mining vista, ships **four** light records: two
+`eDirectionalLight` and two `ePointLight`, all four `eLightEnabled` and all four
+`eEnableDiffuse`. Three facts decide what to do with them.
+
+**1. One directional light is flagged, and it is not the strong one.** Exactly
+one record carries `ePrimaryDirLight`, and it also carries `eBakeIndirect`. Its
+`primarycolor` peaks at **10 W/m²**; the unflagged directional light peaks at
+**80**. The scene's own `dirlightdirections` / `dirlightindices` tables hold both
+directions, so the flag — not the magnitude — is the selector. A harness that
+sorts by radiance picks the wrong sun.
+
+**2. The point lights cannot reach the vista at all.** Both sit inside the
+2,438-unit play area with `attenuation.z == 100`, and the planet's centre is
+54,862 units away. That alone would settle it, but the shaderset settles it
+harder: the vista's shaderset binds `k_level_dir_lights` and does **not** bind
+`k_clustered_lights` / `k_light_clusters`, so it has no code path a point light
+could arrive through.
+
+**3. The engine's own sun contributes exactly zero to the planet's visible
+disc**, and that is arithmetic rather than an impression. The vista body's
+diffuse response to a directional light is a **wrapped** Lambert,
+`saturate((N·L + 0.25) × 0.8)²`, identically zero for `N·L ≤ −0.25`; both shipped
+directional lights put the sub-observer point of the planet at `N·L ≈ −0.595`.
+⇒ the disc is lit by its **baked ambient** and nothing else, which is why the
+engine's own reflection-probe capture of it shows no terminator.
+
+⚠ The wrap is body-specific. The moons' and the debris rock's shaders take a
+plain `saturate(N·L)` with the terminator at `N·L == 0` and no square, so those
+bodies *do* receive real direct light from the same records. Do not carry the
+wrap across shadersets.
+
+`le_mesh/vista_shader.py` exposes `wrap_diffuse`, `dirlight_is_dark`,
+`ndotl_at`, `sub_observer_normal` and `body_is_sunlit(direction, lights)`, the
+last returning the per-light arithmetic rather than only a verdict, so a caller
+can print why a body is dark instead of asserting that it is.
+
+<a id="scene-fog"></a>
+### The scene-fog epilogue — the last thing three of those shaders do
+
+`shader-confirmed`. Three of the exterior shadersets end with the same block,
+verbatim, after all lighting and immediately before the output clamp:
+
+```
+d   = length(cameraPos − POSITIONWS)
+td  = saturate((d − k_fog_depth.x) / (k_fog_depth.y − k_fog_depth.x))
+Ad  = k_fog_ramp.SampleLevel((td·0.996094 + 0.001953, 0), SLICE 0, 0)
+th  = saturate((POSITIONWS.y − k_fog_depth.z) / (k_fog_depth.w − k_fog_depth.z))
+Ah  = k_fog_ramp.SampleLevel((th·0.996094 + 0.001953, 0), SLICE 1, 0)
+C   = lerp(k_fog_low_color, k_fog_hi_color, Ah)
+f   = C.a · k_fog_color.a · Ad
+o0.rgb = lerp(colour, C.rgb · k_fog_color.rgb, f)
+```
+
+`0.996094 == 255/256` and `0.001953 == 1/512`, i.e. the ramp texture is **256
+texels wide** and both lookups are half-texel inset — which is how wide
+`k_fog_ramp` is without opening it. Slice 0 is the **distance** ramp and slice 1
+the **height** ramp, not the other way round. The alpha is lerped by the same
+height ramp as the colour, which is what lets one ramp make the fog both dimmer
+and thinner with altitude.
+
+⛔ **The form is `shader-confirmed`; every value in it is per-FRAME and none is
+decodable from a level resource.** `k_fog_depth`, `k_fog_color`,
+`k_fog_low_color` and `k_fog_hi_color` live in `SGPerFrameConstants` and
+`k_fog_ramp` is an engine-bound texture array. `le_mesh/vista_shader.py` takes
+them as explicit free parameters (`fog_ramp_u`, `fog_ramp_t`,
+`fog_colour_and_factor`, `scene_fog`) and the render harness defaults the whole
+term to **off**.
+
+★ It is nevertheless large. On the exterior level the planet is 19–38 kilo-units
+from the probe eye and its disc spans ±31,600 units of world height, so both
+ramps are fully engaged on it. `measured` against the engine's own reflection
+probe over nine directions whose values span 3.4×, the shipped disc carries only
+**0.150** (sd 0.008) of the radiance the unfogged terms compute. Since
+`p = (1 − f)·c + f·F` with `F ≥ 0` gives `1 − f ≤ p/c` pointwise, that is a hard
+bound: **at least 85 % of the engine's own planet disc is fog, not surface.** An
+unfogged render of an exterior at this scale is not slightly bright, it is
+several times bright, and the discrepancy is not a defect in the surface terms.
+
+⚠ Which shadersets carry it is a discriminator, not a detail: the debris rock
+multiplies the same `k_world_ambient` and binds **no** fog, which is what lets
+the rock separate `k_world_ambient` from `(1 − f)` in the measurement above.
+
+---
+
 ## Not derivable from disk
 
+* **`k_world_ambient` and `k_world_ambient_spec`** (`SGPerFrameConstants` +20 and
+  +32). They multiply the SG5 ambient sum and the ambient-specular cube term in
+  every lit shader measured, they are per-FRAME, and they are in **no** level
+  resource. Both default to 1.0 in this repository and neither is fitted; the
+  1.0 is what a matched-rock control against the engine's own probe implies to
+  within its own ±20 %, and that control bounds a *product* (the constant times
+  this repository's albedo error), not the constant alone.
+* **The scene-fog term** — see [the epilogue](#scene-fog) above: the
+  arithmetic is confirmed and every input is per-frame.
 * **Light radius / `shadow_soft_size`.** No source-size field exists.
   `filtersize` is a shadow-map filter width in texels, not a physical radius; using
   it as one would be fabrication. Import as 0 (point source, hard shadows). The

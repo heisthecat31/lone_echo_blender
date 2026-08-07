@@ -1,25 +1,29 @@
 # Materials
 
-**Status (0.4.0): the `.lemesh` path is wired end to end. Base colour, normal,
+**Status (0.5.0): the `.lemesh` path is wired end to end. Base colour, normal,
 roughness/AO, specular/F0, alpha, transmission tint, emission, layer blend masks
-and the render pass all reach EEVEE; normal maps now run on the *shipped* tangent
+and the render pass all reach EEVEE; normal maps run on the *shipped* tangent
 basis, and specular is reproduced with both of the engine's lobes. The
 `.lescatter` path still does not — its sidecar carries only base colour and
-normal.**
+normal. New in 0.5.0: [the exterior vista's shading model](#vista), decoded off
+the shipped pixel shaders — with the caveat, stated in that section, that it is
+the one part of this project you cannot reproduce from this repository alone.**
 
 Read [What actually reaches EEVEE](#what-actually-reaches-eevee) for the exact
 split before assuming any import is full PBR, and [the role
 ladder](#role-ladder) for how a texture binding gets a meaning at all — through
 0.3.0 that was a single lookup covering under half the corpus.
 
-⛔ Two defects are **open** at 0.4.0. They are documented in the sections they
+⛔ Three items are **open** at 0.5.0. They are documented in the sections they
 belong to rather than in a release note: [`eBlendTranslucent` is not
-implemented](#blend-translucent), and [19 of 44 audited materials drop an
-authored layer](#dropped-layers) — 18 provably invisible, **1 not**.
+implemented](#blend-translucent), [19 of 44 audited materials drop an authored
+layer](#dropped-layers) — 18 provably invisible, **1 not** — and [the vista
+module ships unreproducible](#vista) from this tree.
 
 Evidence tags used below — `stream-confirmed`, `corpus-confirmed`,
-`shader-confirmed`, `name-confirmed` / `name-only`, `engine-confirmed`,
-`inferred` — are defined in [FORMATS.md](FORMATS.md#evidence-vocabulary).
+`shader-confirmed`, `measured`, `name-confirmed` / `name-only`,
+`engine-confirmed`, `inferred` — are defined in
+[FORMATS.md](FORMATS.md#evidence-vocabulary).
 
 ---
 
@@ -808,8 +812,179 @@ and earlier, where only the alias exists, it falls back to it.
 
 ---
 
+<a id="vista"></a>
+## The exterior vista's shading model
+
+★ New in 0.5.0. Seven of the exterior mining vista's shadersets were
+disassembled and their arithmetic reproduced in `le_mesh/vista_shader.py` (pure,
+`bpy`-free) and wired into node graphs by
+`tests/blender_vista_render.py` (`vista_shader=1`, on by default).
+
+⛔ **Read this before you trust any number in this section.** The disassembler is
+**not** part of this repository. Every constant in `le_mesh/vista_shader.py` is a
+**transcribed** shipped-shader literal, not a value this repository can derive,
+and `tests/test_vista_shader.py` re-types each one independently — which catches
+a transcription error and nothing else. This is the **only** part of the project
+that ships unreproducible from the public tree alone; everywhere else, the code
+that produced a claim is here and you can re-run it against your own install.
+Treat this section as a decode to take on trust or to redo with your own
+disassembler. See also [TESTING.md](TESTING.md#transcribed-constants).
+
+### The one thing that changes an ordinary import
+
+**`base_color_factor` does not reach these shaders at all.** The vista's
+shadersets declare **no material constant buffer** — only per-frame, per-view and
+reflection buffers — so the material record's `bakecolor`, which is what the
+importer surfaces as `base_color_factor`, provably never arrives at the GPU.
+Every coefficient the surface uses is a compile-time literal instead. On the
+planet body that is a **14.2×** difference in albedo, and it is not a tweak of a
+nearly-right number: it is the replacement of a value that was never the right
+kind of thing. `vista_shader.albedo_correction(shaderset, base_color_factor)`
+returns `(None, why)` for any shaderset that has **not** been disassembled, so an
+unmeasured material is left exactly as the importer built it.
+
+### The skydome is ordinary geometry, and that changed the dome mode
+
+The dome material carries `mattype == 13` (`eMTSkydome`), which routes it to
+`ERenderPool::eSkydome = 19` — *after* forward opaques, alpha-tested,
+transparents and refractions. That ordering used to leave two readings open:
+"pool 19 is a background fill" (composite the sky under everything) versus "the
+dome is ordinary depth-tested geometry". The dome's own shaders decide it:
+
+* the vertex shader **applies the view matrix's translation row**, so the dome
+  does not follow the camera;
+* it passes the full projection to `SV_Position` and never rewrites it, so there
+  is **no** reversed-Z far-plane pin;
+* the pixel shader declares `SV_Target 0/1` only — no `SV_Depth`, no discard.
+
+⇒ the dome is drawn at its own true projected depth and **overwrites anything
+farther than the shell**. The render harness's default dome mode is therefore
+`skydome=engine`, and the old `composite` default is kept only so earlier renders
+reproduce. ⚠ One caveat that is a *renderer* fact rather than an engine one: a
+closed dome is light-tight to a path tracer and a Cycles SUN sits at infinity,
+hence always outside it. `engine` keeps the depth behaviour and clears the dome's
+**non-camera** ray visibility; `depth` keeps both and shows the artefact.
+
+The dome's whole colour path is one `mad` and a clamp —
+`max(0, plate.rgb × (0.099382, 0.114076, 0.192477) + (0.000488, 0.000595,
+0.000717))` — with `o0.a` a literal 1.0, so the dome is opaque in-engine and the
+plate's all-zero alpha is irrelevant. Its `uv0.v` is sampled at 2×; `measured` on
+the shipped mesh, the dome's `uv0.v` spans exactly [0.5, 1.0], so `2v` covers the
+plate exactly once and this is a **packing convention, not a tiling**.
+
+★ **That tint is also the fix for a bug in a different material.** The ring sheet
+passes about 92 % of the sky through its alpha, so what reads through it is the
+skydome plate. A harness that wires the starfield plate untinted puts a raw
+red-brown nebula behind the rings and the sheet reads warm; the engine's is cold
+blue-white. ⛔ The competing explanation — "the ring plate is red" — is falsified
+by measurement: the ring albedo plate is neutral grey (linear median
+`(0.27468, 0.28744, 0.26225)`, R/B = 1.047, green the largest channel) and **no**
+plate value can redden that material. The hue defect was one material over.
+
+### The lightmap mode is a property of the SHADERSET, and it has three answers
+
+One `lightmap_mode` flag cannot serve a whole level, and the right value is not
+"how bright is this object's atlas page". It is what the object's own shader
+does:
+
+| mode | the shader's behaviour |
+|---|---|
+| `baked` | the shader's **only** light is the SG5 colour lightmap |
+| `ambient` | the shader **adds** a live directional light to that sum |
+| `neither` | the shader binds **no** colour lightmap at all |
+
+All three occur on one level. The planet body is `baked` — its wrapped diffuse is
+identically zero at the shipped light directions (see
+[LIGHTING.md](LIGHTING.md#primary-dir-light)), so the ambient bake really is all
+the light the engine gives it. The moons and the debris rock are `ambient`: they
+add unconditionally, and `k_dirlight_occlusion_map` scales only the **live**
+light, so there is no double-count. The rings, the dome, the haze cards, the sun
+card and the dig-site FX cards are `neither`. `vista_shader.
+LIGHTMAP_MODE_BY_SHADERSET` is the table, and the harness's `mesh_lightmap=auto`
+consults it per material instead of taking one flag for the whole import.
+
+### The planet body — the plate, three detail layers, and the atmosphere
+
+The albedo accumulator is the base plate at `× 0.434154` plus three detail plates,
+each with its own tint, weight and blend channel, and the whole diffuse is then
+multiplied by a global `0.822` **and** by `(1 + Σ saturate(BLEND))` where `BLEND`
+is **vertex colour set 1** — 1.0 on 3,703 of 3,703 vertices, so exactly 4.0 there.
+`color1` has been imported since 0.4.0; before that this factor was silently 1.
+
+Four flow-warped UV chains feed the plates: the flow map is tapped **four** times
+with four different time scrolls (three on `uv0`, clouds alone on `uv1`) and the
+`0.11` warp is applied to the **base plate**, not to a fourth detail layer. Every
+scroll rides `k_time0_x`, so at `t = 0` — a still frame — the three `uv0` taps
+collapse onto one fetch and the chain needs two texture reads rather than four.
+
+★ **The bright limb is the specular F0, Fresnel-mixed toward white.** The
+strongly blue tint `(0.016033, 0.018544, 0.079322)`, applied to
+`0.05 + 0.95 × plate`, is not an "atmosphere colour" laid over the disc: it is
+the material's **F0**, and Schlick mixes it toward white at grazing incidence. So
+the disc centre is the blue end and the limb is the neutral, bright end — the
+rim's hue is the hue of the incident *radiance*, not of the tint. With the shader's
+own height-correlated Smith visibility on top, limb/centre runs **25×–480×**
+depending on the plate value, which is why omitting this stack removes the bright
+limb entirely rather than dimming it. The "is this specular colour black?" gate
+`saturate(dot(F0, 333))` in front of it is provably identically **1** here: the
+minimum of `Σ F0` over the plate's range is 0.005695 and `0.005695 × 333 = 1.896`.
+
+⚠ The same gate on the **ring** sheet is *not* identically one — its F0 is driven
+to zero by the pre-arrival mask, so 13.9 % of the sheet loses its environment term
+outright. Two identical-looking expressions, two different answers.
+
+### The ring sheet's entire ambient is a reflection-probe cube
+
+The ring shaderset binds **no** colour lightmap and never reads
+`k_world_ambient`. Its only ambient is a probe cubemap fetched along the
+reflection vector at an explicit LOD: `aR = sqrt(saturate(roughness² − 0.010))`,
+`lod = max(0, 10·aR − 1)` — 3.56 at the measured mask value — with a Fresnel that
+is **damped by the roughness** (`… / (2(aR + 0.001) + 1)`) rather than mixed to
+white as the planet's is. ⛔ `ShaderNodeTexEnvironment` has no LOD input, so a
+node graph can only pick a pre-filtered image: the probe resource carries its own
+mip chain on disk and the harness samples `round(lod)`, dropping the fractional
+part. That is a stated approximation, not a fit. See [reflection
+probes](LIGHTING.md#reflection-probes) for why only mip 0 is reachable through
+the ordinary import path.
+
+Two more ring facts worth carrying: its diffuse is a **plain** `saturate(N·L)`,
+not the planet's wrap, and its pixel shader has no `SV_IsFrontFace` and never
+flips the shading normal — so the anti-sun face receives exactly zero direct
+light. Cycles flips the shading normal toward the ray on a backface hit and
+lights that same face fully, which is a renderer difference and not a material
+one; the harness gates it with `step(N_geometric · L)`.
+
+### The additive cards, and the pale quads they caused
+
+The ring-haze cards and the dig-site steam/dust cards are `eBlendLinearDodge` —
+they **add** and never occlude. Imported as ordinary lit surfaces they draw
+opaque polygonal wedges through the vista. The FX cards go one further: their
+`o0.rgb` reads **no texture at all** (the colour is a compile-time constant times
+a gamma-decoded vertex colour, and the vertex rgb is 1.0 on all 208 shipped
+vertices), and all three plates they bind are sampled for their **alpha lane
+only**. So the role names the material record carries — `emissive`, `albedo`,
+`flowmap` — describe none of what the shader does with them.
+
+⚠ `eBlendLinearDodge`'s **source factor** is still not recovered from any shipped
+state block. On the haze cards it is moot: every vertex carries alpha 1.0, so
+`(ONE, ONE)` and `(SRC_ALPHA, ONE)` are identical. On the FX cards it decides the
+picture, and the harness exposes both readings (`fx_card_src_alpha=1|0`) rather
+than asserting one away. `inferred`: the alpha-weighted reading, because under
+`(ONE, ONE)` the engine would draw flat constant-coloured quads hard-cut at the
+`1e-4` discard contour and its own probe capture shows nothing of the kind.
+
+---
+
 ## Not derivable from disk
 
+* **`rim_gain`, `fog`, `k_world_ambient` and `k_world_ambient_spec`** on the
+  [vista](#vista) path. They are per-FRAME engine constants in no level resource.
+  All four default to their unfitted values (1.0, 1.0, 1.0 and fog **off**),
+  ⛔ none is tuned against reference art, and any other value has to be stated
+  and justified by the caller. `k_world_ambient_spec` in particular has **one**
+  value and **two** consumers — the planet's ambient-specular cube branch and the
+  ring sheet's whole ambient — so they share a default rather than being tuned
+  independently.
 * Which compile options are active (alpha-test vs. dithered alpha-test,
   alpha-to-coverage, premultiplied alpha, output alpha, opacity, refraction, vertex
   colour, exposure-independent emissive) — all shaderset permutation bits.

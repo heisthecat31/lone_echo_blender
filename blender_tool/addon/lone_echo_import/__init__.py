@@ -20,7 +20,7 @@ from pathlib import Path
 bl_info = {
     "name": "Lone Echo Importer (.lemesh / .lescatter)",
     "author": "Dualgame",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (4, 1, 0),
     "location": "File > Import > Lone Echo (.lemesh) / Lone Echo Scatter (.lescatter)",
     "description": "Import Lone Echo / NRadEngine meshes, characters and whole "

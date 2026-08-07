@@ -3,6 +3,144 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-08-07
+
+The exterior vista's shading model, read off seven of the level's own pixel
+shaders — and the one release in this project's history that ships a module you
+cannot reproduce from this repository. That is stated plainly below, in the
+README's status table and at the top of the module itself, because it reverses a
+call 0.4.0 made and the honest version of a reversal names what it costs.
+
+### ⛔ Read this first — what 0.5.0 ships that it cannot back up
+
+0.4.0 deferred this work for four reasons. Two are now resolved and **two are
+still true**:
+
+| 0.4.0's reason | 0.5.0 |
+|---|---|
+| the constants are a verbatim second copy of a shipped shader's literals | ⛔ **still true.** They are *transcribed*, not derived here. |
+| the light-side fixture was decoded game data checked into the repository | ✅ **gone.** The rig is now **constructed in code** and pushed through the public `le_mesh.lights` encode/decode round-trip; no decoded sidecar is shipped. |
+| the module depends on a disassembler that is not public | ⛔ **still true.** `le_shaderset_disasm.py` is not part of this tree, so `le_mesh/vista_shader.py` ships **unreproducible from the public tree alone**. |
+| the work itself was open and reported so | ✅ **closed** on the four questions this release answers, and the ones that remain open are first-class rows in the README status table. |
+
+⚠ **What the tests do and do not prove.** `tests/test_vista_shader.py` (72 tests)
+re-types every expected value from the disassembly independently of the module,
+so a failure means the two disagree rather than that a constant was compared with
+itself. That catches a **transcription error** and nothing else. It is a
+consistency check over a transcription, not a reproduction of one, and it is the
+only test module in this repository carrying that caveat.
+
+⛔ **This is a boundary, not a precedent.** 0.4.0's rule — a module whose values
+are a verbatim second copy of a shipped shader's literals does not ship — is
+reversed for this module and stands for every other. See
+[docs/TESTING.md](docs/TESTING.md#transcribed-constants).
+
+### Added
+
+- **`le_mesh/vista_shader.py`** — the exterior vista's shading, from the shipped
+  pixel shaders of seven shadersets: the planetary body, the sun card, the
+  skydome, the ring haze, the ring sheet, the moons and the dig-site FX cards,
+  plus the debris rock's lightmap verdict. Pure stdlib, `bpy`-free, and every
+  per-frame value it cannot decode is an explicit free parameter rather than a
+  folded-in literal.
+- **`base_color_factor` provably never reaches these shaders.** They declare
+  **no material constant buffer** at all, so the material record's `bakecolor` —
+  which is what the importer surfaces as `base_color_factor` — cannot arrive at
+  the GPU. On the planet body the shader's own coefficients are **14.2×** the
+  value the importer was using. `albedo_correction()` returns `(None, why)` for
+  any shaderset that has not been disassembled, so an unmeasured material is left
+  exactly as the importer built it.
+- **The skydome is ordinary depth-tested geometry**, which settles a question the
+  render harness had been carrying with both answers renderable. The dome's
+  vertex shader applies the view matrix's translation row (no camera pin) and
+  passes the full projection through with no reversed-Z pin; its pixel shader
+  declares `SV_Target 0/1` only — no `SV_Depth`, no discard. The harness's dome
+  mode default therefore moves from `composite` to the new **`skydome=engine`**.
+  ⚠ `engine` also clears the dome's *non-camera* ray visibility, because a closed
+  dome is light-tight to a path tracer and that is a fact about Cycles, not about
+  the engine, which traces no light at all.
+- **Which light lights an exterior: `ePrimaryDirLight`, not the brightest.** The
+  exterior level ships four light records; exactly one carries `ePrimaryDirLight`
+  (and `eBakeIndirect`) and it peaks at **10 W/m²** against the unflagged
+  directional light's **80**. Both point lights sit inside the play area with a
+  100-unit range against a body 54,862 units away, and the body's shaderset binds
+  no clustered-light path they could arrive through at all.
+- **Neither directional light reaches the planet's visible disc**, and it is
+  arithmetic rather than an impression: the body's diffuse is a *wrapped* Lambert,
+  `saturate((N·L + 0.25) × 0.8)²`, identically zero for `N·L ≤ −0.25`, and both
+  shipped lights put the sub-observer point at `N·L ≈ −0.595`. ⚠ The wrap is
+  body-specific — the moons and the debris rock take a plain `saturate(N·L)` and
+  **do** receive real direct light from the same records.
+- **The lightmap mode is a property of the SHADERSET, with three answers, not
+  two**: `baked` (the shader's only light is the SG5 lightmap), `ambient` (it
+  adds a live directional on top, with no double-count because
+  `k_dirlight_occlusion_map` scales only the live term) and `neither` (it binds
+  no colour lightmap at all). All three occur on one level, which is why one
+  import-wide flag cannot serve it; the harness gains `mesh_lightmap=auto`.
+- **The planet's bright limb is the specular F0, Fresnel-mixed toward white** —
+  not a tint laid over the disc. The disc centre is the blue end and the limb the
+  neutral bright end, so the rim's hue is the hue of the incident radiance. With
+  the shader's own height-correlated Smith visibility on top, limb/centre runs
+  **25×–480×**; omitting the stack removes the limb rather than dimming it.
+- **The scene-fog epilogue**, verbatim in three of the exterior shadersets and
+  the last thing they do. The ramp lookups are half-texel inset on a **256-texel**
+  ramp (`255/256` and `1/512`), slice 0 is distance and slice 1 is height, and the
+  fog alpha is lerped by the same height ramp as the colour. `measured` against
+  the engine's own reflection probe over nine directions spanning 3.4×, the
+  shipped planet disc carries only **0.150** (sd 0.008) of the radiance the
+  unfogged terms compute — a hard pointwise bound of **≥ 85 % fog**, since
+  `p = (1−f)·c + f·F` with `F ≥ 0` gives `1 − f ≤ p/c`.
+- **`tests/test_vista_shader.py`** — 72 archive-free tests, and the level's own
+  four-light rig **constructed in code**, round-tripped through the 352-byte
+  `SGLightParams` grid, and self-checking: it asserts `direction ==
+  R(orientation)·(0,0,1)` and `farp == attenuation.z` on every record, the
+  invariants measured on 118/118 shipped ones.
+- **`tests/blender_vista_render.py` is the full harness** (1,085 → 3,250 lines):
+  the decoded `CGLight` rig (`sun=lights`), the shader-confirmed material
+  overrides (`vista_shader=`, on by default), the planet's three detail plates and
+  four flow-warped UV chains (`saturn_detail=`), the ring sheet's probe-cube
+  ambient (`ring_env=`), additive haze and FX cards (`haze_additive=`,
+  `fx_card_additive=`), the ring back-face gate, the scene fog (`fog=`, **off**
+  by default), a `colourless_surface=transparent` default that stops a material
+  resolving no colour channel from drawing a flat card, and strip rendering plus
+  tile/denoise controls for frames too large for one host buffer.
+
+### Changed
+
+- `SHADERSET_TERMS` rows name **the shaderset and stage** their arithmetic came
+  from (`"<hash> pixel shader"`) rather than a disassembly listing path, and the
+  harness stamps that on each material it overrides as `le_vista_shader_source`.
+- `docs/FORMATS.md` gains a **`measured`** row in the evidence-tag table. It was
+  already in use in published 0.4.0 and was the one tag the table did not define;
+  the `shader-confirmed` row now also says that a site transcribing shipped
+  literals rather than deriving them has to say so.
+- The suite is **1,034 tests over 53 modules**: 977 passed / 0 failed / 57
+  skipped on a clean checkout, 987 / 0 / 47 with a local export.
+
+### Known limitations
+
+- ⛔ **`le_mesh/vista_shader.py` is not reproducible from this repository** — see
+  the top of this entry. Every other module here can be re-derived from your own
+  install with the code that ships.
+- ⛔ **The vista's per-frame terms are not decodable from a level and nothing
+  here is fitted to art.** `k_world_ambient`, `k_world_ambient_spec` (which is
+  also `rim_gain`, one constant with two consumers) and every input to the fog
+  epilogue live in `SGPerFrameConstants`. They default to 1.0, 1.0 and fog
+  **off**, and any other value is the caller's stated choice.
+- ⚠ **The probe cube's LOD cannot be reached from a node graph.** The ring
+  sheet's ambient is a cube fetch at LOD 3.56 and `ShaderNodeTexEnvironment` has
+  no LOD input, so the harness picks `round(lod)` from the probe's own on-disk mip
+  chain and drops the fractional part. A stated approximation, not a fit.
+- ⚠ **`eBlendLinearDodge`'s source factor is still unrecovered.** Moot on the
+  haze cards (every vertex carries alpha 1.0, so `(ONE,ONE)` and `(SRC_ALPHA,ONE)`
+  agree) and decisive on the FX cards, where both readings stay renderable
+  (`fx_card_src_alpha=1|0`) rather than one being asserted away.
+- Everything carried over from 0.4.0 is unchanged: `eBlendTranslucent` is not
+  implemented, the duplicated back-face shell is still drawn, 19 of 44 audited
+  materials drop an authored layer (1 unexplained), reflection-probe mips beyond
+  0 do not reach a material, and `.lescatter` imports still carry base colour +
+  normal only.
+
 ## [0.4.0] - 2026-08-05
 
 The material binding is read from the shader's own reflection data, roles are

@@ -27,7 +27,8 @@ whole vocabulary, and each tag asserts exactly what its row says — no more:
 | --- | --- |
 | `stream-confirmed` | Read out of the bytes of shipped resources on disk. The site states its **container** and its **coverage**. |
 | `corpus-confirmed` | The same, measured across the whole extracted corpus rather than one resource. |
-| `shader-confirmed` | Matches the arithmetic the engine's own shaders perform. |
+| `shader-confirmed` | Matches the arithmetic the engine's own shaders perform. ⚠ Where a shipped shader's *literals* are transcribed rather than derived, the site says so — `le_mesh/vista_shader.py` is the one module in that position. |
+| `measured` | A statistic computed here over shipped bytes or over a decoded image — a median, a coverage percentage, a min/max. The site states what was measured and over how much. |
 | `name-confirmed` / `name-only` | Matches the engine's own type, field or enum names. `-only` means the name is known but **no shipped resource exercises it**. |
 | `engine-confirmed` | Verified inside Blender, by building it and reading the result back. "Engine" here is the **render** engine, not the game. |
 | `export-validated` | Checked against a package this repository's own extractor wrote. ⚠ Weaker than `stream-confirmed`: it proves the tool is self-consistent, not that the reading of the shipped bytes is right. |
