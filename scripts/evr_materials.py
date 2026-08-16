@@ -876,6 +876,38 @@ def extract_textures(ctx: MaterialContext, tex_hashes, out_dir: Path,
     return written
 
 
+def _upgrade_tiers(ctx, role_textures: dict) -> dict:
+    """Bind the best-resolution TIER of whatever each role names.
+
+    A material routinely names a lower streaming tier than the game ships --
+    `d0185a42...` (512) where `d0185a41...` (1024) exists -- and every consumer
+    then gets a half-resolution texture with nothing to indicate better was
+    available. `evr_tex.best_tier` only moves within a texture's own family and
+    never downgrades, so this changes which tier is bound, never which texture.
+    """
+    # ⛔ NOT WIRED IN. Index 7 is the tier digit for the `d0185a4*` family, but
+    # across the 12,293-texture corpus it takes all 16 values freely -- so a
+    # blanket walk can land on an unrelated texture that merely exists, and the
+    # resident-size guard cannot catch it because every resource reports the
+    # same 128px resident tier. Restrict this to a verified family before
+    # calling it from `build_spec`.
+    if not role_textures:
+        return role_textures
+    out = {}
+    for role, tex in role_textures.items():
+        if not tex:
+            out[role] = tex
+            continue
+        try:
+            better = evr_tex.best_tier(ctx.root, tex)
+        except Exception:                                   # noqa: BLE001
+            better = tex
+        if better != tex:
+            ctx.tier_upgrades = getattr(ctx, "tier_upgrades", 0) + 1
+        out[role] = better
+    return out
+
+
 def build_spec(ctx: MaterialContext, material_hash: str, *,
                shaderset_hash=None, model_textures=None,
                out_dir: Path | None = None,

@@ -54,8 +54,10 @@ from . import material_builder
 
 try:
     from . import evr_lighting
+    from . import evr_skeleton
 except ImportError:          # optional: a package without EVR lighting still imports
     evr_lighting = None
+    evr_skeleton = None
 
 #: UV layer the per-instance lightmap UVs are written to on the per-instance mesh
 #: COPY. Deliberately NOT `uv1`: `uv1` is the (all-zero, dead) vertex-stream set
@@ -837,6 +839,14 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         subtype="DIR_PATH",
         description="Directory the sidecar's texture paths are relative to. Blank = the "
                     "sidecar's own directory")   # type: ignore
+    evr_armature: BoolProperty(
+        name="Armature",
+        default=True,
+        description="Build the model's skeleton and bind skin weights when the "
+                    "package has a skeleton.json (written by "
+                    "scripts/evr_apply_skeleton.py). Bones are parentless -- "
+                    "rest pose and skinning are correct, but posing a bone does "
+                    "not carry its children")   # type: ignore
     evr_lighting: BoolProperty(
         name="Echo VR Lighting",
         default=True,
@@ -900,6 +910,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         box = layout.box()
         box.label(text="Echo VR Lighting")
         box.prop(self, "evr_lighting")
+        box.prop(self, "evr_armature")
         sub = box.column()
         sub.enabled = self.evr_lighting
         sub.prop(self, "evr_dynamic_lights_only")
@@ -941,6 +952,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         # chose -- there is nothing extra to select.
         if self.evr_lighting:
             self._import_evr_lighting(context, summary)
+        if self.evr_armature:
+            self._import_evr_armature(context, summary)
         self.report({"INFO"},
                     "Scatter: placed {instances_placed}/{instances_total} instances "
                     "over {meshes_built} meshes ({triangles_unique} unique tris), "
@@ -988,6 +1001,33 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                             "(+{datablocks_shared} shared), {material_variants} "
                             "material variants, pages {pages}".format(**lm))
         return {"FINISHED"}
+
+    def _import_evr_armature(self, context, summary):
+        """Build the armature and bind weights, if the package has a rig."""
+        if evr_skeleton is None:
+            return
+        doc = evr_skeleton.load(self.filepath)
+        if doc is None:
+            return
+        counts = evr_skeleton.summarize(doc)
+        armature, names = evr_skeleton.build_armature(
+            doc, context, y_up_to_z_up=self.y_up_to_z_up)
+        if armature is None:
+            return
+        bound = evr_skeleton.bind_weights(
+            doc, self.filepath, armature, names,
+            summary.get("objects_by_mesh") or {})
+        self.report({"INFO"},
+                    "Armature: %d of %d bones placed, %d mesh(es) skinned. "
+                    "Bones are PARENTLESS -- the hierarchy is not decoded, so "
+                    "posing a bone will not carry its children."
+                    % (counts["bones"], counts["bone_count"], bound["bound"]))
+        if bound.get("skipped_vertex_mismatch"):
+            self.report({"WARNING"},
+                        "Armature: %d mesh(es) skipped -- vertex count differs "
+                        "from when skeleton.json was written (LOD or split "
+                        "mismatch). Re-run evr_apply_skeleton.py."
+                        % bound["skipped_vertex_mismatch"])
 
     def _import_evr_lighting(self, context, summary):
         """Load the package's `lightmaps.json`, if it has one."""

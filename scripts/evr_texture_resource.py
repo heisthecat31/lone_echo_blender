@@ -576,6 +576,52 @@ def _mip_bytes(width: int, height: int, dxgi: int) -> int:
     return width * height * 4
 
 
+#: Position of the streaming-TIER digit inside a texture CSymbol64.
+#:
+#: Echo VR ships one texture as a family of fixed-resolution tiers that differ
+#: in exactly one hex digit, and a LOWER digit is a HIGHER resolution:
+#:
+#:     d0185a41bf37c1fe   1024x1024      <- tier 1, the best that exists
+#:     d0185a42bf37c1fe    512x512
+#:     d0185a43bf37c1fe    256x256
+#:     d0185a44bf37c1fe    128x128
+#:
+#: Comparing those three hashes character by character, index 7 is the only one
+#: that varies. (An earlier attempt at this rewrote index 6 -- the `4` of `a4`
+#: -- and silently upgraded nothing.)
+TIER_DIGIT = 7
+_TIER_ORDER = "0123456789abcdef"
+
+
+def best_tier(root: Path, texture_hash: str) -> str:
+    """The highest-resolution tier of a texture that exists, or the input.
+
+    A material frequently names a lower tier than the game ships -- binding
+    `d0185a42...` (512) where `d0185a41...` (1024) is present -- so every
+    consumer would otherwise get a half-resolution texture with no indication
+    anything better existed.
+
+    Only upgrades to a candidate that is BOTH present and at least as large as
+    the original, so a coincidental hash collision cannot downgrade a texture.
+    """
+    h = normalise_hash(texture_hash)
+    if len(h) != 16:
+        return texture_hash
+    current = load(root, h)
+    current_area = (current.width * current.height) if current else 0
+    for digit in _TIER_ORDER:
+        if digit == h[TIER_DIGIT]:
+            break                       # reached our own tier: nothing better
+        candidate = h[:TIER_DIGIT] + digit + h[TIER_DIGIT + 1:]
+        found = load(root, candidate)
+        if found is None:
+            continue
+        if current_area and found.width * found.height < current_area:
+            continue
+        return candidate
+    return h
+
+
 def scale_dds_resolution(blob: bytes, divisor: int) -> tuple:
     """Halve (or quarter, ...) a texture RELATIVE to its own native size.
 

@@ -435,6 +435,9 @@ class EchoExtractor(tk.Tk):
         self.sel_groups: set = set()      # stems selected whole -> merged
         self.sel_levels: set = set()      # individual level hashes
         self.want_models = tk.BooleanVar(value=False)
+        self.models: list = []
+        self.sel_models: set = set()
+        self.rigged_only = tk.BooleanVar(value=True)
         self.game_data = tk.StringVar()
         self.oodle_dll = tk.StringVar()
 
@@ -912,6 +915,9 @@ class EchoExtractor(tk.Tk):
                         text="  Also extract standalone models for the selected "
                              "levels").pack(anchor="w", padx=20, pady=12)
 
+        ttk.Button(models, text="Single models\u2026", style="Ghost.TButton",
+                   command=self._page_models).pack(side="right", padx=20, pady=8)
+
         self.count_label = ttk.Label(self.body, style="Dim.TLabel")
         self.count_label.pack(anchor="w", pady=(10, 0))
         self._update_count()
@@ -1098,6 +1104,125 @@ class EchoExtractor(tk.Tk):
             self.count_label.configure(
                 text=f"{len(jobs)} package(s) selected.")
 
+    # ------------------------------------------------------ page: models
+    def _page_models(self):
+        """Pick individual models by hash.
+
+        Rigged models sort first: a model either has a `CSkeletonResource` at
+        its own hash or has none, and the rigged ones are the characters and
+        props worth extracting on their own.
+        """
+        self._clear()
+        self.h_title.configure(text="Single models")
+
+        if not self.models:
+            try:
+                if str(SCRIPTS) not in sys.path:
+                    sys.path.insert(0, str(SCRIPTS))
+                import evr_model_extract as ME
+                root = Path(self.source.get())
+                rigged = set(ME.list_models(root, only_skeleton=True))
+                self.models = sorted(
+                    ((h, h in rigged) for h in ME.list_models(root)),
+                    key=lambda kv: (not kv[1], kv[0]))
+            except Exception as exc:                        # noqa: BLE001
+                self._set_status(f"Could not list models: {exc}", BAD)
+                self.models = []
+
+        rigged_n = sum(1 for _h, r in self.models if r)
+        self.h_sub.configure(
+            text=f"{len(self.models)} models \u00b7 {rigged_n} with an armature. "
+                 f"Mesh names are not recoverable from the shipped data, so "
+                 f"these are hashes.")
+
+        bar = ttk.Frame(self.body)
+        bar.pack(fill="x", pady=(0, 10))
+        self.model_search = tk.StringVar()
+        ttk.Entry(bar, textvariable=self.model_search).pack(
+            side="left", fill="x", expand=True)
+        ttk.Checkbutton(bar, text="Rigged only", variable=self.rigged_only,
+                        command=self._paint_models).pack(side="left", padx=(10, 0))
+        ttk.Button(bar, text="Clear", style="Ghost.TButton",
+                   command=self._clear_models).pack(side="left", padx=(8, 0))
+
+        wrap = tk.Frame(self.body, bg=BG_PANEL)
+        wrap.pack(fill="both", expand=True)
+        self.mcanvas = tk.Canvas(wrap, bg=BG_PANEL, highlightthickness=0)
+        sb = ttk.Scrollbar(wrap, orient="vertical", command=self.mcanvas.yview)
+        self.mframe = tk.Frame(self.mcanvas, bg=BG_PANEL)
+        self.mframe.bind("<Configure>", lambda _e: self.mcanvas.configure(
+            scrollregion=self.mcanvas.bbox("all")))
+        self.mcanvas.create_window((0, 0), window=self.mframe, anchor="nw",
+                                   tags="minner")
+        self.mcanvas.bind("<Configure>", lambda e: self.mcanvas.itemconfigure(
+            "minner", width=e.width))
+        self.mcanvas.configure(yscrollcommand=sb.set)
+        self.mcanvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        self.model_search.trace_add("write", lambda *_a: self._paint_models())
+        self._paint_models()
+
+        self.mcount = ttk.Label(self.body, style="Dim.TLabel")
+        self.mcount.pack(anchor="w", pady=(10, 0))
+        self._update_model_count()
+        self._nav(back=self._page_pick, forward=self._page_options,
+                  forward_text="Options \u2192")
+
+    #: Rows built per repaint. 2,521 models would make 2,521 widget sets and
+    #: freeze the window, so the list is capped and the search box narrows it.
+    MODEL_ROW_LIMIT = 400
+
+    def _paint_models(self):
+        for w in self.mframe.winfo_children():
+            w.destroy()
+        needle = self.model_search.get().strip().lower()
+        shown = 0
+        for h, rigged in self.models:
+            if self.rigged_only.get() and not rigged:
+                continue
+            if needle and needle not in h:
+                continue
+            if shown >= self.MODEL_ROW_LIMIT:
+                break
+            picked = h in self.sel_models
+            hue = GROUP_HUES[2] if rigged else GROUP_HUES[7]
+            bg = self._tint(hue) if picked else BG_PANEL
+            row = tk.Frame(self.mframe, bg=bg)
+            row.pack(fill="x", padx=14, pady=1)
+            tk.Frame(row, bg=hue if picked else LINE, width=3).pack(
+                side="left", fill="y")
+            tk.Label(row, text=h, bg=bg, fg=FG if picked else FG_MID,
+                     font=("Consolas", 10)).pack(side="left", padx=(12, 0), pady=5)
+            if rigged:
+                tk.Label(row, text="armature", bg=bg, fg=hue,
+                         font=("Segoe UI", 9)).pack(side="left", padx=(12, 0))
+            for w in (row, *row.winfo_children()):
+                w.configure(cursor="hand2")
+                w.bind("<Button-1>", lambda _e, hh=h: self._toggle_model(hh))
+            shown += 1
+        if shown >= self.MODEL_ROW_LIMIT:
+            tk.Label(self.mframe, bg=BG_PANEL, fg=FG_DIM, font=("Segoe UI", 9),
+                     text=f"showing the first {self.MODEL_ROW_LIMIT} "
+                          f"\u2014 use the search box to narrow").pack(
+                              anchor="w", padx=20, pady=8)
+
+    def _toggle_model(self, h):
+        if h in self.sel_models:
+            self.sel_models.discard(h)
+        else:
+            self.sel_models.add(h)
+        self._paint_models()
+        self._update_model_count()
+
+    def _clear_models(self):
+        self.sel_models.clear()
+        self._paint_models()
+        self._update_model_count()
+
+    def _update_model_count(self):
+        if hasattr(self, "mcount") and self.mcount.winfo_exists():
+            self.mcount.configure(text=f"{len(self.sel_models)} model(s) selected.")
+
     # ----------------------------------------------------- page: options
     def _page_options(self):
         self._clear()
@@ -1178,6 +1303,8 @@ class EchoExtractor(tk.Tk):
         if self.want_models.get():
             for job in list(jobs):
                 jobs.append(Job("models", job.level, job.label))
+        for h in sorted(self.sel_models):
+            jobs.append(Job("model", h, h))
         return jobs
 
     def _estimate(self):
@@ -1298,6 +1425,16 @@ class EchoExtractor(tk.Tk):
         put(("finish", done))
 
     def _command(self, job) -> list:
+        if job.kind == "model":
+            # A standalone model is its own extractor: same package format,
+            # plus the skeleton sidecar when the model carries an armature.
+            cmd = [sys.executable, str(SCRIPTS / "evr_model_extract.py"),
+                   job.level, "--dir", self.source.get(),
+                   "--out", str(Path(self.outdir.get()) / "models")]
+            cap = self.texture.get()
+            if cap:
+                cmd += ["--max-texture", str(cap)]
+            return cmd
         cmd = [sys.executable, str(SCRIPTS / "evr_scene_extract.py"), job.level,
                "--dir", self.source.get(), "--out", self.outdir.get()]
         if job.kind == "group":
@@ -1310,6 +1447,8 @@ class EchoExtractor(tk.Tk):
         return cmd
 
     def _light(self, job, put):
+        if job.kind == "model":
+            return                    # lighting is a level concept
         pkg = Path(self.outdir.get())
         for cand in (pkg / "Scenes_Full" / job.label, pkg / "scenes" / job.label,
                      pkg / "scenes" / job.level):
