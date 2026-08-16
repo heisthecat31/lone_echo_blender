@@ -411,6 +411,7 @@ tracked-plus-untracked set explicitly, as above.
 | [docs/CHARACTERS.md](docs/CHARACTERS.md) | Component assembly, the three LOD systems, and the scene-set refusal heuristic. |
 | [docs/SCENES.md](docs/SCENES.md) | Scene placement, the parent-level edge, and vista fitting. |
 | [docs/TESTING.md](docs/TESTING.md) | What the suite does and does not cover, and the open defects it guards. |
+| [docs/ECHO_VR.md](docs/ECHO_VR.md) | **Echo VR support** — decoded formats, the resource graph, verified numbers, the dead ends already ruled out, and the open problems in priority order. Read this before touching `scripts/evr_*.py`. |
 
 ## License
 

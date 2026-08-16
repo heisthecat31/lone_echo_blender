@@ -52,6 +52,11 @@ from bpy_extras.io_utils import ImportHelper                       # type: ignor
 from . import scatter_reader
 from . import material_builder
 
+try:
+    from . import evr_lighting
+except ImportError:          # optional: a package without EVR lighting still imports
+    evr_lighting = None
+
 #: UV layer the per-instance lightmap UVs are written to on the per-instance mesh
 #: COPY. Deliberately NOT `uv1`: `uv1` is the (all-zero, dead) vertex-stream set
 #: and it is kept intact on the copy so the two are never confused in a shipped
@@ -832,6 +837,30 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         subtype="DIR_PATH",
         description="Directory the sidecar's texture paths are relative to. Blank = the "
                     "sidecar's own directory")   # type: ignore
+    evr_lighting: BoolProperty(
+        name="Echo VR Lighting",
+        default=True,
+        description="Load lightmaps.json if the package has one (written by "
+                    "scripts/evr_apply_lighting.py): the level's placed lights, "
+                    "and the baked irradiance atlases where the geometry carries "
+                    "a lightmap UV. This is unrelated to Per-Instance Lightmap "
+                    "below, which is the Lone Echo path")   # type: ignore
+    evr_lightmaps: BoolProperty(
+        name="Baked Lightmaps (experimental)",
+        default=False,
+        description="Multiply base colour by the baked lightmap atlas. ⚠ The "
+                    "ATLAS decode is verified, but the per-instance UV mapping "
+                    "is NOT: charts still cover far more of the atlas than a "
+                    "chart should, so the lightmap reads as stretched patterning "
+                    "over the albedo. Off until that is fixed")   # type: ignore
+    evr_dynamic_lights_only: BoolProperty(
+        name="Dynamic Lights Only",
+        default=False,
+        description="Import only the lights the engine puts in its DYNAMIC "
+                    "shading list (SGLightParams type 2 / SUN). POINT and SPOT "
+                    "lights are the static-bake rig -- their contribution is "
+                    "already in the lightmap, so importing both double-counts "
+                    "it")   # type: ignore
     instance_lightmap: BoolProperty(
         name="Per-Instance Lightmap",
         default=False,
@@ -869,6 +898,13 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         sub.prop(self, "materials_json")
         sub.prop(self, "textures_base")
         box = layout.box()
+        box.label(text="Echo VR Lighting")
+        box.prop(self, "evr_lighting")
+        sub = box.column()
+        sub.enabled = self.evr_lighting
+        sub.prop(self, "evr_dynamic_lights_only")
+        sub.prop(self, "evr_lightmaps")
+        box = layout.box()
         box.label(text="Lightmap (per instance)")
         box.prop(self, "instance_lightmap")
         sub = box.column()
@@ -899,6 +935,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         except Exception as exc:   # noqa: BLE001
             self.report({"ERROR"}, f"lescatter import failed: {exc}")
             return {"CANCELLED"}
+
+        # Echo VR lighting rides alongside the package rather than inside the
+        # manifest, so it is picked up here from the file the user already
+        # chose -- there is nothing extra to select.
+        if self.evr_lighting:
+            self._import_evr_lighting(context, summary)
         self.report({"INFO"},
                     "Scatter: placed {instances_placed}/{instances_total} instances "
                     "over {meshes_built} meshes ({triangles_unique} unique tris), "
@@ -921,10 +963,20 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         lm = summary.get("instance_lightmap") or {}
         if lm.get("enabled"):
             if not lm.get("stream_present"):
-                self.report({"WARNING"},
-                            "Per-instance lightmap: %s. Re-export the package with "
-                            "the instance_lightmap section (v5)."
-                            % lm.get("stream_reason", "no per-instance UV stream"))
+                # Echo VR packages never carry this section -- it is the Lone
+                # Echo `SGPackedInstanceData` stream, and telling an EVR user to
+                # "re-export with v5" sends them after something that does not
+                # exist for their game. Their baked lighting is lightmaps.json.
+                if evr_lighting is not None and evr_lighting.load(self.filepath):
+                    self.report({"INFO"},
+                                "Per-instance lightmap is a Lone Echo feature and "
+                                "this is an Echo VR package -- its baked lighting "
+                                "came from lightmaps.json instead.")
+                else:
+                    self.report({"WARNING"},
+                                "Per-instance lightmap: %s. Re-export the package "
+                                "with the instance_lightmap section (v5)."
+                                % lm.get("stream_reason", "no per-instance UV stream"))
             elif not lm.get("atlas_available"):
                 self.report({"WARNING"},
                             "Per-instance lightmap UVs imported but NOT wired: %s"
@@ -936,6 +988,74 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                             "(+{datablocks_shared} shared), {material_variants} "
                             "material variants, pages {pages}".format(**lm))
         return {"FINISHED"}
+
+    def _import_evr_lighting(self, context, summary):
+        """Load the package's `lightmaps.json`, if it has one."""
+        if evr_lighting is None:
+            return
+        doc = evr_lighting.load(self.filepath)
+        if doc is None:
+            return
+        counts = evr_lighting.summarize(doc)
+
+        lights = evr_lighting.import_lights(
+            doc, context, y_up_to_z_up=self.y_up_to_z_up,
+            dynamic_only=self.evr_dynamic_lights_only)
+        if lights.get("created"):
+            self.report({"INFO"},
+                        "Echo VR lights: %d built from SGLightParams (type, "
+                        "colour, intensity, range)%s"
+                        % (lights["created"],
+                           " -- %d static-bake lights skipped, they are already "
+                           "in the lightmap" % lights["skipped_static"]
+                           if lights.get("skipped_static") else ""))
+
+        if not counts["atlases"] or not self.evr_lightmaps:
+            return
+        # Objects already carry `le_mesh_index` / `le_instance_index` (set in
+        # `_place_instances`), so both maps are read back off the collection
+        # rather than threaded through the summary.
+        objects_by_mesh: dict = {}
+        objects_by_instance: dict = {}
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        for obj in (coll.objects if coll else ()):
+            index = obj.get("le_mesh_index")
+            if index is not None:
+                objects_by_mesh.setdefault(int(index), []).append(obj)
+            index = obj.get("le_instance_index")
+            if index is not None:
+                objects_by_instance.setdefault(int(index), []).append(obj)
+
+        total = 0
+        notes = []
+        # Per-instance first: static-instanced geometry needs its OWN UVs, and
+        # a mesh-level wire would put the wrong atlas region on it.
+        if counts["bound_instances"]:
+            result = evr_lighting.wire_instance_lightmaps(
+                doc, self.filepath, objects_by_instance)
+            total += result.get("wired", 0)
+            if result.get("reason"):
+                notes.append(result["reason"])
+            if result.get("mismatched"):
+                notes.append("%d instance(s) skipped on vertex-count mismatch"
+                             % result["mismatched"])
+        if counts["bound_meshes"]:
+            result = evr_lighting.wire_lightmaps(
+                doc, self.filepath, objects_by_mesh)
+            total += result.get("wired", 0)
+            if result.get("reason"):
+                notes.append(result["reason"])
+
+        if total:
+            self.report({"INFO"},
+                        "Echo VR lightmaps: %d material(s) wired from %d "
+                        "atlas(es)%s" % (total, counts["atlases"],
+                                         " -- " + "; ".join(notes) if notes else ""))
+        else:
+            self.report({"WARNING"},
+                        "Echo VR lightmaps: %d atlas(es) loaded but NOT wired -- %s"
+                        % (counts["atlases"],
+                           "; ".join(notes) or "no reason recorded"))
 
 
 def menu_func(self, context):

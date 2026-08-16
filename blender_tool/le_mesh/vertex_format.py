@@ -171,7 +171,7 @@ def parse_elements(data: bytes, base: int, active_count: int) -> list[VertexElem
     return out
 
 
-def read_vertex_format(primary: bytes, vb_off: int) -> tuple[list[VertexElement], int, int, int]:
+def read_vertex_format(primary: bytes, vb_off: int, is_evr: bool = False) -> tuple[list[VertexElement], int, int, int]:
     """Parse one CGVertexBufferData record.
 
     Returns (elements, stride, rel_gpu_offset, vertex_count).
@@ -179,7 +179,8 @@ def read_vertex_format(primary: bytes, vb_off: int) -> tuple[list[VertexElement]
     active = struct.unpack_from("<I", primary, vb_off + VB_USED_OFF)[0]
     elements = parse_elements(primary, vb_off, active)
     rel_gpu = struct.unpack_from("<I", primary, vb_off + VB_GPU_OFFSET_OFF)[0]
-    count = struct.unpack_from("<I", primary, vb_off + VB_NUMVERTS_OFF)[0]
+    nv_off = 0x13C if is_evr else VB_NUMVERTS_OFF
+    count = struct.unpack_from("<I", primary, vb_off + nv_off)[0]
     stride = compute_stride(elements)
     return elements, stride, rel_gpu, count
 

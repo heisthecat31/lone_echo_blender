@@ -1552,7 +1552,10 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 sep = nt.nodes.new("ShaderNodeSeparateColor")
                 sep.location = (-900, 0)
                 nt.links.new(node.outputs["Color"], sep.inputs["Color"])
-                rough_src = sep.outputs[0]
+                # ROUGHNESS IS THE GREEN CHANNEL, not red.
+                # Verified against the game on `d09afd15b1c75c04` instance
+                # i1535: red produced visibly wrong gloss, green matches.
+                rough_src = sep.outputs[1]
                 rg_node, rg_sep = node, sep
                 ao = ao_channel_of(spec, rg)
                 if ao:
@@ -1885,9 +1888,56 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 em_src = gmix.outputs[ri]
             elif em_gate[1] is not None:
                 strength *= float(em_gate[1])
-            nt.links.new(em_src, em_col_in)
-            if em_str_in:
-                em_str_in.default_value = strength
+            # ── AO, OR GENUINELY EMISSIVE? ───────────────────────────────
+            # The AO reading is right for most materials (verified against the
+            # game on `d09afd15b1c75c04` i1535) but NOT for all, and the
+            # discriminator is structural rather than a guess:
+            #
+            #   AO MODULATES A BASE COLOUR. A material that binds an emissive
+            #   map and NO albedo has nothing to occlude, so the map cannot be
+            #   ambient occlusion -- it is the surface's own light.
+            #
+            # `mpl_combat_dyson`'s sky (material 845a3a0897d15ecf) is exactly
+            # that: one channel, `layer0_emissive_map`, no base colour. Treated
+            # as AO it was inverted and multiplied into an empty Base Colour,
+            # which painted the sky dome with its own signage texture.
+            has_albedo = bool(spec.get("channels", {}).get("base_color"))
+            if not has_albedo:
+                # Genuinely emissive: drive Emission with the map and leave
+                # Base Colour alone.
+                node.label = "emissive_map"
+                mat["le_emissive_is_ao"] = False
+                if em_col_in is not None and not em_col_in.links:
+                    nt.links.new(em_src, em_col_in)
+                if em_str_in:
+                    em_str_in.default_value = strength
+            else:
+                inv = nt.nodes.new("ShaderNodeInvert")
+                inv.location = (-700, -1100)
+                inv.label = "ao invert"
+                inv.inputs["Fac"].default_value = 1.0
+                nt.links.new(em_src, inv.inputs["Color"])
+
+                aomix, (afi, aai, abi, ari) = _mix_node(
+                    nt, "RGBA", "MULTIPLY", -420, -980, label="ao multiply")
+                aomix.inputs[afi].default_value = 1.0
+
+                bc_in = _principled_input(bsdf, "Base Color")
+                if bc_in is not None and bc_in.links:
+                    nt.links.new(bc_in.links[0].from_socket, aomix.inputs[aai])
+                elif bc_in is not None:
+                    try:
+                        aomix.inputs[aai].default_value = tuple(bc_in.default_value)
+                    except Exception:
+                        aomix.inputs[aai].default_value = (1.0, 1.0, 1.0, 1.0)
+                nt.links.new(inv.outputs["Color"], aomix.inputs[abi])
+                if bc_in is not None:
+                    nt.links.new(aomix.outputs[ari], bc_in)
+
+                node.label = "ao_map"
+                mat["le_emissive_is_ao"] = True
+                if em_str_in:
+                    em_str_in.default_value = 0.0
     elif em_col_in:
         ec = spec.get("emissive_color", [0, 0, 0])
         if any(ec):
@@ -2248,6 +2298,31 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
             mat.show_transparent_back = bool(opts.get("show_transparent_back", False))
         except Exception:
             pass
+    # UV SCALE -- `SShaderInputData.uscale/vscale`, which the Echo VR extractor
+    # parsed and discarded until now. ~10% of shader-set binds are non-unit
+    # ((1,2), (0.25,1), (0.35,1.4) ...), so without this those materials tile at
+    # the wrong density. One TexCoord->Mapping feeds every image node that has
+    # nothing driving its Vector yet, which is the whole graph in practice and
+    # keeps this to a single hook instead of eleven call sites.
+    uv_scale = spec.get("uv_scale")
+    if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0):
+        try:
+            targets = [n for n in nt.nodes
+                       if n.type == "TEX_IMAGE" and not n.inputs["Vector"].links]
+            if targets:
+                coord = nt.nodes.new("ShaderNodeTexCoord")
+                coord.location = (-2800, 400)
+                mapping = nt.nodes.new("ShaderNodeMapping")
+                mapping.location = (-2600, 400)
+                mapping.label = f"uv scale {uv_scale[0]:g}x{uv_scale[1]:g}"
+                mapping.inputs["Scale"].default_value = (
+                    float(uv_scale[0]), float(uv_scale[1]), 1.0)
+                nt.links.new(coord.outputs["UV"], mapping.inputs["Vector"])
+                for node in targets:
+                    nt.links.new(mapping.outputs["Vector"], node.inputs["Vector"])
+        except Exception:
+            pass
+
     return mat
 
 

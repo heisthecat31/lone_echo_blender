@@ -348,6 +348,42 @@ HASH_EMISSIVE_MAP_VOFFSET = {L: symbol64(f"layer{L}_emissive_map_voffset") for L
 _NAME_TABLE_CACHE: dict[int, dict[int, str]] = {}
 
 
+#: Echo VR material parameters, which the Lone Echo vocabulary above does NOT
+#: cover: of the 139 properties a shipped EVR material carries, the LE table
+#: resolves **zero**. These are recovered preimages -- the key IS
+#: `symbol64(name)`, so a hit is verified by construction, not a guess.
+#:
+#: Two things about the naming differ from the Lone Echo side and are why the
+#: existing table misses: EVR strips the underscores (`emissive_scale` is
+#: authored as `emissivescale`), and it carries per-material FEATURE FLAGS that
+#: the LE vocabulary has no equivalent for.
+#:
+#: The flags matter well beyond bookkeeping. `enablebakedlighting` /
+#: `enablesglighting` / `enabledynamiclighting` all reading 0 means the surface
+#: takes NO lighting -- it is self-illuminated. That is what separates a genuine
+#: emissive panel from a surface whose "emissive" map is really doing ambient
+#: occlusion duty, which nothing in the material spec could distinguish before.
+EVR_PARAMS = (
+    "emissivescale",
+    "opacityscale",
+    "opacitythreshold",
+    "speccolortintmode",
+    "taaweight",
+    "enablealphatestdither",
+    "enablebakedlighting",
+    "enablesglighting",
+    "enabledynamiclighting",
+    "enablelightmapao",
+    "enabledecals",
+    "enablefog",
+    "EnableAOVolumes",
+)
+
+#: The flags that together say "this surface receives no lighting".
+EVR_LIGHTING_FLAGS = ("enablebakedlighting", "enablesglighting",
+                      "enabledynamiclighting")
+
+
 def build_name_table(max_layer: int = MAX_LAYER) -> dict[int, str]:
     """hash -> authored parameter name.
 
@@ -379,6 +415,8 @@ def build_name_table(max_layer: int = MAX_LAYER) -> dict[int, str]:
             for suf in SUFFIXED:
                 add(f"layer{L}_{n}{suf}")
     for n in AUX_INPUT_NAMES:
+        add(n)
+    for n in EVR_PARAMS:
         add(n)
 
     _NAME_TABLE_CACHE[max_layer] = table

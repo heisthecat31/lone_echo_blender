@@ -806,6 +806,12 @@ def _first_present(roles: list[str], role_textures: dict[str, str]) -> str | Non
     return None
 
 
+#: Role sources that mean "nothing declared this texture; it was inferred".
+#: A binding from one of these is tentative regardless of how well-known the
+#: role name is.
+GUESSED_ROLE_SOURCES = frozenset({"format", "dxgi", "texture_overlap"})
+
+
 def _channel(role_key: str, tex_hash: str, dxgi_by_tex: dict[str, int],
              *, layer: int | None = None, is_normal: bool = False) -> dict:
     dxgi = dxgi_by_tex.get(tex_hash)
@@ -1589,6 +1595,19 @@ def build_material_spec(key: str, *, shaderset_hash: str = "", material_hash: st
     # the shader's own `specalbedo = .xyz * .w`). 25 of the
     # 440 materials in `blender_tool/exports` are in exactly that state.
     specular_f0_when_absent = 0.0 if (composite and "specular" not in channels) else None
+
+    # `confidence` describes the ROLE NAME (was its preimage cracked?), not
+    # whether the TEXTURE in that role was actually declared. So a texture
+    # picked by DXGI-format guessing lands in a known role and reads
+    # "confirmed" -- which is how `mpl_arena_a`'s sky wore a blend mask as base
+    # colour while claiming to be confirmed data. A guessed binding is
+    # tentative no matter how well-known its role is.
+    for _name, _ch in channels.items():
+        if not isinstance(_ch, dict):
+            continue
+        if role_sources.get(_ch.get("role_key")) in GUESSED_ROLE_SOURCES:
+            _ch["confidence"] = "tentative"
+            _ch["binding_guessed"] = True
 
     spec = {
         "key": key,

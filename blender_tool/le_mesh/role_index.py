@@ -63,6 +63,17 @@ SOURCE_FORMAT = "format"      # no array names it anywhere; the composite atlas'
                               # DXGI format + resolution group does
                               # (`materials.composite_roles_from_format`)
 SOURCE_RDEF = "rdef"          # RDEF knew the texture, nothing knew the role
+SOURCE_CONFIRMED = "confirmed"
+"""A human visually confirmed this exact role_textures dict against the real
+game -- not derived from any binding table. Echo VR's `evr_materials.
+CONFIRMED_MATERIAL_ROLES` uses this: an exhaustive search of
+`CGShaderSetResourceWin10`, a model's own primary/GPU data, and
+`CGMaterialResourceWin10`'s `trailing` table found no computable source for
+some materials' real texture bindings, so the only remaining route is a
+person looking at a render next to the reference and saying yes. Distinct
+from `SOURCE_LOD_SIBLING`, which is a confirmed answer PROPAGATED to a
+sibling that was not itself the one looked at.
+"""
 SOURCE_LOD_SIBLING = "lod_sibling"
 """Propagated from a shaderset that is the SAME MATERIAL at another LOD.
 

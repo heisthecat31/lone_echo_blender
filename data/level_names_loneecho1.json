@@ -1,0 +1,5 @@
+{
+ "levels": {},
+ "archives": {},
+ "_note": "NEGATIVE, exhaustively established. The 171 authored scene names in data/le1_scene_names.json (from the install sourcedb) bind to NOTHING: CSymbol64 of each matches 0 of 1244 archive names, and 0 of the resource name-hashes inside all 1244 archives (scripts/le_bind_scene_names.py, full sweep, 1244 scanned / 0 failed). The scanner is validated -- it recovers 761 name-hashes from archive 4c47d84c1e52447a including the meshlist 046ba98b48a2d2b1 that le_extract --list reports independently. Note CSymbol64 is CASE-INSENSITIVE, so casing is not the reason. Conclusion: these are script-level chapter identifiers reaching resources through an indirection that is not in the shipped data; sourcedb holds no mapping table (83 files, fonts and UI config only). Binding needs a source that does not ship -- a PDB, symbol dump, or the authoring asset database. Do not re-run the archive sweep; it is settled."
+}

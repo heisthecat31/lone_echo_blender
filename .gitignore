@@ -33,3 +33,8 @@ game_data/
 
 # Local private literals for scripts/scrub_gate.py (never commit)
 .scrub_private
+
+# Bundled third-party extractors and remembered paths (machine-local)
+app/extract/
+app/settings.json
+*.pyc
