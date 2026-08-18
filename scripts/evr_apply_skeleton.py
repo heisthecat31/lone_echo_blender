@@ -174,8 +174,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("package")
     ap.add_argument("model_hash")
-    ap.add_argument("--dir", default="H:/pcvr-extracted")
+    ap.add_argument("--dir", default=None)
     args = ap.parse_args(argv)
+    import evr_paths
+    args.dir = evr_paths.require_extract(args.dir)
 
     package = Path(args.package)
     summary = build(package, Path(args.dir), args.model_hash)

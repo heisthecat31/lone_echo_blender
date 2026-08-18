@@ -27,7 +27,7 @@ applied in this order:
 Usage (Blender must run the script, it needs `bpy`):
 
     blender -b -noaudio --python scripts/evr_render.py -- \
-        --manifest J:/EchoVRModels/scenes/<hash>/manifest.json \
+        --manifest <out_dir>/scenes/<hash>/manifest.json \
         --out J:/TMP/shot.png --lod 0 --max-instances 200
 
     # one object, framed automatically

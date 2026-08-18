@@ -39,7 +39,7 @@ a PDB, or authoring data).
 Unnamed levels are written as `null` rather than omitted, so the file states
 what is unknown instead of hiding it.
 
-    python scripts/evr_level_names.py --dir H:/pcvr-extracted \
+    python scripts/evr_level_names.py --dir <extract> \
         --binaries "C:/.../ready-at-dawn-echo-arena/bin/win10" \
         --out data/level_names_echovr.json
 """
@@ -62,8 +62,12 @@ from evr_resource_types import (ACTOR_DATA, SCENE_RESOURCE, normalise_hash,
                                 resolve_type_dir)
 
 #: `quest_combat_port`'s CSymbol64 dictionary, when present.
-DEFAULT_DICTIONARY = Path(
-    r"J:\EchoVR-Tools-Launcher\quest_combat_port\data\hash_lookup.json")
+def _default_dictionary():
+    import evr_paths
+    return evr_paths.hash_lookup()
+
+
+DEFAULT_DICTIONARY = None    # resolved lazily via evr_paths.hash_lookup()
 
 _ASCII = re.compile(rb"[A-Za-z0-9_./\-]{4,90}")
 _MASK = (1 << 64) - 1

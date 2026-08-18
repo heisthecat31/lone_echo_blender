@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# The proprietary Oodle DLL must never be committed
+*.dll
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

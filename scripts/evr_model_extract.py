@@ -163,8 +163,8 @@ def extract(root: Path, model_hash: str, out_dir: Path, *,
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("model", nargs="?", help="model hash")
-    ap.add_argument("--dir", default="H:/pcvr-extracted")
-    ap.add_argument("--out", default="J:/EchoVRModels/models")
+    ap.add_argument("--dir", default=None)
+    ap.add_argument("--out", default=None)
     ap.add_argument("--list", action="store_true", help="list model hashes")
     ap.add_argument("--has-skeleton", action="store_true",
                     help="with --list, only models that carry an armature")
@@ -172,6 +172,9 @@ def main(argv=None) -> int:
     ap.add_argument("--texture-divisor", type=int, default=1)
     ap.add_argument("--all-lods", action="store_true")
     args = ap.parse_args(argv)
+    import evr_paths
+    args.dir = evr_paths.require_extract(args.dir)
+    args.out = evr_paths.out_dir(args.out, "out/models")
 
     root = Path(args.dir)
     if args.list:

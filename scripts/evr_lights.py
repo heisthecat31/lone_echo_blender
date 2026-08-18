@@ -162,7 +162,8 @@ def level_lights(root: Path, level_hash: str) -> list:
 def main(argv) -> int:
     from collections import Counter
 
-    root = Path(argv[0]) if argv else Path("H:/pcvr-extracted")
+    import evr_paths
+    root = Path(argv[0]) if argv else evr_paths.require_extract(None)
     for level in argv[1:] or ["576ed3f8428ebc4b"]:
         lights = level_lights(root, level)
         kinds = Counter(light.type_name for light in lights)

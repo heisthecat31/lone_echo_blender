@@ -194,7 +194,8 @@ def decode(root: Path, model_hash) -> tuple:
 def main(argv) -> int:
     import evr_scene_extract as extractor
 
-    root = Path(r"H:/pcvr-extracted")
+    import evr_paths
+    root = evr_paths.require_extract(None)
     for model_hash in argv or ["c48412e86560721e"]:
         model_hash = normalise_hash(model_hash)
         current, path_label = extractor._decode_model_cached(root, model_hash)

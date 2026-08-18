@@ -34,7 +34,15 @@ game_data/
 # Local private literals for scripts/scrub_gate.py (never commit)
 .scrub_private
 
-# Bundled third-party extractors and remembered paths (machine-local)
-app/extract/
+# Machine-local remembered paths (never commit)
 app/settings.json
+
+# Vendored dependencies under app/extract/ ARE published -- they are MIT under
+# the same copyright as this project, and a clone is non-functional without
+# them. Only genuinely unshippable material is excluded:
+#   * evrFileTools/ - no LICENSE file, credits third parties. Its readers are
+#     reimplemented in scripts/evr_actor_data.py + scripts/evr_component_cr.py.
+#   * bin/          - proprietary DLLs (libsquish, texconv, Oodle).
+app/extract/evrFileTools/
+app/extract/**/bin/
 *.pyc

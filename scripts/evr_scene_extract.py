@@ -59,19 +59,16 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
 #
 # Prefer the viewer's decoder; fall back to the old one so the script still runs
 # where that checkout is absent, and SAY which one is in use.
-EVR_IMPORTER = str(Path(r"J:\EchoVR-Tools-Launcher\evr-mesh-importer\evr_mesh_importer"))
-EVR_TOOLS = str(Path(r"C:\Users\lucas\Desktop\FreshEVR\evrFileTools"))
-for _p in (EVR_IMPORTER, EVR_TOOLS):
-    if _p not in sys.path:
-        sys.path.append(_p)
-
-# Add pyoodle for le_shaderset_scan
-PYOODLE = str(Path(r"J:\EchoVR-Tools-Launcher\EchoVR-Cosmetics-Editor\pyoodle-main"))
-if PYOODLE not in sys.path:
-    sys.path.append(PYOODLE)
+# Import roots come from `evr_paths`, which resolves them relative to the repo
+# (everything needed is vendored under `app/extract/`) with an
+# `EVR_EXTRA_PYTHONPATH` override. No absolute developer paths.
+import evr_paths
+evr_paths.install_import_paths()
+EVR_IMPORTER = str(evr_paths.EXTRACT / "evr_mesh_importer")
+EVR_TOOLS = str(evr_paths.EXTRACT / "evrFileTools")
 
 from le_scene_extract import SceneMesh, SceneInstance, write_package, LIGHTMAP_NONE
-import evr_mesh_importer_core.level_reader as level_reader
+import evr_component_cr as level_reader   # repo-local; see its docstring
 
 # The decoder app.py uses, with `primary` alongside it. `primary._find_primary_data`
 # has five fallback strategies for locating a primary; reimplementing only the
@@ -82,10 +79,12 @@ try:
     import primary as evr_primary
     _DECODER = f"evr-mesh-importer ({EVR_IMPORTER})"
 except ImportError:                  # pragma: no cover - environment dependent
-    import evr_mesh_importer_core.decode as decode
-    evr_primary = None
-    _DECODER = f"evr_mesh_importer_core ({EVR_TOOLS}) -- FALLBACK"
+    raise SystemExit(
+        "the mesh decoder is missing: expected `decode`/`primary` under "
+        f"{EVR_IMPORTER} (vendored). Set EVR_EXTRA_PYTHONPATH to a checkout "
+        "of evr-mesh-importer if you are running from a partial tree.")
 
+import evr_actor_data
 import evr_level_reader
 import evr_materials
 import evr_model_materials
@@ -1141,7 +1140,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             continue
         found_any = True
         with open(actor_path, 'rb') as f:
-            member_info = level_reader.parse_actor_data(f.read())
+            member_info = evr_actor_data.parse(f.read())
         member_actors = member_info.get('actors', [])
         actors.extend(member_actors)
         nodeid_set.update(a['nodeid'] for a in member_actors)
@@ -2053,9 +2052,9 @@ if __name__ == "__main__":
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("hash", help="Hash of the CActorDataResourceWin10")
-    parser.add_argument("--dir", type=Path, default=Path(r"H:\pcvr-extracted"),
+    parser.add_argument("--dir", type=Path, default=None,
                         help="flat Echo VR extract root")
-    parser.add_argument("--out", type=Path, default=Path(r"J:\EchoVRModels"))
+    parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--hash-lookup", type=Path, default=None,
                         help="hash_lookup.json of cracked CSymbol64 names. "
                              "Improves inputname->role resolution; without it "
@@ -2100,6 +2099,10 @@ if __name__ == "__main__":
                              "what each model's file references. Use this when "
                              "--probe reports zero materials.")
     args = parser.parse_args()
+    # No built-in absolute defaults: --dir/--out resolve via evr_paths
+    # (EVR_EXTRACT_DIR / EVR_OUT_DIR, else the repo's own `out/`).
+    args.dir = evr_paths.require_extract(args.dir)
+    args.out = evr_paths.out_dir(args.out, "out")
 
     _STRUCTURAL_FALLBACK[0] = bool(args.structural)
     _MAX_TEXTURE[0] = int(args.max_texture or 0)

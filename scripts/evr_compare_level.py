@@ -25,18 +25,19 @@ keeps answering it as things change.
 Usage::
 
     python.exe scripts/evr_compare_level.py <level_hash> \\
-        --cache "C:/Users/lucas/Desktop/desktop/rad-archive-viewer/cache" \\
-        --out J:/EchoVRModels
+        --cache <archive_cache> \\
+        --out <out_dir>
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 DEFAULT_CACHE = Path(
-    r"C:\Users\lucas\Desktop\desktop\rad-archive-viewer\cache")
+    os.environ.get("EVR_ARCHIVE_CACHE", ""))
 
 
 def normalise(value) -> str:

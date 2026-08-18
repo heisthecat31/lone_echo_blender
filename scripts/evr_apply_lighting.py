@@ -4,7 +4,7 @@ Writes `<pkg>/lightmaps/` (one diffuse-irradiance PNG per lightmap page) and
 `<pkg>/lightmaps.json` binding meshes to pages and listing every placed light,
 so the importer needs no knowledge of the resource formats.
 
-    python scripts/evr_apply_lighting.py <package> <level> [--dir H:/pcvr-extracted]
+    python scripts/evr_apply_lighting.py <package> <level> [--dir <extract>]
 
 See `docs/EVR_LIGHTING.md`. The lights are the real `SGLightParams` records
 (colour, type, intensity, range, direction) -- see `evr_lights.py`.
@@ -248,7 +248,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("package")
     ap.add_argument("level")
-    ap.add_argument("--dir", default="H:/pcvr-extracted")
+    ap.add_argument("--dir", default=None)
     args = ap.parse_args()
     apply(Path(args.package), args.level, Path(args.dir))
     return 0

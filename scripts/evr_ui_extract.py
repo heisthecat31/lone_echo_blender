@@ -63,14 +63,15 @@ was actually measured.
 coplanar, so a viewer may z-fight.  `--separation` nudges them apart by draw
 order as a workaround; it is a rendering aid, not a decoded value.
 
-    python scripts/evr_ui_extract.py --dir J:/Summer2 --list
-    python scripts/evr_ui_extract.py 43e2da7914642604 --dir J:/Summer2 --out ui/
+    python scripts/evr_ui_extract.py --dir <extract> --list
+    python scripts/evr_ui_extract.py <level> --dir <extract> --out ui/
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -89,10 +90,8 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
 #: end), while the `FreshEVR` checkout can -- 5210 actors on the Summer lobby.
 #: Import the same one the mesh path imports, or UI placement silently works on
 #: Win10 and dies on Win7.
-for _p in (str(Path(r"C:\Users\lucas\Desktop\FreshEVR\evrFileTools")),
-           str(_ROOT / "app" / "extract" / "evrFileTools")):
-    if _p not in sys.path:
-        sys.path.append(_p)
+import evr_paths          # noqa: E402
+evr_paths.install_import_paths()
 
 from evr_resource_types import (ACTOR_DATA, CANVAS_UI_CR, TEXTURE_RESOURCE,
                                 UI_CANVAS_RESOURCE, normalise_hash,
@@ -390,12 +389,12 @@ def ui_material_spec(texture: str) -> dict:
 # ---------------------------------------------------------------------------
 def _actor_transforms(root: Path, level_hash) -> dict:
     """`{nodeid: transform}` from the level's actor table."""
-    import evr_mesh_importer_core.level_reader as level_reader
+    import evr_actor_data
 
     path = resource_path(root, ACTOR_DATA, level_hash)
     if path is None:
         return {}
-    info = level_reader.parse_actor_data(path.read_bytes())
+    info = evr_actor_data.parse(path.read_bytes())
     return {a["nodeid"]: a.get("transform") or {} for a in info.get("actors", [])}
 
 

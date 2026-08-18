@@ -1,0 +1,13 @@
+{
+ "levels": {
+  "1537fb15a7cccdd5": null,
+  "4072e13a600ba340": null,
+  "4b2e4df6dadaa3d9": null,
+  "4b2e4df6dadaa3da": null,
+  "4b2e4df6dadaa3db": null,
+  "5a2c9a937b56e477": null,
+  "6113bd53bd411194": null,
+  "813b2979a7a487eb": null
+ },
+ "_note": "0 of 8 levels named. A hash is the CSymbol64 of the authored name; unnamed levels are ones whose preimage does not appear in the shipped binaries. null means unknown, not absent."
+}

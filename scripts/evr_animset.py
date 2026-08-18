@@ -78,8 +78,8 @@ was pinned by exact agreement -- mesh counts, version tags byte-identical across
 of the curve data can still produce plausible-looking numbers.  Any future
 channel decode needs a visual oracle (a known pose), not a numeric one.
 
-    python scripts/evr_animset.py --dir H:/pcvr-extracted --list
-    python scripts/evr_animset.py 570677a85028cfa9 --dir H:/pcvr-extracted
+    python scripts/evr_animset.py --dir <extract> --list
+    python scripts/evr_animset.py <model> --dir <extract>
 """
 
 from __future__ import annotations
@@ -140,10 +140,8 @@ class AnimSet:
 
 def load_names(path: Path | None = None) -> dict:
     """`{hash -> name}` for labelling. Absent file is not an error."""
-    candidates = [path] if path else [
-        Path(r"J:\EchoVR-Tools-Launcher\quest_combat_port\data\hash_lookup.json"),
-        _ROOT / "data" / "hash_lookup.json",
-    ]
+    import evr_paths
+    candidates = [path] if path else [evr_paths.hash_lookup()]
     for candidate in candidates:
         if candidate and candidate.is_file():
             try:
@@ -220,11 +218,14 @@ def main(argv=None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("model", nargs="?", help="model hash owning the set")
-    ap.add_argument("--dir", default=r"H:\pcvr-extracted", help="flat extract")
+    ap.add_argument("--dir", default=None,
+                    help="flat extract (or set EVR_EXTRACT_DIR)")
     ap.add_argument("--list", action="store_true",
                     help="survey every animation set in the extract")
     ap.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
+    import evr_paths
+    args.dir = evr_paths.require_extract(args.dir)
 
     root = Path(args.dir)
     if args.list:

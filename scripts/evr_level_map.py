@@ -46,8 +46,8 @@ byte totals and example hashes, under `unknown`.  A level map that silently
 omits what it cannot parse is how "the floor is missing" goes unnoticed for a
 long time.
 
-    python scripts/evr_level_map.py d09afd15b1c75c04 --dir J:/Summer
-    python scripts/evr_level_map.py d09afd15b1c75c04 --dir J:/Summer --json map.json
+    python scripts/evr_level_map.py <level> --dir <extract>
+    python scripts/evr_level_map.py <level> --dir <extract> --json map.json
 """
 
 from __future__ import annotations
@@ -130,9 +130,8 @@ def read_archive(data: bytes):
 
 def load_names() -> dict:
     out = {}
-    for candidate in (
-            Path(r"J:\EchoVR-Tools-Launcher\quest_combat_port\data\hash_lookup.json"),
-            _ROOT / "data" / "hash_lookup.json"):
+    import evr_paths
+    for candidate in (evr_paths.hash_lookup(),):
         if candidate.is_file():
             try:
                 raw = json.loads(candidate.read_text(encoding="utf-8"))

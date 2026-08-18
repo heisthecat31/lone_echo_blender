@@ -17,7 +17,7 @@ combining every available name source:
 Game-agnostic: works on any extract without knowing which title it came from.
 
     python scripts/evr_name_crack.py --dir J:\\Summer2 --out data/level_names_summer2.json
-    python scripts/evr_name_crack.py --dir H:/pcvr-extracted --out data/level_names_echovr.json
+    python scripts/evr_name_crack.py --dir <extract> --out data/level_names_echovr.json
 """
 
 from __future__ import annotations

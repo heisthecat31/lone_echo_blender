@@ -111,10 +111,8 @@ and particles are carried as bytes only if their type survives, and nothing
 here validates that Echo VR's R15 engine can interpret an R16 resource whose
 type hash merely happens to match.  A clean load is the test, not this script.
 
-    python scripts/le2_port.py 1581f6362104f69e \\
-        --src "J:/Lone Echo 2/ready-at-dawn-lone-echo-2/Extracted" \\
-        --target J:/Summer2 \\
-        --out "J:/Lone Echo 2/ready-at-dawn-lone-echo-2/Extracted_EchoVR_Port"
+    python scripts/le2_port.py <level> --src <le2_extract> \\
+        --target <echovr_extract> --out <output_tree>
 """
 
 from __future__ import annotations
@@ -122,6 +120,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import pathlib
 import shutil
 import sys
 from collections import Counter
@@ -130,7 +129,7 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 _ROOT = _SCRIPTS.parent
 for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool"),
-           str(Path(r"J:\EchoVR-Tools-Launcher\quest_combat_port\tools\resource_io"))):
+           str(_ROOT / "app" / "extract" / "resource_io")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -141,13 +140,17 @@ from evr_resource_types import normalise_hash  # noqa: E402
 ARCHIVE_RESOURCE = "2a41cf1c1d9e5d32"
 
 #: Names loaded only to make the report readable.
-_HASH_LOOKUP = Path(r"J:\EchoVR-Tools-Launcher\quest_combat_port\data\hash_lookup.json")
+_HASH_LOOKUP = None       # resolved via evr_paths.hash_lookup()
 
 
 def load_names() -> dict:
+    import evr_paths
+    path = _HASH_LOOKUP or evr_paths.hash_lookup()
+    if path is None:
+        return {}
     try:
-        raw = json.loads(_HASH_LOOKUP.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, AttributeError):
         return {}
     return {k.lower().replace("0x", "").rjust(16, "0"): v
             for k, v in raw.items() if isinstance(v, str)}
