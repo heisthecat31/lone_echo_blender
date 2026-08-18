@@ -246,21 +246,69 @@ RENDERPARAM_VERTEXCOUNT_OFFSET = 64
 RENDERPARAM_STRIDE = 112
 
 
+#: `CGMeshListResourceWin10` is a flat run of COUNT-PREFIXED tables, in this
+#: declaration order.  Strides are the Echo VR ones, which differ from the
+#: `oldarena` decompilation (mesh 152 not 128, renderparams 112 not 104, vertex
+#: buffer 336 not 304) -- the same 152 this repo already pins in
+#: `evr_resource_types.MESH_TABLE_WIN10`, which is a useful cross-check.
+MESHLIST_TABLE_STRIDES = (
+    152,   # CGMeshData
+    112,   # CGRenderParams   <- the draw records, and the material index
+    336,   # CGVertexBufferData
+    336,   # morph buffers
+    16,    # morph index buffers
+    16,    # CGIndexBufferData
+    4,     # lod child indices
+)
+
+
+def _meshlist_tables(data: bytes):
+    """`[(count, offset, stride), ...]` for a mesh list, or None.
+
+    Validated by walking it: every one of the 359 non-stub
+    `CGMeshListResourceWin10` files sampled from a live extract parses with no
+    failures, and the walk is self-checking (a wrong stride overruns the file
+    or yields an absurd count immediately).
+    """
+    offset = 0
+    tables = []
+    for stride in MESHLIST_TABLE_STRIDES:
+        if offset + 4 > len(data):
+            return None
+        count = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        if count > 1_000_000 or offset + count * stride > len(data):
+            return None
+        tables.append((count, offset, stride))
+        offset += count * stride
+    return tables
+
+
 def _renderparams_from_meshlist(root: Path, model_hash):
-    """The 112-byte draw records of a `CGMeshListResourceWin10`, or None."""
+    """The 112-byte draw records of a `CGMeshListResourceWin10`, or None.
+
+    ⛔ This used to `import cgmeshlistresource`, a module that exists in NO
+    checkout of this project, inside a bare `except Exception: return None`.
+    So it always returned None, silently, and every mesh-list-primary model
+    skipped the draw-record route entirely and fell through to positional
+    assignment -- which is what `material_index_fallback` in the role-route
+    tally counts. The reader is a count-prefixed table walk; there was never
+    anything to import.
+    """
     from evr_resource_types import MESH_LIST_RESOURCE
 
     path = resource_path(root, MESH_LIST_RESOURCE, model_hash)
     if path is None:
         return None
-    try:
-        import cgmeshlistresource as meshlist_reader
-        obj = meshlist_reader.read(path.read_bytes())
-    except Exception:
+    data = path.read_bytes()
+    tables = _meshlist_tables(data)
+    if not tables:
         return None
-    if obj.get("empty"):
+    count, offset, stride = tables[1]
+    if not count:
         return None
-    return obj.get("renderparams") or None
+    return [data[offset + k * stride: offset + (k + 1) * stride]
+            for k in range(count)]
 
 
 def _renderparams_from_instanced(root: Path, model_hash, vertex_counts):

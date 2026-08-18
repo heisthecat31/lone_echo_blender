@@ -58,7 +58,8 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from evr_resource_types import ACTOR_DATA, SCENE_RESOURCE, normalise_hash
+from evr_resource_types import (ACTOR_DATA, SCENE_RESOURCE, normalise_hash,
+                                resolve_type_dir)
 
 #: `quest_combat_port`'s CSymbol64 dictionary, when present.
 DEFAULT_DICTIONARY = Path(
@@ -75,10 +76,10 @@ def _hash(name: str) -> str:
 
 def levels_in(root: Path) -> set:
     """Hashes that are LEVELS: actor data AND a scene resource."""
-    actors = {p.name for p in (root / ACTOR_DATA).iterdir()} \
-        if (root / ACTOR_DATA).is_dir() else set()
-    scenes = {p.name for p in (root / SCENE_RESOURCE).iterdir()} \
-        if (root / SCENE_RESOURCE).is_dir() else set()
+    actor_dir = resolve_type_dir(root, ACTOR_DATA)
+    scene_dir = resolve_type_dir(root, SCENE_RESOURCE)
+    actors = {p.name for p in actor_dir.iterdir()} if actor_dir.is_dir() else set()
+    scenes = {p.name for p in scene_dir.iterdir()} if scene_dir.is_dir() else set()
     return {normalise_hash(h) for h in (actors & scenes)}
 
 

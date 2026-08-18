@@ -81,6 +81,7 @@ from evr_resource_types import (
     TEXTURE_DDS_SIDECAR,
     TEXTURE_RESOURCE,
     normalise_hash,
+    resolve_type_dir,
     resource_path,
 )
 
@@ -351,7 +352,6 @@ def _rebuild_legacy(res: TextureResource, data: bytes, root: Path) -> tuple:
     if not inline:
         return None, "no inline DDS to extend"
 
-    pack_dir = Path(root) / RAW_TEXTURE_PACK
     payloads = []
     for tex_hash in reversed(_legacy_high_res_hashes(data)):
         candidate = resource_path(root, RAW_TEXTURE_PACK, tex_hash)
@@ -548,7 +548,7 @@ if __name__ == "__main__":
     if args.texture:
         print(json.dumps(diagnose(args.root, args.texture, args.packfile), indent=2))
     elif args.sample:
-        directory = args.root / TEXTURE_RESOURCE
+        directory = resolve_type_dir(args.root, TEXTURE_RESOURCE)
         files = sorted(p for p in directory.iterdir() if p.is_file())[:args.sample]
         for path in files:
             stem = path.stem if path.suffix == ".bin" else path.name

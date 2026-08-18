@@ -183,10 +183,10 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
         # renders as streaked garbage rather than as nothing.
         vert_lo, vert_hi = (entry[3], entry[4]) if len(entry) >= 5 else (0, 0)
         if level not in cache:
-            cgsi_path = root / STATIC_RESOURCE / level
-            gpu_path = root / evr_lm.CGSI_GPU / level
-            cgsi = cgsi_path.read_bytes() if cgsi_path.is_file() else None
-            gpu = gpu_path.read_bytes() if gpu_path.is_file() else None
+            cgsi_path = resource_path(root, STATIC_RESOURCE, level)
+            gpu_path = resource_path(root, evr_lm.CGSI_GPU, level)
+            cgsi = cgsi_path.read_bytes() if cgsi_path else None
+            gpu = gpu_path.read_bytes() if gpu_path else None
             pages = evr_lm.static_instance_lightmaps(cgsi)[1] if cgsi else {}
             cache[level] = (cgsi, gpu, evr_lm.level_lightmap(root, level), pages)
         cgsi, gpu, info, page_by_entity = cache[level]

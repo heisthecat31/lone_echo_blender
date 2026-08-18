@@ -29,7 +29,7 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
         sys.path.insert(0, _p)
 
 from evr_resource_types import (INSTANCED_MODEL_RESOURCE, MESH_LIST_RESOURCE,
-                                normalise_hash)
+                                normalise_hash, resolve_type_dir)
 import evr_apply_skeleton
 from le_scene_extract import SceneInstance, SceneMesh, write_package
 
@@ -38,7 +38,7 @@ def list_models(root: Path, only_skeleton: bool = False) -> list:
     """Every model hash in the extract, optionally only rigged ones."""
     found = set()
     for kind in (INSTANCED_MODEL_RESOURCE, MESH_LIST_RESOURCE):
-        directory = root / kind
+        directory = resolve_type_dir(root, kind)
         if directory.is_dir():
             found |= {normalise_hash(p.name.split(".")[0])
                       for p in directory.iterdir() if p.is_file()}
@@ -127,8 +127,33 @@ def extract(root: Path, model_hash: str, out_dir: Path, *,
              "diagnostics": {"model": model_hash, "decode_path": path_label}},
             indent=1), encoding="utf-8")
 
+    # Extract EVERY texture the model streams, not only the ones its materials
+    # happen to name. A model whose palette is one repeated material names a
+    # handful while the rest of its inventory -- including its 4096 maps -- is
+    # never written at all. `dac6537a23236325` names 3 of its 36.
+    import evr_texture_resource as evr_tex
+    written = {p.stem for p in textures.glob("*.dds")}
+    extra = 0
+    for h in (model_textures or []):
+        if h in written:
+            continue
+        try:
+            blob, _note = evr_tex.rebuild_dds(root, h, packfile_hash=packfile)
+            if not blob:
+                blob, _note = evr_tex.rebuild_dds(root, h)
+        except Exception:                                   # noqa: BLE001
+            blob = None
+        if not blob:
+            continue
+        if ctx.texture_divisor > 1:
+            blob, _n = evr_tex.scale_dds_resolution(blob, ctx.texture_divisor)
+        if ctx.max_texture:
+            blob, _n = evr_tex.cap_dds_resolution(blob, ctx.max_texture)
+        (textures / f"{h}.dds").write_bytes(blob)
+        extra += 1
+
     skeleton = evr_apply_skeleton.build(package, root, model_hash)
-    return {"package": package, "meshes": len(meshes),
+    return {"package": package, "meshes": len(meshes), "extra_textures": extra,
             "verts": sum(len(r[0]) for r in results),
             "materials": len(specs),
             "textures": len(list(textures.glob("*.dds"))),
@@ -165,7 +190,8 @@ def main(argv=None) -> int:
         return 1
     skel = summary["skeleton"]
     print(f"{args.model}: {summary['meshes']} mesh(es), {summary['verts']:,} verts, "
-          f"{summary['materials']} material(s), {summary['textures']} texture(s)"
+          f"{summary['materials']} material(s), {summary['textures']} texture(s) "
+          f"({summary['extra_textures']} beyond what the materials name)"
           + (f", {skel['bones']}/{skel['of']} bones" if skel else ", no skeleton"))
     print(f"-> {summary['package']}")
     return 0

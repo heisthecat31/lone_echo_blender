@@ -89,7 +89,8 @@ for _path in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from evr_resource_types import MATERIAL_RESOURCE, normalise_hash, resource_path
+from evr_resource_types import (MATERIAL_RESOURCE, normalise_hash,
+                                resolve_type_dir, resource_path)
 
 #: (struct offset, element stride) for the six `SGMaterialData` containers, in
 #: member order.  Non-uniform on purpose -- see the module docstring.
@@ -208,7 +209,7 @@ def build_default_textures(root: Path, *, threshold: int = DEFAULT_SHARE_THRESHO
     infrastructure.  Also returns the per-material tables it read, since the
     caller invariably wants them and re-reading 1727 files is wasteful.
     """
-    directory = Path(root) / MATERIAL_RESOURCE
+    directory = resolve_type_dir(Path(root), MATERIAL_RESOURCE)
     if not directory.is_dir():
         return set()
 

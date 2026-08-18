@@ -83,7 +83,8 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evr_resource_types import MATERIAL_RESOURCE, normalise_hash, resource_path
+from evr_resource_types import (MATERIAL_RESOURCE, normalise_hash,
+                                resolve_type_dir, resource_path)
 
 # ---------------------------------------------------------------------------
 # Layout constants
@@ -739,7 +740,7 @@ def load(root: Path, material_hash, known_textures=None) -> MaterialResource | N
 
 def all_material_hashes(root: Path) -> set[str]:
     """Every CGMaterialResourceWin10 present in the extract."""
-    directory = Path(root) / MATERIAL_RESOURCE
+    directory = resolve_type_dir(Path(root), MATERIAL_RESOURCE)
     if not directory.is_dir():
         return set()
     return {
@@ -752,7 +753,7 @@ def all_texture_hashes(root: Path) -> set[str]:
     """Every cgtextureresourceWin10 present -- the widest sane scan anchor."""
     from evr_resource_types import TEXTURE_RESOURCE
 
-    directory = Path(root) / TEXTURE_RESOURCE
+    directory = resolve_type_dir(Path(root), TEXTURE_RESOURCE)
     if not directory.is_dir():
         return set()
     return {
@@ -919,7 +920,7 @@ def dump_descriptors(data: bytes) -> str:
 
 def audit(root: Path, limit: int | None = None) -> dict:
     """Probe every material in the extract. Read-only."""
-    directory = Path(root) / MATERIAL_RESOURCE
+    directory = resolve_type_dir(Path(root), MATERIAL_RESOURCE)
     if not directory.is_dir():
         return {"error": f"no such directory: {directory}"}
 

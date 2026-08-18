@@ -47,7 +47,8 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evr_resource_types import TEXTURE_STREAMING, normalise_hash, resource_path
+from evr_resource_types import (TEXTURE_STREAMING, normalise_hash,
+                                resolve_type_dir, resource_path)
 
 STREAM_DATA_SIZE = 192   # STextureStreamData: three u32[16] arrays
 OBJECT_TS_SIZE = 8       # SObjectTSData: u32 texture + f32 maxtexelratio
@@ -250,7 +251,7 @@ def audit(root: Path, limit: int | None = None) -> dict:
     trusting any material output built on top of it -- it is the cheap version
     of the 2518-sample round-trip the reference parser was validated with.
     """
-    directory = Path(root) / TEXTURE_STREAMING
+    directory = resolve_type_dir(Path(root), TEXTURE_STREAMING)
     if not directory.is_dir():
         return {"error": f"no such directory: {directory}"}
 

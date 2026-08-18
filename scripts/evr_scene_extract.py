@@ -105,6 +105,7 @@ from evr_resource_types import (
     TEXTURE_STREAMING as DIR_TEX_STREAMING,
     MESH_DIRS,
     normalise_hash,
+    resolve_type_dir,
 )
 
 # Same four directories, same order, as the original list -- only the COMMENTS
@@ -181,6 +182,108 @@ def resolve_level(token: str) -> str:
     return canonical
 
 
+def _model_group_table(data: bytes, is_model) -> list:
+    """The flat model-hash array `CModelCR` carries, or `[]`.
+
+    `CModelCR` ends with one contiguous run of u64s that are ALL real model
+    hashes -- 87 entries on `mpl_combat_fission`. It is a model TABLE, not a
+    record array, which is why the 0x28-strided component walk reads it as
+    noise (the same hash appears as `component_type`, `selector` and `flags` at
+    successive offsets).
+    """
+    best: list = []
+    run: list = []
+    for off in range(0, max(0, len(data) - 8), 8):
+        h = f"{struct.unpack('<Q', data[off:off + 8])[0]:016x}"
+        if is_model(h):
+            run.append(h)
+        else:
+            if len(run) > len(best):
+                best = run
+            run = []
+    return best if len(best) >= len(run) else run
+
+
+def _stub_substitutes(table: list, has_geometry, window: int = 2) -> dict:
+    """`{empty model -> [neighbouring models that DO have geometry]}`.
+
+    ⚠ HEURISTIC, and the only one in the geometry path -- read this before
+    trusting a prop's position.
+
+    Some actors bind a model whose `CGMeshListResource` is a 56-byte stub with
+    a 0-byte GPU blob (measured identical across three independent extracts, so
+    the stub really is empty, not an extraction failure). In the model table
+    those stubs sit inside a REPEATING group alongside the meshes that carry
+    the geometry:
+
+        C* D D D  C* D D D            stub C, then its meshes
+        N  O  P*  N  O  P*  N O P*    stub P, beside N and O
+
+    So a stub's geometry is taken to be its neighbours in that table. On
+    `mpl_combat_fission` this recovers `0d42ff215d4315ad` (a clean
+    2.8 x 2.8 x 6.0 m structure, 22896 verts) and `ead3c4d5e88b1ac9`, which the
+    component walk never collects at all.
+
+    ⛔ What is NOT established: the group's exact framing. The two observed
+    groups differ in size (4 and 3) and in whether the stub leads or trails, so
+    a fixed-width window is used rather than a decoded record. A stub whose
+    neighbours in the table are unrelated models would import geometry at the
+    wrong place. `--no-stub-substitute` turns it off.
+    """
+    out: dict = {}
+    for i, h in enumerate(table):
+        if has_geometry(h):
+            continue
+        picks: list = []
+        for j in range(max(0, i - window), min(len(table), i + window + 1)):
+            if j == i:
+                continue
+            other = table[j]
+            if has_geometry(other) and other not in picks:
+                picks.append(other)
+        if picks:
+            out.setdefault(h, [])
+            for m in picks:
+                if m not in out[h]:
+                    out[h].append(m)
+    return out
+
+
+def _model_cr_bindings(data: bytes, nodeid_set: set) -> dict:
+    """`CModelCR` -> `{str(nodeid): [model_hash, ...]}`, ALL models per actor.
+
+    Same record framing and same validity rule as
+    `level_reader.parse_model_cr` (component type in its known set, or the
+    `record_id == 0x1C` / `flags == 0x000FFFFF` fallback) -- the only
+    difference is that this keeps every model an actor binds instead of
+    letting a dict assignment discard all but the last.
+
+    The validity rule itself is NOT the weak link, despite looking like one:
+    over `mpl_combat_fission`'s 726 records that cite a real model on a real
+    actor, exactly ONE fails it. The losses were all collisions.
+    """
+    import struct as _struct
+    out: dict = {}
+    for off in range(0x20, max(0, len(data) - 8), 8):
+        mesh_hash = _struct.unpack_from("<Q", data, off)[0]
+        if mesh_hash in (0, 0xFFFFFFFFFFFFFFFF):
+            continue
+        component_type = _struct.unpack_from("<Q", data, off - 0x20)[0]
+        selector = _struct.unpack_from("<Q", data, off - 0x18)[0]
+        record_id = _struct.unpack_from("<Q", data, off - 0x08)[0]
+        valid = component_type in level_reader.CMODEL_COMPONENT_TYPES
+        if not valid and record_id == 0x1C:
+            flags = _struct.unpack_from("<Q", data, off - 0x10)[0]
+            valid = flags == 0x000FFFFF
+        if not (valid and selector in nodeid_set):
+            continue
+        slot = out.setdefault(str(selector), [])
+        value = f"0x{mesh_hash:016X}"
+        if value not in slot:
+            slot.append(value)
+    return out
+
+
 def sublevels_of(level_hash: str) -> list:
     """Every level that belongs with `level_hash`, itself first.
 
@@ -227,8 +330,9 @@ def sublevels_of(level_hash: str) -> list:
                 break
 
     root = Path(_LAST_ROOT[0] or ".")
+    actor_dir = resolve_type_dir(root, DIR_ACTOR_DATA)
     ordered = [canonical] + sorted(g for g in group if g != canonical)
-    present = [g for g in ordered if (root / DIR_ACTOR_DATA / g).exists()]
+    present = [g for g in ordered if (actor_dir / g).exists()]
     return present or [canonical]
 
 
@@ -283,7 +387,7 @@ def reconstruct_dds(tex_hash: str, pcvr_dir: Path, out_path: Path) -> bool:
     
     The high-res data in RawTexturePackfileWin10 is prepended to build the full DDS.
     """
-    tex_res = pcvr_dir / DIR_TEX_RESOURCE / tex_hash
+    tex_res = resolve_type_dir(pcvr_dir, DIR_TEX_RESOURCE) / tex_hash
     if not tex_res.exists():
         return False
     
@@ -314,7 +418,7 @@ def reconstruct_dds(tex_hash: str, pcvr_dir: Path, out_path: Path) -> bool:
     orig_mips = struct.unpack_from('<I', dds_header, 28)[0]
     
     # Read high quality payloads (stored smallest to largest, prepend largest first)
-    raw_dir = pcvr_dir / DIR_RAW_TEX_PACK
+    raw_dir = resolve_type_dir(pcvr_dir, DIR_RAW_TEX_PACK)
     high_payloads = []
     for h in reversed(high_hashes):
         hp = raw_dir / h
@@ -991,7 +1095,8 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                       hash_lookup: Path | None = None,
                       probe_only: bool = False,
                       where_only: bool = False,
-                      geo_only: bool = False):
+                      geo_only: bool = False,
+                      stub_substitute: bool = True):
     # Reset ONCE per scene, at the top -- not between the materials and
     # geometry phases. The materials phase now decodes geometry too (LOD
     # grouping, see the LOD-aware `material_rank` below), and `_DECODE_CACHE`
@@ -1025,8 +1130,9 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     found_any = False
     for member in scene_group:
         actor_path = None
+        actor_dir = resolve_type_dir(pcvr_dir, DIR_ACTOR_DATA)
         for ext in ["", ".bin"]:
-            cand = pcvr_dir / DIR_ACTOR_DATA / (member + ext)
+            cand = actor_dir / (member + ext)
             if cand.exists():
                 actor_path = cand
                 break
@@ -1054,22 +1160,84 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     # 732 of this level's 1459 actors (69% -> only 31% coverage) had no model
     # hash at all and were silently dropped -- most of a level's static
     # architecture lives here, not in CModelCR/CInstanceModelCR.
-    actor_map = {}
+    # ⛔ `actor_map` maps a nodeid to a LIST of models, not to one model.
+    #
+    # `level_reader.parse_model_cr` returns `{str(nodeid): {...}}` -- a dict
+    # keyed by actor -- so when an actor carries SEVERAL model components only
+    # the last one written survives. That is not an edge case: on
+    # `mpl_combat_fission` 102 of 584 model-bound actors bind more than one
+    # model, and **18 models are lost outright** because they never win a
+    # single actor. Measured against the level's own CArchiveResource closure
+    # -- the engine's authoritative load list -- the old walk collected 72 of
+    # the 98 models that have real geometry; the 26 it missed are 5.3 MB
+    # including a 2.5 MB and a 1.3 MB mesh, which is what "the floor is
+    # missing" looks like from inside Blender.
+    #
+    # The parsers are left alone (they are a vendored dependency); their result
+    # is re-derived here into `{nodeid: [model, ...]}`, order preserved.
+    actor_map: dict = {}
+    _model_tables: list = []
     for member, h in ((m, t) for m in scene_group
                       for t in (DIR_MODEL_CR, DIR_INSTANCE_MODEL_CR,
                                 DIR_STATIC_MODEL_CR)):
-        p = pcvr_dir / h / member
+        type_dir = resolve_type_dir(pcvr_dir, h)
+        p = type_dir / member
         if not p.exists():
             p = p.with_suffix(".bin")
-        if p.exists():
-            with open(p, 'rb') as f:
-                if h == DIR_MODEL_CR:
-                    func, type_name = level_reader.parse_model_cr, h
-                elif h == DIR_STATIC_MODEL_CR:
-                    func, type_name = level_reader.parse_instance_model_cr, "CStaticInstanceModelCR"
-                else:
-                    func, type_name = level_reader.parse_instance_model_cr, h
-                actor_map.update(func(f.read(), nodeid_set, type_name).get('actors', {}))
+        if not p.exists():
+            continue
+        blob = p.read_bytes()
+        if h == DIR_MODEL_CR:
+            found = _model_cr_bindings(blob, nodeid_set)
+            if stub_substitute:
+                _model_tables.append(blob)
+        else:
+            type_name = ("CStaticInstanceModelCR" if h == DIR_STATIC_MODEL_CR
+                         else h)
+            found = {
+                k: [v['model_hash']]
+                for k, v in level_reader.parse_instance_model_cr(
+                    blob, nodeid_set, type_name).get('actors', {}).items()
+            }
+        for nid, models in found.items():
+            slot = actor_map.setdefault(nid, [])
+            for m in models:
+                if m not in slot:
+                    slot.append(m)
+
+    # --- stub expansion -----------------------------------------------------
+    # An actor that binds an EMPTY model contributes nothing; its geometry
+    # lives in the model table beside the stub. See `_stub_substitutes`.
+    if stub_substitute and _model_tables:
+        def _is_model(hh):
+            return find_mesh_and_primary(pcvr_dir, hh)[1] is not None
+
+        def _has_geo(hh):
+            gpu_p, _pri = find_mesh_and_primary(pcvr_dir, hh)
+            return bool(gpu_p) and gpu_p.stat().st_size > 0
+
+        subs: dict = {}
+        for blob in _model_tables:
+            table = _model_group_table(blob, _is_model)
+            for stub, picks in _stub_substitutes(table, _has_geo).items():
+                subs.setdefault(stub, [])
+                for m in picks:
+                    if m not in subs[stub]:
+                        subs[stub].append(m)
+        added = 0
+        for nid, models in actor_map.items():
+            for m in list(models):
+                key = normalise_hash(m)
+                if _has_geo(key):
+                    continue
+                for repl in subs.get(key, ()):
+                    value = f"0x{repl.upper()}"
+                    if value not in models:
+                        models.append(value)
+                        added += 1
+        if subs:
+            print(f"  stub expansion: {len(subs)} empty model(s) mapped to "
+                  f"table neighbours, {added} binding(s) added")
 
     # ─── PARSE STATIC INSTANCES (per member, merged) ─────────────────────────
     #
@@ -1082,7 +1250,8 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
 
     for member in scene_group:
         def _res(kind):
-            q = pcvr_dir / kind / member
+            type_dir = resolve_type_dir(pcvr_dir, kind)
+            q = type_dir / member
             return q if q.exists() else q.with_suffix(".bin")
 
         p_smodel, p_transform = (_res(DIR_STATIC_MODEL_CR),
@@ -1150,8 +1319,9 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         nid_str = str(actor['nodeid'])
         if nid_str not in actor_map:
             continue
-        mhash = actor_map[nid_str]['model_hash'].replace('0x', '').replace('0X', '').lower().rjust(16, '0')
-        unique_models.add(mhash)
+        for _m in actor_map[nid_str]:
+            unique_models.add(
+                _m.replace('0x', '').replace('0X', '').lower().rjust(16, '0'))
         
     for inst in static_instances:
         mhash = static_models[inst.model_index]
@@ -1543,17 +1713,20 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         if nid_str not in actor_map:
             continue
             
-        mhash = actor_map[nid_str]['model_hash'].replace('0x', '').replace('0X', '').lower().rjust(16, '0')
         t = actor.get('transform')
         if not t:
             continue
-            
-        instances_to_process.append({
-            'mhash': mhash,
-            'pos': t.get('position', [0, 0, 0]),
-            'rot': t.get('rotation', [0, 0, 0, 1]),
-            'scale': t.get('scale', [1, 1, 1])
-        })
+
+        # Every model on this actor is placed, at the actor's transform. An
+        # actor with two model components draws both in game; keeping one was
+        # the bug.
+        for _m in actor_map[nid_str]:
+            instances_to_process.append({
+                'mhash': _m.replace('0x', '').replace('0X', '').lower().rjust(16, '0'),
+                'pos': t.get('position', [0, 0, 0]),
+                'rot': t.get('rotation', [0, 0, 0, 1]),
+                'scale': t.get('scale', [1, 1, 1])
+            })
         
     for inst in static_instances:
         mhash = inst.model_hash or static_models[inst.model_index]
@@ -1918,6 +2091,10 @@ if __name__ == "__main__":
                         help="audit GEOMETRY only: which models decode, and "
                              "whether their indices/UVs are self-consistent. "
                              "Use this when the viewport looks wrong.")
+    parser.add_argument("--no-stub-substitute", action="store_true",
+                        help="do NOT substitute table neighbours for models "
+                             "whose mesh resource is an empty stub (see "
+                             "`_stub_substitutes` -- it is a heuristic)")
     parser.add_argument("--where", action="store_true",
                         help="census: which resource types hold each model and "
                              "what each model's file references. Use this when "
@@ -1942,5 +2119,6 @@ if __name__ == "__main__":
         probe_only=args.probe,
         where_only=args.where,
         geo_only=args.geo,
+        stub_substitute=not args.no_stub_substitute,
     )
     raise SystemExit(0 if ok else 1)

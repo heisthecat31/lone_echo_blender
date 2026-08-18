@@ -44,8 +44,8 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-#: `CSkeletonResourceWin10`
-SKELETON_RESOURCE = "46adff5980245670"
+from evr_resource_types import SKELETON_RESOURCE, resource_path
+
 BONE_STRIDE = 32
 
 SIDECAR_NAME = "skeleton.json"
@@ -54,13 +54,13 @@ WEIGHT_BLOB = "skeleton_weights.bin"
 
 
 def has_skeleton(root: Path, model_hash: str) -> bool:
-    return (Path(root) / SKELETON_RESOURCE / model_hash).is_file()
+    return resource_path(root, SKELETON_RESOURCE, model_hash) is not None
 
 
 def read_bind_pose(root: Path, model_hash: str) -> list:
     """`[(quat xyzw, translation, scale), ...]`, or `[]`."""
-    path = Path(root) / SKELETON_RESOURCE / model_hash
-    if not path.is_file():
+    path = resource_path(root, SKELETON_RESOURCE, model_hash)
+    if path is None:
         return []
     blob = path.read_bytes()
 

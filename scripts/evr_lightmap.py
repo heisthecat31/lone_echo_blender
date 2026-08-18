@@ -44,11 +44,10 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from evr_resource_types import TEXTURE_RESOURCE, normalise_hash
+from evr_resource_types import (LIGHTMAP_RESOURCE, STATIC_RESOURCE_GPU,
+                                TEXTURE_RESOURCE, normalise_hash,
+                                resolve_type_dir)
 import evr_texture_resource as evr_tex
-
-#: `CGLightMapResourceWin10`
-LIGHTMAP_RESOURCE = "230554bc3beca38c"
 
 #: `SLightMapTextureNames`: five CSymbol64 per row.
 ROW_STRIDE = 0x28
@@ -231,7 +230,9 @@ def static_instance_lightmaps(cgsi: bytes) -> tuple:
 
 
 #: `CGStaticInstanceResourceWin10GPU` -- the LMUV scatter buffer.
-CGSI_GPU = "dd3ff9850e4eed35"
+#: Defined in `evr_resource_types` so `resolve_type_dir` can translate it on a
+#: Win7 extract; re-exported here under its historical name.
+CGSI_GPU = STATIC_RESOURCE_GPU
 #: One lightmap UV: two u16 UNORM. `meshdata.uvcount` counts these, and the
 #: header's `@0x170 == 4 * sum(uvcount) == GPU file size` pins the stride.
 UV_STRIDE = 4
@@ -304,7 +305,7 @@ def level_lightmap(root: Path, level_hash: str, row_index: int | None = None) ->
     `assetdata.lightmapidx`; when omitted the single populated row is used,
     which is what every shipped level has.
     """
-    path = root / LIGHTMAP_RESOURCE / normalise_hash(level_hash)
+    path = resolve_type_dir(root, LIGHTMAP_RESOURCE) / normalise_hash(level_hash)
     if not path.exists():
         path = path.with_suffix(".bin")
     if not path.exists():
@@ -313,8 +314,8 @@ def level_lightmap(root: Path, level_hash: str, row_index: int | None = None) ->
     if not rows:
         return None
 
-    known = {p.name for p in (root / TEXTURE_RESOURCE).iterdir()} \
-        if (root / TEXTURE_RESOURCE).is_dir() else set()
+    tex_dir = resolve_type_dir(root, TEXTURE_RESOURCE)
+    known = {p.name for p in tex_dir.iterdir()} if tex_dir.is_dir() else set()
     candidates = ([(row_index, rows[row_index])]
                   if row_index is not None and row_index < len(rows)
                   else [(i, r) for i, r in enumerate(rows)

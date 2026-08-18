@@ -26,6 +26,17 @@ when it is not:
   `CGInstancedModelResourceWin10`.
 * the real `CGMeshListResourceWin10` is `4e426f88c1b5d7ac`, which the old
   `MESH_DIRS` never searched at all.
+
+## The GPU buckets are named after all
+
+Three hashes here were carried with "not in `type_map.json` under any
+`win10_name`" comments and no name.  `type_map.json` is simply incomplete (the
+copy in this tree is 37KB of zeroes, which is its own problem);
+`quest_combat_port/data/hash_lookup.json` names all three --
+`CGMeshListResourceWin10GPU`, `CGInstancedModelResourceWin10GPU`,
+`CGTextureResourceWin10GPU`.  That mattered, because "this type has no name"
+was also the reason nobody derived its `Win7` twin, and without those twins a
+Win7 extract has no geometry and no texture pixels at all.
 """
 
 from __future__ import annotations
@@ -52,7 +63,10 @@ TRANSFORM_CR = "92abd3e1432bf5e8"        # CTransformCRWin10
 # ---------------------------------------------------------------------------
 MESH_LIST_RESOURCE = "4e426f88c1b5d7ac"      # CGMeshListResourceWin10  (stream 0)
 INSTANCED_MODEL_RESOURCE = "37102e4b27955a14"  # CGInstancedModelResourceWin10
-MESH_GPU_BUCKET = "e642bfb1abcf76df"         # raw stream-1 vertex/index blobs
+MESH_GPU_BUCKET = "e642bfb1abcf76df"         # CGMeshListResourceWin10GPU
+#: The GPU vertex/index blob for an instanced model.
+INSTANCED_MODEL_GPU = "e7a8ab5ceaef49cb"     # CGInstancedModelResourceWin10GPU
+UNKNOWN_MESH_BUCKET = INSTANCED_MODEL_GPU      # legacy alias
 
 # ---------------------------------------------------------------------------
 # Materials and textures
@@ -84,7 +98,40 @@ RAW_TEXTURE_PACK = "ae49fad43254367a"    # RawTexturePackfileWin10
 #: `streamingdisabled == 1` textures -- whose `cgtextureresourceWin10` header
 #: carries no inline pixels AND an all-`0xFFFFFFFF` sentinel packfilelayout --
 #: turn out to always have, which is why they are recoverable at all.
-TEXTURE_DDS_SIDECAR = "beac1969cb7b8861"
+TEXTURE_DDS_SIDECAR = "beac1969cb7b8861"      # CGTextureResourceWin10GPU
+
+# ---------------------------------------------------------------------------
+# Rigging and baked lighting
+#
+# These three were declared privately in the modules that use them, which is
+# why they had no Win7 twin: `resolve_type_dir` can only translate a hash it
+# has been told about.  They live here now so every type the pipeline opens is
+# translated from one table.
+# ---------------------------------------------------------------------------
+#: The level's CLOSURE / load driver -- the authoritative list of every
+#: `(type, resource)` the engine loads for a level. Decoded by
+#: `quest_combat_port/tools/resource_io/carchiveresource.py`.
+ARCHIVE_RESOURCE = "2a41cf1c1d9e5d32"    # CArchiveResourceWin10
+#: Per-model animation set: the animation TABLE (see `evr_animset`).
+ANIM_SET_RESOURCE = "e9e7d2e25d8e2252"   # CAnimSetResourceWin10
+SKELETON_RESOURCE = "46adff5980245670"   # CSkeletonResourceWin10
+LIGHTMAP_RESOURCE = "230554bc3beca38c"   # CGLightMapResourceWin10
+STATIC_RESOURCE_GPU = "dd3ff9850e4eed35"  # CGStaticInstanceResourceWin10GPU
+
+# ---------------------------------------------------------------------------
+# UI
+#
+# Echo VR does not build its UI out of meshes the way Lone Echo's holotable
+# does.  A screen is a CANVAS: a pixel-sized rectangle of elements, each one a
+# sub-rectangle of a shared texture atlas, placed into the world by a per-level
+# component table that names an actor node and a pixels-per-metre scale.  That
+# is why none of it shows up in a mesh export -- there is no mesh to find.
+# ---------------------------------------------------------------------------
+#: The canvas itself: size in pixels, then its element table.
+UI_CANVAS_RESOURCE = "59a9bd6e4525ecc4"  # CUICanvasResourceWin10
+#: Per-LEVEL component table that PLACES canvases on actor nodes.
+CANVAS_UI_CR = "822fd4ccb42e8a3c"        # CCanvasUICRWin10
+SHARED_CANVAS_UI_CR = "dab7dce1df894ef6"  # CSharedCanvasUICRWin10
 
 #: name -> hash, for `verify_against_type_map`.
 TYPE_NAMES: dict[str, str] = {
@@ -103,12 +150,175 @@ TYPE_NAMES: dict[str, str] = {
     "cgtextureresourceWin10": TEXTURE_RESOURCE,
     "CGTextureStreamingResourceWin10": TEXTURE_STREAMING,
     "RawTexturePackfileWin10": RAW_TEXTURE_PACK,
+    "CGMeshListResourceWin10GPU": MESH_GPU_BUCKET,
+    "CGInstancedModelResourceWin10GPU": INSTANCED_MODEL_GPU,
+    "CGTextureResourceWin10GPU": TEXTURE_DDS_SIDECAR,
+    "CSkeletonResourceWin10": SKELETON_RESOURCE,
+    "CGLightMapResourceWin10": LIGHTMAP_RESOURCE,
+    "CGStaticInstanceResourceWin10GPU": STATIC_RESOURCE_GPU,
+    "CTransformCRWin10": TRANSFORM_CR,
+    "CArchiveResourceWin10": ARCHIVE_RESOURCE,
+    "CAnimSetResourceWin10": ANIM_SET_RESOURCE,
+    "CUICanvasResourceWin10": UI_CANVAS_RESOURCE,
+    "CCanvasUICRWin10": CANVAS_UI_CR,
+    "CSharedCanvasUICRWin10": SHARED_CANVAS_UI_CR,
 }
 
-#: The GPU vertex/index blob for an instanced model.  Not in `type_map.json`
-#: under any `win10_name`, so it is carried by hash.
-INSTANCED_MODEL_GPU = "e7a8ab5ceaef49cb"
-UNKNOWN_MESH_BUCKET = INSTANCED_MODEL_GPU      # legacy alias
+# ---------------------------------------------------------------------------
+# Win7 equivalents (older builds, e.g. the Summer lobby build)
+#
+# The hash of `CActorDataResourceWin7` is NOT `ACTOR_DATA`; every type has a
+# different hash for its Win7 variant.  The mapping below lets the pipeline
+# locate the correct directory in either format automatically.
+#
+# Every value is `CSymbol64(<the Win10 name with "Win10" replaced by "Win7">)`,
+# and `verify_win7_hashes()` re-derives the whole table to prove it.  The names
+# come from `quest_combat_port/data/hash_lookup.json`, which is where the three
+# types the old table was missing -- the two GPU geometry buckets and the DDS
+# sidecar -- turn out to be named after all.  They were carried here as bare
+# hashes on the belief that they had no name, so nobody thought to look for a
+# Win7 twin; on the Summer build that is exactly what made every model export
+# as "no meshes found".
+# ---------------------------------------------------------------------------
+_WIN10_TO_WIN7: dict[str, str] = {
+    ACTOR_DATA:              "c165fbf2e77f973d",  # CActorDataResourceWin7
+    SCENE_RESOURCE:          "86f4cd162e7da857",  # CGSceneResourceWin7
+    MODEL_CR:                "3de813820d0b4719",  # CModelCRWin7
+    INSTANCE_MODEL_CR:       "9ccac823a34d5d61",  # CInstanceModelCRWin7
+    STATIC_MODEL_CR:         "d612ab89f07e9ee1",  # CStaticInstanceModelCRWin7
+    STATIC_RESOURCE:         "e83cf7faaec4cab5",  # CGStaticInstanceResourceWin7
+    BVH_RESOURCE:            "3ae74682a3963d31",  # CBVHResourceWin7
+    TRANSFORM_CR:            "5c06dd89d54954c9",  # CTransformCRWin7
+    MESH_LIST_RESOURCE:      "366b22153d894fe1",  # CGMeshListResourceWin7
+    INSTANCED_MODEL_RESOURCE: "1a8ef93542db7fd7", # CGInstancedModelResourceWin7
+    MATERIAL_RESOURCE:       "117d2b6509c8ff79",  # CGMaterialResourceWin7
+    SHADER_SET_RESOURCE:     "5fa019d27a511a3b",  # CGShaderSetResourceWin7
+    STANDALONE_SHADER:       "f717bc83bcd0c537",  # CGStandaloneShaderResourceWin7
+    TEXTURE_RESOURCE:        "e8017b774f2b6327",  # cgtextureresourceWin7
+    TEXTURE_STREAMING:       "23d48cecc462abe7",  # CGTextureStreamingResourceWin7
+    RAW_TEXTURE_PACK:        "51e6cb2d64c65e4f",  # RawTexturePackfileWin7
+    # -- the entries whose absence broke the Summer lobby ------------------
+    MESH_GPU_BUCKET:         "617076c759935957",  # CGMeshListResourceWin7GPU
+    INSTANCED_MODEL_GPU:     "039a43c1af5440f9",  # CGInstancedModelResourceWin7GPU
+    TEXTURE_DDS_SIDECAR:     "e2f9e022d8519ca9",  # CGTextureResourceWin7GPU
+    SKELETON_RESOURCE:       "202d89353292d63d",  # CSkeletonResourceWin7
+    LIGHTMAP_RESOURCE:       "6665bedfeadf8b79",  # CGLightMapResourceWin7
+    STATIC_RESOURCE_GPU:     "20b61b33e84bab85",  # CGStaticInstanceResourceWin7GPU
+    ARCHIVE_RESOURCE:        "e5bd8207135b8887",  # CArchiveResourceWin7
+    ANIM_SET_RESOURCE:       "9576db2165a5f779",  # CAnimSetResourceWin7
+    UI_CANVAS_RESOURCE:      "d2c0532987135e95",  # CUICanvasResourceWin7
+    CANVAS_UI_CR:            "deec78ebf244b725",  # CCanvasUICRWin7
+    SHARED_CANVAS_UI_CR:     "4f86b88915b537f1",  # CSharedCanvasUICRWin7
+}
+
+#: Win7 hash -> the Win10 hash it stands in for.  Lets a caller that found a
+#: directory by iteration label it with the type it actually is.
+_WIN7_TO_WIN10: dict[str, str] = {v: k for k, v in _WIN10_TO_WIN7.items()}
+
+
+def _dir_name_variants(type_hash: str):
+    """Every spelling a type directory may carry on disk, in search order.
+
+    ⚠ `CGInstancedModelResourceWin7GPU` is `039a43c1af5440f9` and the Summer
+    extract writes that directory as `39a43c1af5440f9` -- 15 characters, the
+    leading zero stripped.  `resource_path` already tolerated that for RESOURCE
+    file names; the type directory did not, and one dropped nibble is enough to
+    lose every instanced model in the build.
+    """
+    canonical = normalise_hash(type_hash)
+    stripped = canonical.lstrip("0") or "0"
+    return dict.fromkeys((str(type_hash), canonical, stripped))
+
+
+def resolve_type_dir(root: Path, win10_hash: str) -> Path:
+    """Return the existing resource-type directory, checking Win10 then Win7.
+
+    Falls back to the Win10 path (even if it doesn't exist) so callers that
+    only care about existence keep working.
+    """
+    root = Path(root)
+    canonical = normalise_hash(win10_hash)
+    for type_hash in (win10_hash, _WIN10_TO_WIN7.get(canonical)):
+        if not type_hash:
+            continue
+        for name in _dir_name_variants(type_hash):
+            directory = root / name
+            if directory.is_dir():
+                return directory
+    return root / str(win10_hash)  # fallback: caller will see it doesn't exist
+
+
+#: How the `CGMeshData` table that opens a `CGMeshListResource` is framed:
+#: `(count_offset, table_offset, record_stride)`.
+#:
+#: ⛔ The two formats do NOT share a layout, and reading a Win7 file with the
+#: Win10 frame is worse than reading nothing.  Win7 puts a u64 in front of the
+#: count, so `u32@0` is a 0/1 flag: on the Summer build that flag is 1 for 80
+#: of 439 mesh lists, and each of those was read as "one record starting at
+#: byte 4" -- 80 records of pure misalignment that the caller had no way to
+#: tell from real ones.
+#:
+#: Measured on the 303 models that ship in BOTH the Win7 (Summer) and Win10
+#: (Summer2) builds: the counts agree model-for-model, and each Win7 record is
+#: the Win10 record minus two u64s after the mesh id and one u64 further in --
+#: 24 bytes -- with the trailing 96 bytes byte-identical.  So a field at Win10
+#: offset `n >= 0x38` sits at `n - 24` in Win7.
+MESH_TABLE_WIN10 = (0, 4, 152)
+MESH_TABLE_WIN7 = (8, 12, 128)
+
+
+def mesh_table_layout(path: Path) -> tuple[int, int, int]:
+    """`(count_offset, table_offset, stride)` for a mesh-list file.
+
+    Decided by the type directory the file was found in, which is the only
+    thing that actually states the format; sniffing the bytes cannot, because
+    a Win7 flag of 1 is indistinguishable from a Win10 count of 1.
+    """
+    parent = normalise_hash(Path(path).parent.name)
+    if parent == normalise_hash(_WIN10_TO_WIN7[MESH_LIST_RESOURCE]):
+        return MESH_TABLE_WIN7
+    return MESH_TABLE_WIN10
+
+
+def win7_type_hash(win10_hash) -> str | None:
+    """The Win7 twin of a Win10 type hash, or None when there is no entry."""
+    return _WIN10_TO_WIN7.get(normalise_hash(win10_hash))
+
+
+def canonical_type_hash(type_hash) -> str:
+    """A Win7 OR Win10 type hash -> the Win10 hash the pipeline names it by.
+
+    Directory-iterating callers (`evr_materials.locate_model`,
+    `scan_all_files`) label what they find with `TYPE_NAMES`, which is keyed by
+    Win10 hashes only.  Without this, every Win7 directory came back labelled
+    with a raw hash, and `scan_model_references` -- which prefers the geometry
+    resources BY NAME -- silently fell through to "whatever file matched".
+    """
+    canonical = normalise_hash(type_hash)
+    return _WIN7_TO_WIN10.get(canonical, canonical)
+
+
+def verify_win7_hashes() -> list[str]:
+    """Re-derive every Win7 hash from its Win10 name; report disagreements.
+
+    `CSymbol64` is available in-tree (`le_mesh.material_scalars.symbol64`), so
+    the Win7 table does not have to be trusted -- it can be recomputed.
+    Returns [] when the whole table checks out.
+    """
+    from le_mesh.material_scalars import symbol64
+
+    by_hash = {normalise_hash(v): k for k, v in TYPE_NAMES.items()}
+    problems: list[str] = []
+    for win10_hash, win7_hash in _WIN10_TO_WIN7.items():
+        name = by_hash.get(normalise_hash(win10_hash))
+        if name is None:
+            problems.append(f"{win10_hash}: no name in TYPE_NAMES to re-derive from")
+            continue
+        expected = normalise_hash(symbol64(name.replace("Win10", "Win7")))
+        if expected != normalise_hash(win7_hash):
+            problems.append(f"{name}Win7: table says {win7_hash}, "
+                            f"CSymbol64 says {expected}")
+    return problems
 
 #: GPU blob -> its PRIMARY descriptor.  Transcribed from
 #: `evr-mesh-importer/primary.py::_find_primary_path`, the implementation that
@@ -182,7 +392,7 @@ def resource_path(root: Path, type_hash: str, resource_hash) -> Path | None:
     zeroes were stripped when the file was written.  Both are tried; the first
     existing path wins.  Returns None when nothing matches.
     """
-    directory = Path(root) / type_hash
+    directory = resolve_type_dir(Path(root), type_hash)
     if not directory.is_dir():
         return None
     canonical = normalise_hash(resource_hash)

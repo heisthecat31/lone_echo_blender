@@ -55,7 +55,7 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from evr_resource_types import SCENE_RESOURCE, normalise_hash
+from evr_resource_types import SCENE_RESOURCE, normalise_hash, resolve_type_dir
 
 #: `SGLightParams` stride, and the offsets within it.
 LIGHT_STRIDE = 360
@@ -151,7 +151,7 @@ def dynamic_only(lights) -> list:
 
 def level_lights(root: Path, level_hash: str) -> list:
     """`[Light, ...]` for a level, or `[]`."""
-    path = root / SCENE_RESOURCE / normalise_hash(level_hash)
+    path = resolve_type_dir(root, SCENE_RESOURCE) / normalise_hash(level_hash)
     if not path.exists():
         path = path.with_suffix(".bin")
     if not path.exists():

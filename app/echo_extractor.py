@@ -42,8 +42,33 @@ ADDON_SRC = REPO / "blender_tool" / "addon" / "lone_echo_import"
 
 # Resource-type directories that identify an extract: CSymbol64s of the
 # engine's own type names, so nothing else produces this pair.
-ACTOR_DATA = "347869ce492dc7da"          # CActorDataResourceWin10
-SCENE_RESOURCE = "a388ea69e5108f4c"      # CGSceneResourceWin10
+#
+# Older builds (e.g. the Summer lobby build) use Win7 resource types whose
+# hashes differ from the Win10 ones the later builds shipped.  Both pairs are
+# checked so the app works on any extract regardless of era.
+ACTOR_DATA_WIN10 = "347869ce492dc7da"     # CActorDataResourceWin10
+SCENE_RESOURCE_WIN10 = "a388ea69e5108f4c" # CGSceneResourceWin10
+ACTOR_DATA_WIN7 = "c165fbf2e77f973d"      # CActorDataResourceWin7
+SCENE_RESOURCE_WIN7 = "86f4cd162e7da857"  # CGSceneResourceWin7
+
+# Back-compat aliases used by the rest of the codebase (always the Win10 pair).
+ACTOR_DATA = ACTOR_DATA_WIN10
+SCENE_RESOURCE = SCENE_RESOURCE_WIN10
+
+# All (actor, scene) pairs to try, in order of preference.
+_RESOURCE_PAIRS = [
+    (ACTOR_DATA_WIN10, SCENE_RESOURCE_WIN10),
+    (ACTOR_DATA_WIN7, SCENE_RESOURCE_WIN7),
+]
+
+
+def _find_level_dirs(root: Path):
+    """Return `(actors_dir, scenes_dir)` for whichever format exists, or `(None, None)`."""
+    for actor_hash, scene_hash in _RESOURCE_PAIRS:
+        actors, scenes = root / actor_hash, root / scene_hash
+        if actors.is_dir() and scenes.is_dir():
+            return actors, scenes
+    return None, None
 
 #: The app keeps its own copy of the external extractors, so a working install
 #: is self-contained and does not depend on where they happened to be cloned.
@@ -198,7 +223,7 @@ class Game:
 
 
 GAMES = [
-    Game("echovr", "Echo VR", "Zero-g arena \u00b7 34 levels",
+    Game("echovr", "Echo VR", "Zero-g arena \u00b7 all versions",
          "level_names_echovr.json", "evrFileTools",
          "evrtools -mode extract, run once per package in the game's _data "
          "folder (\u2026/_data/<id>/rad15/win10).", "packages"),
@@ -282,8 +307,8 @@ def looks_like_extract(path) -> tuple:
     p = Path(path)
     if not p.is_dir():
         return False, "That folder does not exist."
-    actors, scenes = p / ACTOR_DATA, p / SCENE_RESOURCE
-    if actors.is_dir() and scenes.is_dir():
+    actors, scenes = _find_level_dirs(p)
+    if actors is not None:
         n = len({q.name for q in actors.iterdir()} & {q.name for q in scenes.iterdir()})
         return True, f"Valid extract \u2014 {n} level(s) found."
     hexish = sum(1 for q in p.iterdir()
@@ -297,10 +322,18 @@ def looks_like_extract(path) -> tuple:
 
 
 def discover_levels(root, names_file) -> list:
-    """`[(hash, name_or_None), ...]` for every level present, named first."""
+    """`[(hash, name_or_None), ...]` for every level present, named first.
+
+    Loads the game-specific names file AND merges every other known-name
+    source (all per-game JSONs, the quest_combat_port hash_lookup, and the
+    Summer2 names) so the full dictionary is available regardless of which
+    extract the user pointed at.  Any still-unnamed hashes are auto-cracked
+    via suffix generation and the result is written back so the cost is
+    paid once.
+    """
     p = Path(root)
-    actors, scenes = p / ACTOR_DATA, p / SCENE_RESOURCE
-    if not (actors.is_dir() and scenes.is_dir()):
+    actors, scenes = _find_level_dirs(p)
+    if actors is None:
         return []
 
     # Zero-pad to 16: some extracts drop a hash's leading zero, and an unpadded
@@ -312,6 +345,8 @@ def discover_levels(root, names_file) -> list:
 
     present = ({norm(q.name) for q in actors.iterdir()}
                & {norm(q.name) for q in scenes.iterdir()})
+
+    # Start with the game-specific names file.
     names = {}
     src = DATA / names_file
     if src.is_file():
@@ -319,9 +354,75 @@ def discover_levels(root, names_file) -> list:
             names = json.loads(src.read_text(encoding="utf-8")).get("levels", {})
         except (OSError, ValueError):
             names = {}
+
+    # Merge every OTHER known-name JSON so the full dictionary is always
+    # available.  A level present in Summer2 is named by the EchoVR file and
+    # vice versa — the user should never see an unnamed hash that we have a
+    # name for in any file.
+    _ALL_NAME_FILES = [
+        "level_names_echovr.json",
+        "level_names_loneecho2.json",
+        "level_names_loneecho1.json",
+        "level_names_summer2.json",
+        "level_names.json",
+    ]
+    for other_file in _ALL_NAME_FILES:
+        other = DATA / other_file
+        if not other.is_file() or other == src:
+            continue
+        try:
+            raw = json.loads(other.read_text(encoding="utf-8"))
+            for section in (raw.get("levels", {}),):
+                for k, v in section.items():
+                    if v and k not in names:
+                        names[k] = v
+            # Handle the multi-game format (level_names.json)
+            for game in (raw.get("games") or {}).values():
+                for k, v in (game.get("levels") or {}).items():
+                    if v and k not in names:
+                        names[k] = v
+        except (OSError, ValueError):
+            pass
+
+    # Auto-crack: resolve any unnamed hashes via dictionary + suffix generation.
+    unnamed = {h for h in present if not names.get(h)}
+    if unnamed:
+        try:
+            if str(SCRIPTS) not in sys.path:
+                sys.path.insert(0, str(SCRIPTS))
+            from evr_name_crack import resolve_quick
+            cracked = resolve_quick(unnamed, names)
+            if cracked:
+                names.update(cracked)
+                # Persist so this is a one-time cost.
+                _save_cracked_names(src, names, present)
+        except Exception:                              # noqa: BLE001
+            pass  # cracker unavailable or failed — degrade gracefully
+
     out = [(h, names.get(h)) for h in present]
     out.sort(key=lambda kv: (kv[1] is None, (kv[1] or kv[0]).lower()))
     return out
+
+
+def _save_cracked_names(path: Path, all_names: dict, present: set) -> None:
+    """Write auto-cracked names back to the JSON so they persist.
+
+    Only writes hashes that are present in THIS extract, so the per-game
+    file stays scoped to what's actually on disk.
+    """
+    try:
+        scoped = {h: all_names.get(h) for h in present}
+        known = sum(1 for v in scoped.values() if v)
+        payload = {
+            "levels": dict(sorted(scoped.items(),
+                                   key=lambda kv: (kv[1] is None, kv[1] or kv[0]))),
+            "_note": (f"{known} of {len(scoped)} levels named. "
+                      f"Auto-enriched by the universal name cracker."),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def group_levels(levels) -> list:

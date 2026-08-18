@@ -83,6 +83,7 @@ import evr_texture_resource as evr_tex
 import evr_texture_streaming as evr_stream
 from evr_resource_types import (
     MESH_LIST_RESOURCE,
+    mesh_table_layout,
     normalise_hash,
     resource_path,
 )
@@ -90,7 +91,9 @@ from evr_resource_types import (
 from le_mesh import materials as le_materials
 from le_mesh import role_index
 
-#: `CGMeshData` stride, from the reference mesh-list parser.
+#: `CGMeshData` stride, from the reference mesh-list parser.  Win10 only --
+#: `mesh_table_layout` supplies the real one per file, because the Win7 record
+#: is 128 bytes.  Kept as the Win10 value for callers that import it.
 MESH_STRIDE = 152
 
 #: The sidecar version the add-on treats as "hand `spec` to the builder verbatim".
@@ -163,7 +166,7 @@ def locate_model(root: Path, model_hash) -> dict:
     reports which ones contain the hash, with the type name where known.  This
     is the diagnostic to reach for when a link probe comes back empty.
     """
-    from evr_resource_types import TYPE_NAMES
+    from evr_resource_types import TYPE_NAMES, canonical_type_hash
 
     by_hash = {v: k for k, v in TYPE_NAMES.items()}
     found = {}
@@ -175,7 +178,8 @@ def locate_model(root: Path, model_hash) -> dict:
             continue
         path = resource_path(root, directory.name, model_hash)
         if path is not None:
-            label = by_hash.get(normalise_hash(directory.name), directory.name)
+            label = by_hash.get(canonical_type_hash(directory.name),
+                                directory.name)
             found[label] = path.stat().st_size
     return found
 
@@ -189,7 +193,7 @@ def scan_all_files(root: Path, resource_hash, wanted: set) -> dict:
     first is how `scan_model_references` reported "0 references" for all 20
     sampled models while the answer may simply have been in a sibling file.
     """
-    from evr_resource_types import TYPE_NAMES
+    from evr_resource_types import TYPE_NAMES, canonical_type_hash
 
     by_hash = {v: k for k, v in TYPE_NAMES.items()}
     out: dict = {}
@@ -211,7 +215,8 @@ def scan_all_files(root: Path, resource_hash, wanted: set) -> dict:
             if value in wanted and value not in seen:
                 seen.append(value)
         if seen:
-            label = by_hash.get(normalise_hash(directory.name), directory.name)
+            label = by_hash.get(canonical_type_hash(directory.name),
+                                directory.name)
             out[label] = seen
     return out
 
@@ -250,8 +255,10 @@ def scan_model_references(root: Path, model_hash, wanted: set) -> list:
 def _mesh_records(root: Path, model_hash) -> list:
     """The `CGMeshData` records for a model, or `[]`.
 
-    Reads the count-prefixed mesh table that opens a `CGMeshListResourceWin10`.
-    Stub files (56 zero bytes) yield `[]`.
+    Reads the count-prefixed mesh table that opens a `CGMeshListResource`, in
+    whichever of the two frames the file's type directory declares -- see
+    `evr_resource_types.mesh_table_layout`.  Stub files (56 zero bytes) yield
+    `[]`.
     """
     path = resource_path(root, MESH_LIST_RESOURCE, model_hash)
     if path is None:
@@ -259,10 +266,13 @@ def _mesh_records(root: Path, model_hash) -> list:
     data = path.read_bytes()
     if len(data) < 4 or len(data) == 56:
         return []
-    count = int.from_bytes(data[:4], "little")
-    if count == 0 or 4 + count * MESH_STRIDE > len(data):
+    count_offset, table_offset, stride = mesh_table_layout(path)
+    if count_offset + 4 > len(data):
         return []
-    return [data[4 + i * MESH_STRIDE: 4 + (i + 1) * MESH_STRIDE]
+    count = int.from_bytes(data[count_offset:count_offset + 4], "little")
+    if count == 0 or table_offset + count * stride > len(data):
+        return []
+    return [data[table_offset + i * stride: table_offset + (i + 1) * stride]
             for i in range(count)]
 
 
@@ -281,7 +291,7 @@ def probe_mesh_field_offset(root: Path, model_hashes, wanted: set, *,
     for model_hash in list(model_hashes)[:sample]:
         for record in _mesh_records(root, model_hash):
             total += 1
-            for offset in range(0, MESH_STRIDE - 8 + 1, 8):
+            for offset in range(0, len(record) - 8 + 1, 8):
                 value = int.from_bytes(record[offset:offset + 8], "little")
                 if normalise_hash(value) in wanted:
                     scores[offset] += 1
@@ -323,7 +333,7 @@ def probe_mesh_material_offset(root: Path, model_hashes,
     for model_hash in list(model_hashes)[:sample]:
         for record in _mesh_records(root, model_hash):
             total += 1
-            for offset in range(0, MESH_STRIDE - 8 + 1, 8):
+            for offset in range(0, len(record) - 8 + 1, 8):
                 value = int.from_bytes(record[offset:offset + 8], "little")
                 if normalise_hash(value) in material_hashes:
                     scores[offset] += 1
@@ -498,21 +508,39 @@ def build_context(root: Path, model_hashes, *, hash_lookup: Path | None = None,
         names=load_hash_lookup(hash_lookup),
     )
 
+    # Name the directory that was actually searched, not the Win10 spelling.
+    # On a Win7 extract the Win10 name is not the thing that is missing, and
+    # saying it is sends the reader looking for a directory that build never
+    # had.
+    from evr_resource_types import (MATERIAL_RESOURCE, SHADER_SET_RESOURCE,
+                                    TEXTURE_RESOURCE, resolve_type_dir,
+                                    win7_type_hash)
+
+    def _searched(win10_hash: str, win10_name: str) -> str:
+        directory = resolve_type_dir(root, win10_hash)
+        win7 = win7_type_hash(win10_hash)
+        name = (win10_name.replace("Win10", "Win7")
+                if win7 and directory.name in (win7, win7.lstrip("0"))
+                else win10_name)
+        return f"{name} ({directory})"
+
     if not ctx.material_hashes:
         ctx.warnings.append(
-            f"no CGMaterialResourceWin10 directory under {root} -- every "
-            f"material will fall back to defaults and read as plain opaque"
+            f"no {_searched(MATERIAL_RESOURCE, 'CGMaterialResourceWin10')} "
+            f"directory -- every material will fall back to defaults and read "
+            f"as plain opaque"
         )
     if not ctx.texture_hashes:
         ctx.warnings.append(
-            f"no cgtextureresourceWin10 directory under {root} -- the bind scan "
-            f"has no anchor and will find nothing"
+            f"no {_searched(TEXTURE_RESOURCE, 'cgtextureresourceWin10')} "
+            f"directory -- the bind scan has no anchor and will find nothing"
         )
     if not ctx.shaderset_hashes:
         ctx.warnings.append(
-            f"no CGShaderSetResourceWin10 directory under {root} -- texture "
-            f"ROLES live there, so without it nothing binds a texture to a "
-            f"Principled socket and every material is untextured"
+            f"no {_searched(SHADER_SET_RESOURCE, 'CGShaderSetResourceWin10')} "
+            f"directory -- texture ROLES live there, so without it nothing "
+            f"binds a texture to a Principled socket and every material is "
+            f"untextured"
         )
 
     ctx.probe = probe_mesh_field_offset(

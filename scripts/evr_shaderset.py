@@ -115,13 +115,14 @@ from evr_resource_types import (
     SHADER_SET_RESOURCE,
     STANDALONE_SHADER,
     normalise_hash,
+    resolve_type_dir,
     resource_path,
 )
 
 
 def all_shaderset_hashes(root: Path) -> set:
     """Every CGShaderSetResourceWin10 present in the extract."""
-    directory = Path(root) / SHADER_SET_RESOURCE
+    directory = resolve_type_dir(Path(root), SHADER_SET_RESOURCE)
     if not directory.is_dir():
         return set()
     return {
