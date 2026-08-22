@@ -241,8 +241,54 @@ def section_levels(root: Path, model_hash, material_hashes: set) -> list:
 #: Verified corpus-wide: on 550 of 567 mesh-list models every value is a legal
 #: palette index; the 17 exceptions are single-material models reading 1, which
 #: clamps harmlessly.
-RENDERPARAM_MATIDX_OFFSET = 32
-RENDERPARAM_VERTEXCOUNT_OFFSET = 64
+#: ⚠ CORRECTED. These were both 8 bytes too low (32 / 64), which made the
+#: reader take the two fields that sit one slot EARLIER in the record. Measured
+#: over every `mpl_combat_fission` model that has render params and decodes
+#: (104 models):
+#:
+#:     vertex count matches +0x48 : 83 models
+#:     vertex count matches +0x40 :  0 models
+#:
+#: and on multi-draw models the old material field was CONSTANT on 49 of them
+#: while the corrected one varies on 57. A constant material index is what put
+#: one material on every submesh of a model -- `570677a85028cfa9` is 5 draws of
+#: 2645/882/12/5286/1764 vertices that all came out as matidx 72, a single
+#: `eMTRefraction` glass material, on a model that ships 14 textures.
+#:
+#: The framing is pinned by a third field: +0x50 holds the INDEX count, and on
+#: that model it reads 11382 / 4026 / 24 / 22764 / 8052 -- exactly 3x the
+#: decoded triangle counts. Three independent fields agreeing at the same
+#: shift is what identifies the layout.
+#: ⛔ `+0x00` IS NOT A USABLE LOD LEVEL -- investigated and rejected.
+#:
+#: It is a bitmask, and on some models it looks exactly like one: on
+#: `dac6537a23236325` (mpl_arena_a) the five draws step 18/20/24, 42/36/34,
+#: 74/68/66, 138/132/130, 266/260/258, i.e. a low group of bits selecting the
+#: draw slot within a mesh and one higher bit per LOD level, ordering perfectly
+#: with the vertex counts 53841 / 33624 / 23082 / 10143 / 1448.
+#:
+#: It does not generalise. The split between the "slot" bits and the "level"
+#: bits MOVES between models -- `34918b365c4b7940` puts the slot at bits 4-6
+#: and the level at 7-9 where `dac6537a` uses 1-3 and 4-8 -- so there is no
+#: fixed bit position to read. Measured over all 508 models of `mpl_arena_a` +
+#: `mpl_combat_fission`, taking the HIGHEST set bit as the level:
+#:
+#:     440  single level (no chain)
+#:      46  multi level, vertex counts monotonic
+#:      22  multi level, NOT monotonic     <- e.g. 0d42ff215d4315ad reads
+#:                                            4259/1710/6744/1729/6744/1710
+#:
+#: 22 counter-examples is too many to build on, so submesh LOD is still
+#: inferred from bounding boxes constrained by mattype in `evr_scene_extract`.
+#:
+#: ⚠ Whoever revisits this: `_renderparams_from_instanced` takes
+#: `(root, model_hash, vertex_counts)`. Calling it without the third argument
+#: fails silently and skips every CGInstancedModelResource model -- 390 of the
+#: 508 here -- which makes the field look far worse than it is. The first pass
+#: of this survey did exactly that and nearly reached the opposite conclusion.
+RENDERPARAM_MATIDX_OFFSET = 40          # +0x28
+RENDERPARAM_VERTEXCOUNT_OFFSET = 72     # +0x48
+RENDERPARAM_INDEXCOUNT_OFFSET = 80      # +0x50, cross-check only
 RENDERPARAM_STRIDE = 112
 
 

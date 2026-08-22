@@ -704,6 +704,11 @@ if _HAVE_BPY:                                              # pragma: no cover
 
         filename_ext = ".json"
         filter_glob: StringProperty(default="*.json", options={"HIDDEN"})   # type: ignore
+        #: ⚠ `filter_glob` is an EXTENSION filter, not a name filter: Blender
+        #: matches it with `BLI_path_extension_check_glob`, so only `*.ext`
+        #: patterns work. Setting it to "lights.json" hides EVERY file, which is
+        #: why picking the right sidecar is fixed in `execute` instead --
+        #: see `package_reader.resolve_package_file`.
 
         light_set: EnumProperty(
             name="Light Set",
@@ -760,6 +765,13 @@ if _HAVE_BPY:                                              # pragma: no cover
                 layout.prop(self, p)
 
         def execute(self, context):
+            # Any file inside the package identifies it, so a mis-picked
+            # sidecar (materials.json, movers.json, ...) resolves to lights.json
+            # instead of failing. `filter_glob` cannot do this -- it filters by
+            # EXTENSION only.
+            from . import package_reader
+            self.filepath = package_reader.resolve_package_file(
+                self.filepath, "lights.json")
             opts = {
                 "light_set": self.light_set,
                 "hide_specular_only": self.hide_specular_only,

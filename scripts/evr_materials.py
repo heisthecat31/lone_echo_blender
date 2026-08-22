@@ -354,6 +354,268 @@ def probe_mesh_material_offset(root: Path, model_hashes,
     }
 
 
+#: Type dir holding a model's stream-0 GPU blob -- the geometry itself.
+MODEL_GEOMETRY_TYPE = "e7a8ab5ceaef49cb"
+#: `CGTextureStreamingResource`: a model's own texture inventory.
+MODEL_TEXTURE_LIST_TYPE = "c2434c5a99e139ce"
+
+#: A texture this small is an engine stub, not art.
+_TWIN_STUB_DIM = 64
+#: At most this many real textures still counts as "a placeholder".
+_TWIN_POOR_MAX = 1
+#: At least this many makes a model the real, dressed article.
+_TWIN_RICH_MIN = 3
+
+_GEOMETRY_INDEX: dict = {}
+
+
+_REAL_TEXTURE_COUNT: dict = {}
+
+
+def _model_real_texture_count(root: Path, model_hash: str) -> int:
+    """How many NON-STUB textures a model's own inventory lists.
+
+    Memoized: `_position_twin` asks this of every candidate it scans, and
+    without the cache one lobby export spent 378s re-reading the same
+    texture-list and texture-resource files.
+    """
+    import evr_texture_resource as evr_tex
+
+    _key = (str(root), model_hash)
+    if _key in _REAL_TEXTURE_COUNT:
+        return _REAL_TEXTURE_COUNT[_key]
+    _value = _model_real_texture_count_uncached(root, model_hash)
+    _REAL_TEXTURE_COUNT[_key] = _value
+    return _value
+
+
+def _model_real_texture_count_uncached(root: Path, model_hash: str) -> int:
+    import evr_texture_resource as evr_tex
+
+    path = Path(root) / MODEL_TEXTURE_LIST_TYPE / model_hash
+    if not path.exists():
+        path = path.with_suffix(".bin")
+    try:
+        blob = path.read_bytes()
+    except OSError:
+        return -1
+    if len(blob) < 12:
+        return -1
+    count = struct.unpack_from("<I", blob, 8)[0]
+    real = 0
+    for i in range(count):
+        off = 0x0C + i * 8
+        if off + 8 > len(blob):
+            break
+        tex = normalise_hash(struct.unpack_from("<Q", blob, off)[0])
+        resource = evr_tex.load(root, tex)
+        if resource is not None and (resource.maxwidth or 0) > _TWIN_STUB_DIM:
+            real += 1
+    return real
+
+
+def geometry_twins(root: Path) -> dict:
+    """`{geometry digest -> [model hashes]}`, built once per run.
+
+    Hashes every model's stream-0 GPU blob. 570 of the extract's 1892 models
+    share their geometry byte-for-byte with at least one other model.
+    """
+    key = str(root)
+    cached = _GEOMETRY_INDEX.get(key)
+    if cached is not None:
+        return cached
+    import hashlib
+
+    index: dict = {}
+    directory = Path(root) / MODEL_GEOMETRY_TYPE
+    if directory.is_dir():
+        for path in directory.iterdir():
+            if not path.is_file():
+                continue
+            try:
+                digest = hashlib.md5(path.read_bytes()).hexdigest()
+            except OSError:
+                continue
+            index.setdefault(digest, []).append(normalise_hash(path.stem))
+    _GEOMETRY_INDEX[key] = index
+    return index
+
+
+#: When a model has no texture-list file at all, richness is judged by how
+#: many distinct MATERIALS it binds instead. A placeholder binds exactly one
+#: (the shared art-less decal); the dressed article binds a full set.
+_TWIN_RICH_MATERIALS = 3
+
+_POSITION_DIGEST: dict = {}
+_IS_DRESSED: dict = {}
+
+
+def _position_digest(root: Path, model_hash: str):
+    """md5 of a model's decoded vertex POSITIONS, or None.
+
+    ⭐ Why positions and not the GPU blob: a placeholder and its dressed twin
+    are the same mesh, but the dressed one carries extra vertex attributes (a
+    second UV set for its lightmap or detail maps), so the two blobs differ
+    byte-for-byte while every position matches exactly. `fd43e384670c124f`
+    (mpl_lobby_b2 i613) and `465df5a92843f0ff` are that case: 3164 identical
+    positions, 172708 bytes against a different size, and `geometry_twins`
+    -- which hashes the blob -- pairs them with nothing.
+
+    Exact float equality over thousands of vertices is a very strong key, so a
+    match here is not a coincidence.
+    """
+    import hashlib
+
+    key = (str(root), model_hash)
+    if key in _POSITION_DIGEST:
+        return _POSITION_DIGEST[key]
+    digest = None
+    try:
+        import evr_scene_extract as _se
+
+        results, _label = _se._decode_model_cached(Path(root), model_hash)
+        if results:
+            md5 = hashlib.md5()
+            count = 0
+            for sub in results:
+                for v in sub[0]:
+                    md5.update(b"%.4f,%.4f,%.4f;" % (v[0], v[1], v[2]))
+                    count += 1
+            digest = (count, md5.hexdigest())
+    except Exception:                                        # noqa: BLE001
+        digest = None
+    _POSITION_DIGEST[key] = digest
+    return digest
+
+
+_MATERIAL_COUNT: dict = {}
+_ALL_MATERIALS: dict = {}
+
+
+def _material_count(root: Path, model_hash: str) -> int:
+    """How many distinct materials this model references anywhere."""
+    key = (str(root), model_hash)
+    if key in _MATERIAL_COUNT:
+        return _MATERIAL_COUNT[key]
+    corpus = _ALL_MATERIALS.get(str(root))
+    if corpus is None:
+        try:
+            corpus = evr_mat.all_material_hashes(Path(root))
+        except Exception:                                    # noqa: BLE001
+            corpus = set()
+        _ALL_MATERIALS[str(root)] = corpus
+    try:
+        found = scan_all_files(Path(root), model_hash, corpus)
+        value = len({m for values in found.values() for m in values})
+    except Exception:                                        # noqa: BLE001
+        value = 0
+    _MATERIAL_COUNT[key] = value
+    return value
+
+
+def _is_dressed(root: Path, model_hash: str) -> bool:
+    """Is this the real, textured article rather than a stand-in?
+
+    Normally that is `_model_real_texture_count >= _TWIN_RICH_MIN`. 89 of the
+    extract's 1892 models carry no texture-list file at all and score -1 there
+    -- `019fa4ceb55e298f`, the twin of `mpl_lobby_b2` i648, is one -- so for
+    those the material count stands in: it binds 4, against the single art-less
+    decal its placeholder binds.
+    """
+    key = (str(root), model_hash)
+    if key in _IS_DRESSED:
+        return _IS_DRESSED[key]
+    count = _model_real_texture_count(root, model_hash)
+    value = (count >= _TWIN_RICH_MIN if count >= 0
+             else _material_count(root, model_hash) >= _TWIN_RICH_MATERIALS)
+    _IS_DRESSED[key] = value
+    return value
+
+
+def _position_twin(root: Path, model_hash: str):
+    """A dressed model with byte-identical POSITIONS, or None.
+
+    The fallback for when `geometry_twins` (which keys on the raw blob) finds
+    nothing. Only DRESSED models are considered and the search is bounded to
+    blobs within 0.5x..4x the candidate's size, so this stays cheap: it runs
+    only for a placeholder that failed the blob path.
+    """
+    mine = _position_digest(root, model_hash)
+    if mine is None or not mine[0]:
+        return None
+    directory = Path(root) / MODEL_GEOMETRY_TYPE
+    try:
+        own_size = (directory / model_hash).stat().st_size
+    except OSError:
+        return None
+    hits = []
+    for path in directory.iterdir():
+        if not path.is_file():
+            continue
+        other = normalise_hash(path.stem)
+        if other == model_hash:
+            continue
+        size = path.stat().st_size
+        if not (own_size * 0.5 <= size <= own_size * 4):
+            continue
+        if not _is_dressed(root, other):
+            continue
+        if _position_digest(root, other) == mine:
+            hits.append(other)
+            if len(hits) > 1:
+                return None              # ambiguous, say nothing
+    return hits[0] if hits else None
+
+
+def dressed_geometry_twin(root: Path, model_hash) -> str | None:
+    """The TEXTURED model a placeholder is standing in for, or None.
+
+    ⭐ A level can place a stand-in: same geometry, but a shared art-less
+    material instead of the model's own. `mpl_lobby_b2` does it for a whole
+    class of props -- 16 models share `a2630eab179ee4a2`, an `eMTSkirt` decal
+    material whose only texture is a 2048x2048 grey dither mask, and 14 of them
+    list nothing else in their own inventory. They import as blank blobs.
+
+    The real article is a SEPARATE model with byte-identical geometry and its
+    own textures. `fd6f83c0c0af2997` (the lobby's placeholder) and
+    `9b9ecfce83ab097b` are the same 415 vertices to the byte; the first lists
+    one dither mask, the second lists 12 textures across 3 full PBR materials,
+    and renders as the watermelon it is meant to be.
+
+    ## The test, and why it is safe
+
+    Byte-identical geometry is the anchor -- not a name, not a position, not a
+    size heuristic. On top of that the candidate must be genuinely poor (at most
+    `_TWIN_POOR_MAX` real textures) and the twin genuinely dressed (at least
+    `_TWIN_RICH_MIN`). Across the whole extract only NINE geometry groups
+    satisfy that, and every placeholder in them belongs to the art-less class
+    above -- so this cannot quietly re-skin a model that was already fine.
+
+    ⚠ Returns None the moment anything is ambiguous: no twin, the candidate
+    already has art, or more than one dressed twin (nothing in the data says
+    which one the level meant).
+    """
+    model_hash = normalise_hash(model_hash)
+    own = _model_real_texture_count(root, model_hash)
+    if own < 0 or own > _TWIN_POOR_MAX:
+        return None
+    index = geometry_twins(root)
+    siblings = None
+    for group in index.values():
+        if model_hash in group and len(group) > 1:
+            siblings = group
+            break
+    dressed = [h for h in (siblings or ())
+               if h != model_hash and _is_dressed(root, h)]
+    if len(dressed) == 1:
+        return dressed[0]
+    if dressed:
+        return None                      # more than one, no way to choose
+    # The blob key found nothing usable. Positions are the more robust key --
+    # a dressed twin often carries extra vertex attributes. See `_position_twin`.
+    return _position_twin(root, model_hash)
+
+
 def materials_for_model(root: Path, model_hash, material_hashes: set,
                         offset: int | None = None, vertex_counts=None) -> list:
     """Per-draw material hashes for a model, in mesh-record order.
@@ -453,6 +715,11 @@ class MaterialContext:
     root: Path
     material_hashes: set = field(default_factory=set)
     texture_hashes: set = field(default_factory=set)
+    #: `{texture hash -> [per-slice file names]}` for array textures.
+    texture_array_slices: dict = field(default_factory=dict)
+    #: Property-pair hashes that behave like a UV scale rather than a fixed
+    #: engine constant -- a whole-corpus measurement, so it happens once.
+    uv_scale_slots: set = field(default_factory=set)
     #: CGShaderSetResourceWin10 hashes -- where texture ROLES live.
     shaderset_hashes: set = field(default_factory=set)
     names: dict = field(default_factory=dict)
@@ -594,6 +861,11 @@ def build_context(root: Path, model_hashes, *, hash_lookup: Path | None = None,
               f"{len(ctx.material_hashes)} materials (one-time)...")
         ctx.default_textures = evr_mat_tex.build_default_textures(root)
         print(f"  {len(ctx.default_textures)} shared engine textures identified")
+        # Same reason, same shape: telling a real per-material UV scale from a
+        # fixed engine constant that happens to share the pair's XOR delta is a
+        # corpus-wide judgement, not a per-material one.
+        ctx.uv_scale_slots = evr_mat.build_uv_scale_slots(root)
+        print(f"  {len(ctx.uv_scale_slots)} UV-scale property slots identified")
     return ctx
 
 
@@ -852,6 +1124,106 @@ def _texture_file_name(tex_hash: str) -> str:
     return f"textures/{tex_hash}.dds"
 
 
+#: Written beside the extracted textures, recording the resolution settings
+#: they were produced with.
+TEXTURE_STAMP = ".texture_settings.json"
+
+
+def texture_cache_is_stale(out_dir, divisor: int, cap: int) -> bool:
+    """Were the textures already here written with DIFFERENT resolution settings?
+
+    ⚠ This exists because `extract_textures` skips any file that already exists,
+    and that silently outlived the settings that produced it. A directory first
+    extracted with `--texture-divisor 2` kept serving HALF-RESOLUTION textures
+    through every later run, including runs that asked for full resolution --
+    on `mpl_arena_a`, 28 of 40 textures were still the half-size files from the
+    original run weeks earlier, which is unreadable for signage with small text
+    and looks exactly like a UV bug.
+
+    Returns True when the stamp is missing or disagrees, so the caller rewrites
+    everything instead of trusting the cache.
+    """
+    import json as _json
+
+    stamp = Path(out_dir) / TEXTURE_STAMP
+    want = {"texture_divisor": int(divisor or 1), "max_texture": int(cap or 0)}
+    try:
+        have = _json.loads(stamp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # No stamp: the files predate this check and there is NO way to tell
+        # what settings produced them, so they must be rewritten once. Assuming
+        # they were fine is what let a half-resolution cache survive for days.
+        # The stamp written afterwards makes this a one-time cost per package.
+        return True
+    return have != want
+
+
+def write_texture_stamp(out_dir, divisor: int, cap: int) -> None:
+    import json as _json
+
+    try:
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        (Path(out_dir) / TEXTURE_STAMP).write_text(_json.dumps(
+            {"texture_divisor": int(divisor or 1), "max_texture": int(cap or 0)},
+            indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+#: An array texture with more slices than this is a lightmap/probe atlas, which
+#: `evr_apply_lighting` already slices on its own terms. Colour arrays in the
+#: shipped data top out well below it.
+ARRAY_SLICE_LIMIT = 64
+
+
+def write_array_slices(root: Path, tex_hash: str, blob: bytes, out_dir: Path) -> list:
+    """Write each slice of a texture ARRAY as its own DDS. Returns the names.
+
+    ⭐ Some art ships as a texture array and every consumer of ours sees only
+    slice 0. `a240a4bc051b2f23` is 37 slices of 2048x1024 BC1_SRGB and each one
+    is a DIFFERENT lobby poster -- "POINT YOUR HANDS WHERE YOU WANT TO GO",
+    "HOLD GRIP EARLY TO ENGAGE AUTO-GRAB", the Atlas Intelligence board, the
+    player-report notice. Handing Blender the array gives every poster the same
+    image, which is exactly how it looked.
+
+    Slicing is a RE-HEADER, not a decode: `evr_lightmap.single_slice_dds`
+    rewrites the DX10 header to `arraySize = 1` and copies that slice's mip
+    chain through untouched, so the pixels reach Blender still compressed and
+    Blender does the decode (the same reason the lightmap path does it).
+
+    ⚠ This does NOT say which slice a given object should use. Nothing in the
+    level data links a model to a slice -- the array is bound by no material
+    and named in no model's texture list, so the choice is made at runtime.
+    What this fixes is availability: the slices exist on disk, named
+    `<hash>.s00.dds` .. so a consumer can pick, instead of being silently
+    handed slice 0 for everything.
+    """
+    import evr_lightmap as evr_lm
+
+    names: list = []
+    try:
+        count = struct.unpack_from("<I", blob, 140)[0] if blob[84:88] == b"DX10" else 1
+    except struct.error:
+        return names
+    if count <= 1 or count > ARRAY_SLICE_LIMIT:
+        return names
+    out_dir = Path(out_dir)
+    for index in range(count):
+        try:
+            slice_blob = evr_lm.single_slice_dds(blob, index)
+        except Exception:                                    # noqa: BLE001
+            slice_blob = None
+        if not slice_blob:
+            continue
+        name = "%s.s%02d.dds" % (tex_hash, index)
+        try:
+            (out_dir / name).write_bytes(slice_blob)
+        except OSError:
+            continue
+        names.append(name)
+    return names
+
+
 def extract_textures(ctx: MaterialContext, tex_hashes, out_dir: Path,
                      *, packfile_hash: str | None = None) -> dict:
     """Write each texture's DDS into `out_dir`; return `{hash -> rel path}`.
@@ -878,7 +1250,12 @@ def extract_textures(ctx: MaterialContext, tex_hashes, out_dir: Path,
         ctx.dxgi_by_tex[tex_hash] = resource.format
 
         destination = out_dir / f"{tex_hash}.dds"
-        if not destination.exists() or destination.stat().st_size <= 128:
+        # `_force_texture_rewrite` is set once per run when the textures on disk
+        # were written with different resolution settings -- see
+        # `texture_cache_is_stale`. Without it a stale half-resolution cache
+        # survives every later extraction.
+        stale = getattr(ctx, "force_texture_rewrite", False)
+        if stale or not destination.exists() or destination.stat().st_size <= 128:
             blob, note = evr_tex.rebuild_dds(
                 ctx.root, tex_hash, packfile_hash=packfile_hash)
             if not blob:
@@ -896,6 +1273,25 @@ def extract_textures(ctx: MaterialContext, tex_hashes, out_dir: Path,
                 if cap_note.startswith("capped"):
                     ctx.textures_capped += 1
             destination.write_bytes(blob)
+
+        # An array texture is useless to a consumer as ONE file -- every object
+        # bound to it gets slice 0. Write the slices out beside it.
+        #
+        # ⚠ Outside the cache guard above on purpose: the guard skips a texture
+        # whose DDS is already on disk, and the first run that introduced
+        # slicing would then never slice anything that had been extracted
+        # before it.
+        if int(getattr(resource, "arraysize", 1) or 1) > 1                 and tex_hash not in ctx.texture_array_slices:
+            existing = sorted(out_dir.glob("%s.s??.dds" % tex_hash))
+            if len(existing) >= int(resource.arraysize):
+                ctx.texture_array_slices[tex_hash] = [p.name for p in existing]
+            else:
+                blob, note = evr_tex.rebuild_dds(
+                    ctx.root, tex_hash, packfile_hash=packfile_hash)
+                if blob:
+                    made = write_array_slices(ctx.root, tex_hash, blob, out_dir)
+                    if made:
+                        ctx.texture_array_slices[tex_hash] = made
 
         relative = _texture_file_name(tex_hash)
         written[tex_hash] = relative
@@ -1062,7 +1458,7 @@ def build_spec(ctx: MaterialContext, material_hash: str, *,
                             ctx.dxgi_by_tex[tex] = resource.format
             ctx.role_route_tally["material_table"] = (
                 ctx.role_route_tally.get("material_table", 0) + 1)
-            return le_materials.build_material_spec(
+            table_spec = le_materials.build_material_spec(
                 f"{normalise_hash(material_hash)}__{normalise_hash(shaderset_hash)}",
                 shaderset_hash=normalise_hash(shaderset_hash),
                 material_hash=normalise_hash(material_hash),
@@ -1072,6 +1468,16 @@ def build_spec(ctx: MaterialContext, material_hash: str, *,
                 texture_files=ctx.texture_files,
                 role_sources={r: role_index.SOURCE_ARRAY for r in role_textures},
                 texture_names={})
+            # ⚠ This route returns EARLY, so it used to skip the UV scale that
+            # the shader-set route below applies -- and it is the route almost
+            # everything takes (224 of `mpl_arena_a`'s 238 materials). Every
+            # atlas-shared texture therefore sampled the wrong band of its
+            # atlas. The scale is on the material itself; see
+            # `evr_material_resource.uv_scale_from_props`.
+            table_uv = evr_mat.uv_scale_from_props(material.props, ctx.uv_scale_slots)
+            if table_uv != (1.0, 1.0):
+                table_spec["uv_scale"] = [table_uv[0], table_uv[1]]
+            return table_spec
 
     # Roles come from the shader set's own structured element/sub-table layout
     # (`evr_shaderset._parse_structured`, EOF-exact decode) -- not an anchored
@@ -1182,6 +1588,12 @@ def build_spec(ctx: MaterialContext, material_hash: str, *,
     uv_scale = (1.0, 1.0)
     if shaderset_hash:
         uv_scale = evr_shaderset.dominant_uv_scale(ctx.root, shaderset_hash)
+    # The shader set is the better source when it exists -- it binds the scale
+    # to a specific texture rather than to the material as a whole -- but it
+    # exists for almost nothing, so fall back to the material's own pair.
+    if uv_scale == (1.0, 1.0):
+        uv_scale = evr_mat.uv_scale_from_props(
+            material.props, ctx.uv_scale_slots)
 
     from_dxgi = role_source.startswith("dxgi")
     role_sources = {
@@ -1338,8 +1750,22 @@ def _scalars_from_material(material) -> dict:
             emissive_layers.append(layer)
     scalars["layers"] = layers
     scalars["emissive_layer_indices"] = emissive_layers
-    scalars["emissive_intensity"] = float(
-        layers[0]["emissive_intensity"] or 1.0) if layers else 1.0
+    # Layer 0's value wins, then the UNLAYERED `emissive_intensity`.
+    #
+    # That second property was invisible until its name was recovered from the
+    # engine's authoring schema (`SCHEMA_RECOVERED_PARAMS`): the hash was in the
+    # shipped materials all along but `build_name_table` could not name it, so
+    # `named_scalars` dropped it and this line defaulted to 1.0. On
+    # `mpl_arena_a` 13 materials author 2.0 there, i.e. they were rendering at
+    # half their authored emissive brightness; `mpl_combat_fission` has values
+    # up to 30.
+    _layer0 = float(layers[0]["emissive_intensity"] or 0.0) if layers else 0.0
+    _flat = (scalars.get("named_scalars") or {}).get("emissive_intensity")
+    try:
+        _flat = float(_flat) if _flat is not None else 0.0
+    except (TypeError, ValueError):
+        _flat = 0.0
+    scalars["emissive_intensity"] = _layer0 or _flat or 1.0
     scalars["is_emissive"] = bool(emissive_layers)
 
     # Both tables are int-keyed dicts in `material_scalars`.
@@ -1424,6 +1850,14 @@ class MaterialTable:
             "diagnostics": {
                 "mesh_material_offset": ctx.mesh_material_offset,
                 "mesh_material_probe": ctx.probe,
+                # Array textures, and the per-slice files written beside them.
+                # Nothing in the level data says which slice an object uses --
+                # see `write_array_slices` -- so this is an inventory, not a
+                # binding: the slices exist so a consumer can choose.
+                "texture_arrays": {
+                    h: {"slices": len(v), "files": v}
+                    for h, v in sorted(ctx.texture_array_slices.items())
+                },
                 "mesh_shaderset_offset": ctx.mesh_shaderset_offset,
                 "mesh_shaderset_probe": ctx.shaderset_probe,
                 "materials_built": len(self.entries),
@@ -1433,6 +1867,133 @@ class MaterialTable:
                 "warning_count": len(ctx.warnings),
             },
         }
+
+
+# ---------------------------------------------------------------------------
+# Emissive map vs ambient occlusion
+# ---------------------------------------------------------------------------
+
+#: Luma at or below which a texel counts as black.
+_BLACK_LEVEL = 0.05
+#: BC1 family: two RGB565 endpoints then 4 bytes of 2-bit indices, 8B a block.
+_BC1_FORMATS = frozenset((70, 71, 72))
+_BC1_BLOCK = 8
+#: Texels/blocks sampled when estimating the black proportion.
+_BLACK_SAMPLES = 65536
+
+
+def _rgb565_luma(value: int) -> float:
+    r = ((value >> 11) & 0x1F) / 31.0
+    g = ((value >> 5) & 0x3F) / 63.0
+    b = (value & 0x1F) / 31.0
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _dds_black_fraction(path: Path) -> float | None:
+    """Fraction of a DDS's top mip that is essentially black, or None.
+
+    The add-on uses this to tell a GLOW MASK from an ambient-occlusion map.
+    AO is a visibility term in [0,1] where 1 is unoccluded, so a map that is
+    mostly black would assert near-total occlusion everywhere -- nobody
+    authors that, and every emissive map measured in the reference extract is
+    0.000-0.051 mean luma. Blackness is therefore the discriminator, NOT
+    colour or saturation: these masks are greyscale, so a saturation test
+    (tried, reverted) calls them occlusion.
+
+    BC1 is read from its block ENDPOINTS rather than decoded: two RGB565
+    colours per 8-byte block sample every block for the cost of a scan, and
+    this only needs a proportion, not an image.
+    """
+    try:
+        blob = Path(path).read_bytes()
+    except OSError:
+        return None
+    if len(blob) < 128 or blob[:4] != b"DDS ":
+        return None
+    height, width = struct.unpack_from("<II", blob, 12)
+    if not width or not height:
+        return None
+    dxgi, offset = None, 128
+    if blob[84:88] == b"DX10":
+        if len(blob) < 148:
+            return None
+        dxgi = struct.unpack_from("<I", blob, 128)[0]
+        offset = 148
+
+    if dxgi in _BC1_FORMATS or blob[84:88] == b"DXT1":
+        blocks = ((width + 3) // 4) * ((height + 3) // 4)
+        available = (len(blob) - offset) // _BC1_BLOCK
+        blocks = min(blocks, available)
+        if blocks <= 0:
+            return None
+        # A proportion needs a sample, not the whole map: a 4096x4096 BC1 has
+        # a million blocks and scanning all of them costs half a second per
+        # texture. Striding to ~64k samples is within 0.001 of the full scan
+        # and runs in single-digit milliseconds.
+        stride = max(1, blocks // _BLACK_SAMPLES)
+        black = total = 0
+        for i in range(0, blocks, stride):
+            c0, c1 = struct.unpack_from("<HH", blob, offset + i * _BC1_BLOCK)
+            if _rgb565_luma(c0) <= _BLACK_LEVEL and _rgb565_luma(c1) <= _BLACK_LEVEL:
+                black += 1
+            total += 1
+        return (black / total) if total else None
+
+    # Anything else needs a real decode. Optional -- `evr_lightmap` already
+    # depends on this package, and its absence just means the test does not
+    # fire rather than a wrong answer.
+    try:
+        import texture2ddecoder
+    except ImportError:
+        return None
+    decoders = {83: "decode_bc5", 82: "decode_bc5", 80: "decode_bc4",
+                79: "decode_bc4", 77: "decode_bc3", 78: "decode_bc3",
+                98: "decode_bc7", 99: "decode_bc7", 97: "decode_bc7"}
+    name = decoders.get(dxgi)
+    if name is None:
+        return None
+    try:
+        raw = bytes(getattr(texture2ddecoder, name)(blob[offset:], width, height))
+    except Exception:
+        return None
+    if len(raw) < width * height * 4:
+        return None
+    # BGRA. Sample on a grid rather than every texel -- a proportion this
+    # coarse does not need 16M samples.
+    step = max(1, (width * height) // _BLACK_SAMPLES)
+    black = total = 0
+    for i in range(0, width * height, step):
+        b, g, r = raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2]
+        if (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0 <= _BLACK_LEVEL:
+            black += 1
+        total += 1
+    return (black / total) if total else None
+
+
+def annotate_emissive_masks(entries, package_dir) -> int:
+    """Tag each emissive channel with how black its map is. Returns the count.
+
+    Measured for EVERY emissive map, not just the ambiguous ones. The add-on
+    treats this as the authoritative signal in both directions -- a mostly
+    black map is a glow mask, a bright one is an occlusion map -- so skipping
+    the ones a structural rule could already settle would throw away the only
+    evidence that can overrule that rule.
+    """
+    package_dir = Path(package_dir)
+    tagged = 0
+    for entry in entries or ():
+        spec = entry.get("spec") if isinstance(entry, dict) and "spec" in entry else entry
+        if not isinstance(spec, dict):
+            continue
+        channels = spec.get("channels") or {}
+        emission = channels.get("emission")
+        if not isinstance(emission, dict) or not emission.get("file"):
+            continue
+        fraction = _dds_black_fraction(package_dir / emission["file"])
+        if fraction is not None:
+            emission["black_fraction"] = round(fraction, 4)
+            tagged += 1
+    return tagged
 
 
 def _v1_projection(entry: dict, ctx: MaterialContext) -> dict:

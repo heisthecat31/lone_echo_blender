@@ -454,6 +454,11 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
 
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={"HIDDEN"})   # type: ignore
+    #: ⚠ `filter_glob` is an EXTENSION filter, not a name filter: Blender
+    #: matches it with `BLI_path_extension_check_glob`, so only `*.ext`
+    #: patterns work. Setting it to "manifest.json" hides EVERY file, which is
+    #: why picking the right sidecar is fixed in `execute` instead --
+    #: see `package_reader.resolve_package_file`.
 
     import_materials: BoolProperty(name="Import Materials", default=True)   # type: ignore
     import_shadow_only: BoolProperty(name="Include Shadow-Only Meshes", default=False)   # type: ignore
@@ -580,6 +585,12 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
         col.prop(self, "skip_unresolved")
 
     def execute(self, context):
+        # Any file inside the package identifies it, so a mis-picked
+        # sidecar (materials.json, movers.json, ...) resolves to manifest.json
+        # instead of failing. `filter_glob` cannot do this -- it filters by
+        # EXTENSION only.
+        self.filepath = package_reader.resolve_package_file(
+            self.filepath, "manifest.json")
         opts = {
             "import_materials": self.import_materials,
             "import_shadow_only": self.import_shadow_only,

@@ -43,20 +43,27 @@ def test_mesh_list_hash_is_not_the_instanced_model_hash():
     assert ert.MESH_LIST_RESOURCE != ert.INSTANCED_MODEL_RESOURCE
 
 
-def test_mesh_dirs_preserve_the_proven_geometry_search_order():
-    """The old comments were wrong; the ORDER was not, and must not change.
+def test_mesh_dirs_holds_gpu_blobs_only_each_with_a_primary():
+    """`MESH_DIRS` is GPU blobs, and every one must have a primary.
 
-    `decode.extract_mesh` consumes the raw vertex/index payload. Putting the
-    stream-0 `CGMeshListResourceWin10` descriptor in this list would break
-    models that currently extract, which is why it is excluded on purpose.
+    `decode.extract_mesh` needs the blob AND the primary that describes its
+    vertex format; given a blob alone it guesses the stride and renders fans
+    radiating from a point. So a directory in this list without an entry in
+    `GPU_TO_PRIMARY` is a mangled model waiting to happen.
+
+    This list previously had four entries, two wrong in KIND: a primary
+    descriptor and a texture packfile, neither of which holds vertex data.
+    Both exclusions are asserted so they cannot creep back.
     """
-    assert ert.MESH_DIRS == (
-        ert.MESH_GPU_BUCKET,
-        ert.RAW_TEXTURE_PACK,
-        ert.UNKNOWN_MESH_BUCKET,
-        ert.INSTANCED_MODEL_RESOURCE,
-    )
+    assert ert.MESH_DIRS == (ert.MESH_GPU_BUCKET, ert.INSTANCED_MODEL_GPU)
+    for gpu_dir in ert.MESH_DIRS:
+        assert gpu_dir in ert.GPU_TO_PRIMARY, gpu_dir
+
+    # Primaries describe geometry, they do not contain it.
     assert ert.MESH_LIST_RESOURCE not in ert.MESH_DIRS
+    assert ert.INSTANCED_MODEL_RESOURCE not in ert.MESH_DIRS
+    # RawTexturePackfileWin10 is not geometry at all.
+    assert ert.RAW_TEXTURE_PACK not in ert.MESH_DIRS
 
 
 def test_every_type_hash_is_16_hex_digits():
@@ -145,8 +152,14 @@ def _extract(tmp_path):
            _texture(fmt=99, inline=_dds()))      # BC7_UNORM_SRGB
     _write(tmp_path, ert.TEXTURE_RESOURCE, TEX_NORMAL,
            _texture(fmt=83, inline=_dds()))      # BC5_UNORM
+    # Textures are bound through the material's OWN slot table -- the sixth
+    # container. NOT through `auxillaryinputs`: that is the decal slot, and
+    # across 1727 shipped materials it carries only `cutting_cut_decal` and
+    # `cutting_scorch_decal`. Binding the fixture there would test a route the
+    # real data does not use.
     _write(tmp_path, ert.MATERIAL_RESOURCE, MAT_HASH, _material(
         mattype=1, blendmode=0,
+        slot_textures=((INPUT_DIFFUSE, TEX_BASE), (INPUT_NORMAL, TEX_NORMAL)),
         aux_blob=(_bind(INPUT_DIFFUSE, TEX_BASE, slot=0)
                   + _bind(INPUT_NORMAL, TEX_NORMAL, slot=1)),
     ))
@@ -242,10 +255,22 @@ def test_materials_for_model_reads_the_planted_hash(tmp_path):
         tmp_path, MODEL, emr.all_material_hashes(tmp_path), 16) == [MAT]
 
 
-def test_materials_for_model_returns_empty_without_an_offset(tmp_path):
+def test_without_an_offset_it_scans_rather_than_giving_up(tmp_path):
+    """No offset is not the end of the road -- there is a reference scan.
+
+    The scan is less precise about draw ORDER than a per-record read, but it
+    is the difference between a textured import and an untextured one, so an
+    absent offset must NOT come back empty when the model plainly names a
+    material. Empty is reserved for when there is genuinely nothing to find.
+    """
     _extract(tmp_path)
-    assert evr_materials.materials_for_model(
-        tmp_path, MODEL, emr.all_material_hashes(tmp_path), None) == []
+    known = emr.all_material_hashes(tmp_path)
+
+    assert evr_materials.materials_for_model(tmp_path, MODEL, known, None) == [MAT]
+
+    # ...and with no known materials to match against, there IS nothing to
+    # find, so the scan reports that rather than inventing a hit.
+    assert evr_materials.materials_for_model(tmp_path, MODEL, set(), None) == []
 
 
 # --- DXGI map ---------------------------------------------------------------
@@ -321,11 +346,26 @@ def test_unnamed_inputs_still_route_by_dxgi_fallback(tmp_path):
     worth pinning: a BC5 texture still lands in `normal`, not `base_color`.
     """
     _extract(tmp_path)
-    spec = evr_materials.build_spec(_ctx(tmp_path, named=False), MAT)
+    # The DXGI route works from the MODEL's texture list, not the material's
+    # own slots -- that is the whole point of it, since without names the slots
+    # say nothing. It does not fire unless that list is supplied.
+    spec = evr_materials.build_spec(_ctx(tmp_path, named=False), MAT,
+                                    model_textures=[TEX_BASE, TEX_NORMAL])
     channels = spec["channels"]
     assert channels["normal"]["texture"] == NORMAL
-    assert channels["normal"].get("inferred_from") == "dxgi"
     assert channels["base_color"]["texture"] == BASE
+
+    # The guess must READ as a guess. This route assigns real role keys off the
+    # texture format, so it records provenance as SOURCE_FORMAT plus a
+    # `binding_guessed` flag -- not the `inferred_from` marker, which belongs
+    # to the older `unknown_s{slot}` path where the role itself was unknown.
+    from le_mesh import role_index
+
+    for channel in ("normal", "base_color"):
+        role_key = channels[channel]["role_key"]
+        assert spec["role_sources"][role_key] == role_index.SOURCE_FORMAT
+        assert channels[channel]["binding_guessed"] is True
+        assert channels[channel]["confidence"] == "tentative"
 
 
 def test_named_roles_are_declared_and_unnamed_ones_are_not(tmp_path):
@@ -343,7 +383,8 @@ def test_named_roles_are_declared_and_unnamed_ones_are_not(tmp_path):
     assert set(named.values()) == {role_index.SOURCE_ARRAY}
 
     unnamed = evr_materials.build_spec(
-        _ctx(tmp_path, named=False), MAT)["role_sources"]
+        _ctx(tmp_path, named=False), MAT,
+        model_textures=[TEX_BASE, TEX_NORMAL])["role_sources"]
     assert set(unnamed.values()) == {role_index.SOURCE_FORMAT}
 
 
@@ -644,3 +685,71 @@ def test_summarise_mentions_counts(tmp_path):
     text = evr_materials.summarise(sidecar)
     assert "materials" in text
     assert "base_color" in text
+
+
+# --- emissive map blackness (glow mask vs occlusion) -------------------------
+
+def _bc1_dds(blocks, *, width=64, height=64):
+    """A minimal DXT1/BC1 DDS whose every block carries `blocks` endpoints."""
+    header = bytearray(128)
+    header[0:4] = b"DDS "
+    struct.pack_into("<I", header, 4, 124)
+    struct.pack_into("<I", header, 12, height)
+    struct.pack_into("<I", header, 16, width)
+    header[84:88] = b"DXT1"
+    c0, c1 = blocks
+    body = struct.pack("<HHI", c0, c1, 0) * (((width + 3) // 4) * ((height + 3) // 4))
+    return bytes(header) + body
+
+
+def test_an_all_black_bc1_measures_as_black(tmp_path):
+    path = tmp_path / "glow.dds"
+    path.write_bytes(_bc1_dds((0x0000, 0x0000)))
+    assert evr_materials._dds_black_fraction(path) == 1.0
+
+
+def test_an_all_white_bc1_measures_as_not_black(tmp_path):
+    path = tmp_path / "ao.dds"
+    path.write_bytes(_bc1_dds((0xFFFF, 0xFFFF)))
+    assert evr_materials._dds_black_fraction(path) == 0.0
+
+
+def test_a_non_dds_file_measures_as_unknown_rather_than_zero(tmp_path):
+    """Unknown must be None: 0.0 would read as 'bright', i.e. occlusion."""
+    path = tmp_path / "not.dds"
+    path.write_bytes(b"nonsense" * 32)
+    assert evr_materials._dds_black_fraction(path) is None
+    assert evr_materials._dds_black_fraction(tmp_path / "missing.dds") is None
+
+
+def test_annotate_tags_the_emissive_channel_only(tmp_path):
+    (tmp_path / "textures").mkdir()
+    (tmp_path / "textures" / "glow.dds").write_bytes(_bc1_dds((0, 0)))
+    (tmp_path / "textures" / "rough.dds").write_bytes(_bc1_dds((0xFFFF, 0xFFFF)))
+    entries = [{"spec": {"channels": {
+        "emission": {"file": "textures/glow.dds"},
+        "roughness": {"file": "textures/rough.dds"},
+    }}}]
+    assert evr_materials.annotate_emissive_masks(entries, tmp_path) == 1
+    channels = entries[0]["spec"]["channels"]
+    assert channels["emission"]["black_fraction"] == 1.0
+    # Only the emissive map is the subject of the AO question.
+    assert "black_fraction" not in channels["roughness"]
+
+
+def test_annotate_measures_even_when_components_is_bound(tmp_path):
+    """The measurement outranks the structural rule, so it must not be skipped."""
+    (tmp_path / "textures").mkdir()
+    (tmp_path / "textures" / "glow.dds").write_bytes(_bc1_dds((0, 0)))
+    entries = [{"spec": {
+        "channels": {"emission": {"file": "textures/glow.dds"},
+                     "roughness": {"role_key": "layer0_composite_components"}},
+        "role_textures": {"layer0_composite_components": "c" * 16},
+    }}]
+    assert evr_materials.annotate_emissive_masks(entries, tmp_path) == 1
+
+
+def test_annotate_survives_a_missing_texture(tmp_path):
+    entries = [{"spec": {"channels": {"emission": {"file": "textures/gone.dds"}}}}]
+    assert evr_materials.annotate_emissive_masks(entries, tmp_path) == 0
+    assert "black_fraction" not in entries[0]["spec"]["channels"]["emission"]

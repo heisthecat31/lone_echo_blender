@@ -52,6 +52,13 @@ def _raises(exc, fn, *args, **kwargs):
 #: `dataByteSize` at +8 fails these tests immediately.
 FIXTURE_CAPACITY = 32
 
+#: One `CMap<CSymbol64, CSymbol64>` entry in the sixth container: slot hash
+#: then texture hash. Matches `evr_material_textures.CONTAINERS[5]`'s stride.
+SLOT_TEXTURE_SIZE = 16
+
+#: One `permutations` entry: `CMap<unsigned int, unsigned int>`.
+PERM_ENTRY_SIZE = 8
+
 
 def _descriptor(count, *, element_size, stride=56, capacity=FIXTURE_CAPACITY):
     """A RadArrayDescriptor: dataByteSize at +8, capacity at +40, count at +48.
@@ -70,11 +77,25 @@ def _descriptor(count, *, element_size, stride=56, capacity=FIXTURE_CAPACITY):
 
 def _material(*, props=(), propoffsets=(), uvsets=(), aux_blob=b"",
               mattype=1, blendmode=0, flags=0, bakecolor=(1.0, 1.0, 1.0, 1.0),
-              materialfx=0xFFFFFFFFFFFFFFFF, perms=b"", trailing=b""):
+              materialfx=0xFFFFFFFFFFFFFFFF, perms=b"", trailing=b"",
+              slot_textures=()):
     """Build a synthetic Echo VR SGMaterialData blob.
 
-    `perms` and `trailing` are raw bytes, because their element types are
-    unreversed -- which is exactly the situation `dataByteSize` has to handle.
+    `perms` is raw bytes, because its element type is unreversed -- which is
+    exactly the situation `dataByteSize` has to handle.
+
+    The SIXTH container is the `CMap<CSymbol64 slot, CSymbol64 texture>` that
+    `evr_material_textures` reads as the material's own texture table. Pass
+    `slot_textures` as `(slot_hash, texture_hash)` pairs to populate it; pass
+    `trailing` instead to put arbitrary bytes there, which is only useful for
+    testing the size bookkeeping itself.
+
+    Every table is kept a whole number of 8-byte units so that no alignment
+    padding is needed. That matters because the two readers of this format
+    disagree about padding -- `evr_material_resource` aligns each table to 8,
+    `evr_material_textures.read_containers` packs them contiguously and
+    demands the arrays consume the file exactly -- and a fixture with padding
+    would be readable by one and not the other.
     """
     head = bytearray(40)
     struct.pack_into("<Q", head, emr.OFF_MATERIALFX, materialfx)
@@ -92,24 +113,45 @@ def _material(*, props=(), propoffsets=(), uvsets=(), aux_blob=b"",
         _descriptor(len(propoffsets), element_size=emr.PROPOFF_ENTRY_SIZE,
                     stride=64),
         _descriptor(len(uvsets), element_size=emr.UVSET_ENTRY_SIZE),
-        _descriptor(len(perms), element_size=1, stride=64),
+        # `permutations` is a CMap<u32,u32>: 8-byte elements. Declaring 1-byte
+        # elements still adds up for the payload walk, but contradicts the
+        # stride `evr_material_textures.CONTAINERS` validates against.
+        _descriptor(len(perms) // PERM_ENTRY_SIZE, element_size=PERM_ENTRY_SIZE,
+                    stride=64),
         _descriptor(len(aux_blob) // emr.SHADER_INPUT_SIZE,
                     element_size=emr.SHADER_INPUT_SIZE),
-        _descriptor(len(trailing), element_size=1),
+        _descriptor(len(slot_textures) if slot_textures else len(trailing),
+                    element_size=SLOT_TEXTURE_SIZE if slot_textures else 1),
     ))
 
-    payload = bytearray()
-    for word in props:
-        payload += struct.pack("<f", word)
-    for key, byteoffset in propoffsets:
-        payload += struct.pack("<QII", key, byteoffset, 0)
-    for uvset in uvsets:
-        payload += struct.pack("<Q", uvset)
-    payload += perms                  # declaration order: perms before aux
-    payload += aux_blob
-    payload += trailing
+    # The undescribed 32-byte block between the descriptors and the first
+    # table. No descriptor accounts for it, so a fixture that omits it leaves
+    # every table 32 bytes adrift of where the reader looks.
+    preamble = struct.pack("<4Q", 0, 0, 0, 0xFFFFFFFFFFFFFFFF)
 
-    return bytes(head) + descriptors + bytes(payload)
+    payload = bytearray()
+
+    def _emit(chunk):
+        """Append a table, 8-byte aligned like the reader expects.
+
+        Only `materialprops` normally needs this -- it is the one CTable<u8>,
+        so its byte count is arbitrary -- but aligning every table keeps the
+        fixture honest rather than accidentally right.
+        """
+        payload.extend(bytes(-len(payload) % emr.TABLE_ALIGNMENT))
+        payload.extend(chunk)
+
+    _emit(b"".join(struct.pack("<f", word) for word in props))
+    _emit(b"".join(struct.pack("<QII", key, byteoffset, 0)
+                   for key, byteoffset in propoffsets))
+    _emit(b"".join(struct.pack("<Q", uvset) for uvset in uvsets))
+    _emit(perms)                      # declaration order: perms before aux
+    _emit(aux_blob)
+    _emit(b"".join(struct.pack("<QQ", slot, texture)
+                   for slot, texture in slot_textures)
+          if slot_textures else trailing)
+
+    return bytes(head) + descriptors + preamble + bytes(payload)
 
 
 def _bind(inputname, texture, *, slot=0, layer=0, type_=1,
@@ -158,26 +200,38 @@ def test_layout_matches_lone_echo_once_the_two_differences_are_applied():
     spacing is what the scalar reader depends on.
     """
     le_header, le_descriptor_base = 56, 56
-    le_offsets = {}
+    le_starts = {}
     cursor = le_descriptor_base
     for name, stride, _elem in emr.DESCRIPTORS[:5]:   # Lone Echo has no `trailing`
-        # Lone Echo reads +40 and calls it `iused`; that is the CAPACITY slot.
-        le_offsets[name] = cursor + emr.DESC_CAPACITY
+        le_starts[name] = cursor
         cursor += stride
 
-    # Lone Echo's published constants, from le_mesh/material_scalars.py.
-    assert le_offsets["materialprops"] == 0x060
-    assert le_offsets["materialpropoffsets"] == 0x098
-    assert le_offsets["uvsets"] == 0x0D8
-    assert le_offsets["permutations"] == 0x110
-    assert le_offsets["auxillaryinputs"] == 0x150
+    # Lone Echo's published constants, from le_mesh/material_scalars.py. That
+    # module reads +40 and calls it `iused`, so its constants land on the
+    # CAPACITY slot -- see the note below.
+    assert le_starts["materialprops"] + emr.DESC_CAPACITY == 0x060
+    assert le_starts["materialpropoffsets"] + emr.DESC_CAPACITY == 0x098
+    assert le_starts["uvsets"] + emr.DESC_CAPACITY == 0x0D8
+    assert le_starts["permutations"] + emr.DESC_CAPACITY == 0x110
+    assert le_starts["auxillaryinputs"] + emr.DESC_CAPACITY == 0x150
     assert cursor == 0x160                        # Lone Echo's HEADER_SIZE
 
-    # Echo VR is the same spacing shifted down by the 16 dropped header bytes.
+    # The actual cross-check: identical spacing, shifted down by the 16 dropped
+    # header bytes. Compare descriptor STARTS, because the two readers do not
+    # read the same slot within a descriptor and comparing slot addresses would
+    # be comparing different fields.
     for name in ("materialprops", "materialpropoffsets", "uvsets",
                  "permutations", "auxillaryinputs"):
-        assert emr.DESC_OFFSETS[name] == le_offsets[name] - 16
+        assert emr.DESC_STARTS[name] == le_starts[name] - 16
     assert le_header - emr.DESC_BASE == 16
+
+    # ⚠ The two readers disagree about which slot holds the count, and this
+    # module is the one that matches the data: capacity (+40) and count (+48)
+    # differ on 1059 of 2400 descriptor slots across 400 shipped Echo VR
+    # materials, so they are NOT interchangeable. Lone Echo reading +40 as
+    # `iused` is only safe where that game's own materials never over-allocate.
+    assert emr.DESC_OFFSETS["materialprops"] == emr.DESC_STARTS["materialprops"] + emr.DESC_COUNT
+    assert emr.DESC_COUNT != emr.DESC_CAPACITY
 
 
 def test_lone_echo_constants_are_still_what_we_compared_against():
@@ -251,9 +305,32 @@ def test_payload_uses_count_not_capacity():
     """Allocated != stored. Sizing the walk off capacity overshoots massively."""
     data = _material(props=(1.0, 2.0), propoffsets=((0xAA, 0),))
     header = emr.parse_header(data)
+    # Tables begin after the descriptors AND the undescribed preamble.
+    base = emr.HEADER_SIZE + emr.PREAMBLE_SIZE
     # 8 bytes of props + one 16-byte offset entry, NOT 32 + 512.
-    assert header.payload_offsets["materialpropoffsets"] == emr.HEADER_SIZE + 8
-    assert header.payload_end == emr.HEADER_SIZE + 8 + 16
+    assert header.payload_offsets["materialpropoffsets"] == base + 8
+    assert header.payload_end == base + 8 + 16
+
+
+def test_a_materialprops_that_is_four_mod_eight_pads_the_next_table():
+    """The common case: 174 of 400 shipped materials need this padding.
+
+    `materialprops` is the one CTable<u8>, so its byte count is arbitrary; an
+    odd number of 4-byte words leaves the cursor 4 past an 8-byte boundary and
+    the NEXT table has to be pushed out to realign. Getting this wrong shifts
+    every following table by four bytes, which still parses and still looks
+    plausible -- the scalars stay word-aligned either way -- so it is worth
+    pinning rather than eyeballing.
+    """
+    data = _material(props=(1.0,), propoffsets=((0xAA, 0),),
+                     slot_textures=((0x1001, 0xB0),))
+    header = emr.parse_header(data)
+    base = emr.HEADER_SIZE + emr.PREAMBLE_SIZE
+
+    assert header.payload_offsets["materialprops"] == base
+    assert header.alignment_padding == {"materialpropoffsets": 4}
+    assert header.payload_offsets["materialpropoffsets"] == base + 8
+    assert not header.size_mismatches
 
 
 def test_a_bytesize_that_is_not_a_whole_element_is_flagged():
@@ -322,8 +399,9 @@ def test_every_table_is_now_locatable_including_auxillaryinputs():
                      aux_blob=_bind(0x1111, 0xDEAD))
     header = emr.parse_header(data)
 
-    assert emr.payload_offset("materialprops", header) == emr.HEADER_SIZE
-    expected = emr.HEADER_SIZE + 2 * 4 + 1 * 16 + 1 * 8 + 24
+    base = emr.HEADER_SIZE + emr.PREAMBLE_SIZE
+    assert emr.payload_offset("materialprops", header) == base
+    expected = base + 2 * 4 + 1 * 16 + 1 * 8 + 24
     assert emr.payload_offset("auxillaryinputs", header) == expected
 
 
@@ -456,9 +534,15 @@ def test_scan_shortfall_is_warned_about_only_when_the_scan_was_used():
     data = bytearray(_material(aux_blob=_bind(0x1111, 0xDEAD)
                                + _bind(0x2222, 0xBEEF)))
     # Break the offset path so decode falls back to the anchored scan, which
-    # can only see the one texture the anchor names.
+    # can only see the one texture the anchor names. Inflating an EARLIER
+    # table's count is the way to do it: it walks `auxillaryinputs` off the end
+    # of the file, which is exactly the "descriptors do not add up" case the
+    # scan exists for. Zeroing this table's own `dataByteSize` would not --
+    # the count field at +48 is what sizes the read, and `dataByteSize` only
+    # derives the element size.
     struct.pack_into("<Q", data,
-                     emr.DESC_STARTS["auxillaryinputs"] + emr.DESC_BYTESIZE, 0)
+                     emr.DESC_STARTS["uvsets"] + emr.DESC_COUNT,
+                     FIXTURE_CAPACITY)
     result = emr.decode(bytes(data), known_textures={f"{0xDEAD:016x}"})
     assert result.bind_source == "scan"
     assert len(result.binds) == 1
@@ -513,3 +597,74 @@ def test_probe_flags_offsets_that_miss_the_word_array():
     report = emr.probe_layout(_material(props=(1.0,), propoffsets=((0xAA, 4000),)))
     assert not report["ok"]
     assert any("outside" in p for p in report["problems"])
+
+
+# ---------------------------------------------------------------------------
+# Per-material UV scale
+#
+# The two property names are UNCRACKED, so the pair is found structurally: the
+# hashes of `...u...` and `...v...` differ by a fixed XOR because CSymbol64 is a
+# CRC and `ord('u') ^ ord('v') == 3`. These tests pin the structure and the
+# ordering, because getting the ordering backwards silently transposes every
+# atlas-shared texture instead of failing loudly.
+# ---------------------------------------------------------------------------
+
+_D = emr.UV_SCALE_PAIR_DELTA
+
+
+def test_uv_scale_pairs_are_found_by_the_xor_delta():
+    """Low-hash member is `vscale`, high-hash member is `uscale`."""
+    low = 0xB038EC9606824F9F
+    assert low ^ _D == 0xB038EF9606824F9F      # the shipped CATAPULT sign pair
+    assert emr.uv_scale_from_props({low: 2.0, low ^ _D: 1.0}) == (1.0, 2.0)
+
+
+def test_uv_scale_is_identity_when_nothing_is_authored():
+    assert emr.uv_scale_from_props({}) == (1.0, 1.0)
+    assert emr.uv_scale_from_props({0x1234: 2.0}) == (1.0, 1.0)   # no partner
+
+
+def test_a_unit_pair_is_not_reported_as_a_transform():
+    """`(1,1)` means "no Mapping node", not "a scale that happens to be 1"."""
+    assert emr.uv_scale_from_props({0x40: 1.0, 0x40 ^ _D: 1.0}) == (1.0, 1.0)
+
+
+def test_an_isotropic_pair_still_counts():
+    """0.5/0.5 does not stretch, but it does still re-tile."""
+    assert emr.uv_scale_from_props({0x40: 0.5, 0x40 ^ _D: 0.5}) == (0.5, 0.5)
+
+
+def test_a_pair_outside_the_measured_slots_is_ignored():
+    """The reason `slots` exists.
+
+    Three pair hashes in the shipped corpus hold `(3,5)`/`(5,3)` on all 710
+    materials that carry them -- fixed engine constants that merely sit a
+    `UV_SCALE_PAIR_DELTA` apart. Treating them as UV scales put a bogus 3x5
+    mapping on 41% of the corpus.
+    """
+    constant = 0x983B599CD5EDB4C9
+    props = {constant: 5.0, constant ^ _D: 3.0}
+    assert emr.uv_scale_from_props(props, slots=set()) == (1.0, 1.0)
+    assert emr.uv_scale_from_props(props, slots={constant}) == (3.0, 5.0)
+
+
+def test_the_most_common_non_unit_pair_wins():
+    """One pair per texture layer, and no decoded edge from a pair to a layer.
+
+    Same policy as `evr_shaderset.dominant_uv_scale` for the same ambiguity.
+    """
+    props = {
+        0x10: 3.0, 0x10 ^ _D: 5.0,
+        0x20: 3.0, 0x20 ^ _D: 5.0,
+        0x30: 2.0, 0x30 ^ _D: 1.0,
+        0x40: 1.0, 0x40 ^ _D: 1.0,          # identity, must not dilute the vote
+    }
+    assert emr.uv_scale_from_props(props) == (5.0, 3.0)
+
+
+def test_nonsense_values_are_rejected():
+    """A zero or negative scale collapses the UVs; NaN poisons the Mapping node."""
+    assert emr.uv_scale_from_props({0x40: 0.0, 0x40 ^ _D: 1.0}) == (1.0, 1.0)
+    assert emr.uv_scale_from_props({0x40: -2.0, 0x40 ^ _D: 1.0}) == (1.0, 1.0)
+    assert emr.uv_scale_from_props({0x40: float("nan"), 0x40 ^ _D: 1.0}) == (1.0, 1.0)
+    assert emr.uv_scale_from_props({0x40: 1e9, 0x40 ^ _D: 1.0}) == (1.0, 1.0)

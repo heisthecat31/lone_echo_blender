@@ -179,6 +179,24 @@ CGSI_SECTIONS = (
     (0x130, "brokenassets", "<QQ", 16),
 )
 
+# ⭐ `assetdata.ssoffset` / `.sscount` index `shadersetoverrides` -- the "ss"
+# is shaderset. `sum(sscount) == len(shadersetoverrides)` EXACTLY on all three
+# lobby levels (combat 612/612, lobby 339/339, arena 197/197), so each asset
+# owns a contiguous run of overrides. They are NOT indices into
+# `instancedata`: read that way they overshoot on `mpl_lobby_b_arena`
+# (197 against 191 instances).
+#
+# ⭐ `assetdata` is the level's own list of static-instanced MODELS, and it is
+# WIDER than what any component places: 14 of the combat level's 236 assets,
+# 5 of the lobby's 110 and 6 of the arena's 62 are bound to no instance by
+# `CStaticInstanceModelCR` and to no actor by the CModel/CInstanceModel walk.
+# Those orphans decode to real geometry -- `5e9e0d12c49920c2` and
+# `6f486e64b29d1d94` are a mirrored pair of 6.12 x 5.81 m panels -- but nothing
+# on disk gives them a transform, and unlike every statically-lit surface they
+# carry NO lightmap row (`lightmapidx == LIGHTMAP_NONE`). Whatever places them
+# is not a component this toolchain reads yet, so they cannot be exported by
+# guessing a transform.
+
 
 def read_cgsi(blob: bytes) -> dict | None:
     """Decode `CGStaticInstanceResource` into its six tables, or None.
@@ -402,3 +420,57 @@ def page_irradiance(slices, page: int, basis: str, width: int, height: int):
         src = np.frombuffer(slices[index], dtype=np.uint8).reshape(height, width, 4)
         acc += src[:, :, [2, 1, 0]].astype(np.float32) * (weights[i] / 255.0)
     return acc
+
+
+def ambient_dds(root: Path, tex_hash: str):
+    """`(blob, width, height, arraysize)` for the rebuilt ambient texture array."""
+    blob, note = evr_tex.rebuild_dds(root, tex_hash)
+    if not blob:
+        raise ValueError(f"{tex_hash}: {note}")
+    height, width = struct.unpack_from("<II", blob, 12)
+    arraysize = struct.unpack_from("<I", blob, 140)[0]
+    return blob, width, height, arraysize
+
+
+def single_slice_dds(blob: bytes, index: int) -> bytes | None:
+    """One array slice of a BC6H texture array, re-headered as a plain 2D DDS.
+
+    ⭐ No decode happens here, which is the point. `texture2ddecoder.decode_bc6`
+    returns 8-BIT BGRA, and a lightmap's data lives in the very bottom of that
+    range -- on `mpl_arena_a`'s DC slice the median lit texel is 12/255 and
+    62.6% of lit texels fall in 1..15, so roughly 3-4 bits survive. Blender's
+    own DDS reader decodes BC6H to FLOAT: same texels, 10332 distinct values
+    instead of 256, and HDR above 1.0 kept (max 2.95 where ours clamped at 1.0).
+
+    So the file is handed over compressed and Blender does the decode.
+    """
+    height, width = struct.unpack_from("<II", blob, 12)
+    mips = max(1, struct.unpack_from("<I", blob, 28)[0])
+    dxgi = struct.unpack_from("<I", blob, 128)[0] if blob[84:88] == b"DX10" else 0
+
+    # ⛔ Do NOT assume 16 bytes per block and a single mip. Both were hard-coded
+    # here and both are wrong outside the BC6H lightmap case this started as:
+    # BC1/BC4 carry EIGHT bytes per block, and a DDS array stores the WHOLE mip
+    # chain of slice 0, then the whole chain of slice 1, and so on.
+    #
+    # On `a240a4bc051b2f23` -- 37 slices of 2048x1024 BC1 with 12 mips, the
+    # lobby's poster set -- the old arithmetic made each stride 2x too large and
+    # ignored the mips, so it walked off the end after 24 slices and every one
+    # of those started at the wrong offset.
+    bytes_per_block = 8 if dxgi in (70, 71, 72, 79, 80, 81) else 16
+
+    def _chain_bytes() -> int:
+        total = 0
+        for level in range(mips):
+            w = max(1, width >> level)
+            h = max(1, height >> level)
+            total += max(1, (w + 3) // 4) * max(1, (h + 3) // 4) * bytes_per_block
+        return total
+
+    per_slice = _chain_bytes()
+    start = 148 + index * per_slice
+    if per_slice <= 0 or start + per_slice > len(blob):
+        return None
+    header = bytearray(blob[:148])
+    struct.pack_into("<I", header, 140, 1)          # arraysize -> 1
+    return bytes(header) + blob[start:start + per_slice]

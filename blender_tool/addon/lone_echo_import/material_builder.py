@@ -641,6 +641,80 @@ def ao_channel_of(spec: dict, chan: dict | None) -> str | None:
     return None
 
 
+#: An emissive map is treated as ambient occlusion when the material has a base
+#: colour to occlude (see the long note at the use site). That test is right for
+#: a lot of level geometry and WRONG for anything with a real glow mask, so it
+#: is narrowed by two facts that outrank it.
+#:
+#: A map that is mostly BLACK cannot be occlusion. AO is a [0,1] visibility
+#: term where 1 = unoccluded, so a mostly-black map asserts near-total
+#: occlusion everywhere -- nobody authors that.
+#:
+#: The threshold is a MAJORITY (more than half the map is black), not a number
+#: fitted to the sample. The two populations do not overlap or come close;
+#: measured over the reference models::
+#:
+#:     composite_components (the real AO map)   0.000 - 0.000   n=9
+#:     albedo maps                              0.000 - 0.373   n=14
+#:     emissive maps                            0.587 - 1.000   n=11
+#:
+#: Anything in 0.38-0.58 gives an identical answer, so this sits in an empty
+#: gap rather than on a boundary.
+EMISSIVE_BLACK_FRACTION = 0.50
+
+
+def _binds_composite_components(spec: dict, channels: dict) -> bool:
+    """Does this material carry its own `composite_components` texture?"""
+    roughness = channels.get("roughness") or {}
+    if "composite_components" in str(roughness.get("role_key", "")):
+        return True
+    return any("composite_components" in role
+               for role in (spec.get("role_textures") or {}))
+
+
+def emissive_is_ao(spec: dict, channels: dict) -> bool:
+    """Should this material's emissive map be read as ambient occlusion?
+
+    ⛔ Read the note at the use site before touching this. Two earlier attempts
+    to refine the plain `has_albedo` test were reverted, both because they
+    guessed from how the texture LOOKED: gating on colorspace (false premise --
+    the masks are sRGB), then on per-texture saturation (these masks are
+    greyscale, so it flips genuine AO the wrong way). Neither is used here.
+
+    The two tests below are different in kind. The first is structural and
+    comes from the shader; the second rejects a map that could not be an
+    occlusion term whatever it depicts.
+    """
+    if not channels.get("emission"):
+        return False
+    # Nothing to occlude -- the original discriminator, verified against the
+    # running game on `d09afd15b1c75c04` i1535.
+    if not channels.get("base_color"):
+        return False
+
+    # ★ WHAT THE MAP ACTUALLY CONTAINS, where the extractor could measure it.
+    # This decides BOTH ways and outranks the structural test below, so a
+    # material carrying a genuine occlusion map in its emissive slot still
+    # gets occlusion -- which is the failure the two reverted attempts caused.
+    # Absent on sidecars written before this existed, in which case it simply
+    # does not fire and the structural test decides.
+    black = (channels.get("emission") or {}).get("black_fraction")
+    if isinstance(black, (int, float)):
+        return black < EMISSIVE_BLACK_FRACTION
+
+    # ★ AO ALREADY HAS A HOME. `composite_components.y` IS the ambient
+    # occlusion (`shader-confirmed`, see le_mesh/materials.py's
+    # `ao_channel`). A material that binds that texture has its occlusion
+    # accounted for, so reading the emissive map as a SECOND AO double-counts
+    # it -- and inverting a glow mask into Base Colour punches the glowing
+    # texels to black, which is the visible bug this fixes. 1282 of the 1347
+    # emissive-binding materials in the reference extract are in this class.
+    if _binds_composite_components(spec, channels):
+        return False
+
+    return True
+
+
 # --- the two-lobe composite BRDF ------------------------------------------
 # `le_mesh/materials.py::brdf_lobe_blend` carries the full derivation. Short
 # version: RAD's composite path runs TWO specular lobes and weights them per
@@ -1338,6 +1412,176 @@ def _mix_node(nt, data_type, blend_type, x, y, label=""):
                "VECTOR": MIX_VECTOR_SOCKETS}.get(data_type, MIX_RGBA_SOCKETS)
 
 
+#: Scroll rate for an animated UV layer, in UV units per SECOND.
+#:
+#: ⚠ NOT FROM THE DATA. The materials that scroll say only THAT they scroll --
+#: `cff42270c09d1c79` carries exactly one property, `layer0_albedo_map_uoffset
+#: = 0.0`, and `cdaf8112b0b3b173` exactly one, `layer0_flipbook_offset = 0.0`.
+#: Both are 520-byte near-stubs; there is no rate, no frame count and no
+#: direction anywhere in them. The speed is applied at runtime, and the only
+#: place left that could hold it is `CScriptCR`, which is not decoded.
+#:
+#: So this value is authored to match the reported look -- "slow, sluggish, a
+#: background thing", then tuned 5x up from 0.004 on a second look, and is
+#: exposed as an import option rather than being
+#: presented as recovered. Change it freely; nothing downstream depends on it.
+UV_SCROLL_RATE_DEFAULT = 0.02
+
+#: Material properties that mean "this layer's UVs move at runtime".
+UV_SCROLL_PROPERTIES = (
+    "layer0_albedo_map_uoffset", "layer1_albedo_map_uoffset",
+    "layer2_albedo_map_uoffset", "layer3_albedo_map_uoffset",
+)
+UV_SCROLL_V_PROPERTIES = (
+    "layer0_albedo_map_voffset", "layer1_albedo_map_voffset",
+    "layer2_albedo_map_voffset", "layer3_albedo_map_voffset",
+)
+#: A flipbook advances through frames rather than sliding, but with no frame
+#: count on disk the only honest approximation is the same slow slide.
+UV_FLIPBOOK_PROPERTIES = (
+    "layer0_flipbook_offset", "layer1_flipbook_offset",
+    "layer2_flipbook_offset", "layer3_flipbook_offset",
+)
+
+
+def uv_scroll_axes(spec: dict) -> tuple:
+    """`(scrolls_u, scrolls_v)` -- does this material animate its UVs?
+
+    Presence of the property is the signal, not its value: every one of them is
+    `0.0` on disk because that is the REST offset, the state before the engine
+    starts advancing it.
+    """
+    named = spec.get("named_scalars") or {}
+    scroll_u = any(key in named for key in UV_SCROLL_PROPERTIES)
+    scroll_v = any(key in named for key in UV_SCROLL_V_PROPERTIES)
+    if any(key in named for key in UV_FLIPBOOK_PROPERTIES):
+        scroll_u = True
+    return scroll_u, scroll_v
+
+
+def _drive_uv_scroll(mapping, axes, rate: float) -> list:
+    """Drive the Mapping node's Location from the scene clock.
+
+    A driver rather than keyframes: it stays correct however long the timeline
+    is and needs no bake, and `frame / fps` makes the rate independent of the
+    scene's frame rate.
+    """
+    driven = []
+    for index, active in enumerate(axes):
+        if not active:
+            continue
+        try:
+            fcurve = mapping.inputs["Location"].driver_add("default_value", index)
+        except (RuntimeError, TypeError):
+            continue
+        driver = fcurve.driver
+        driver.type = "SCRIPTED"
+        for existing in list(driver.variables):
+            driver.variables.remove(existing)
+        var = driver.variables.new()
+        var.name = "f"
+        var.targets[0].id_type = "SCENE"
+        var.targets[0].id = bpy.context.scene
+        var.targets[0].data_path = "frame_current"
+        fps = getattr(getattr(bpy.context.scene, "render", None), "fps", 24) or 24
+        driver.expression = "f / %d * %r" % (int(fps), float(rate))
+        driven.append("uv"[index] if index < 2 else str(index))
+    return driven
+
+
+def base_color_layers(spec: dict) -> list:
+    """Every layer that binds a base colour, lowest index first.
+
+    `channels["base_color"]` is a MERGED view that keeps only "the lowest layer
+    that provides it" (see `le_mesh.materials.classify_roles_layered`), so a
+    material painting two albedos on top of each other arrives with the upper
+    one silently dropped. `spec["layers"]` still carries them all.
+
+    ⭐ That is not a corner case, it is how the sky is built. `mpl_arena_a`'s
+    sky-layer materials (matidx 113-116, 520-byte near-stubs that nonetheless
+    declare `auxillaryinputs: 2`) bind:
+
+        layer0  e36cdae9c6eaa43a  2048x2048  bright wisps, ~5% alpha
+        layer1  50988725d240e5fe    64x64    PURE BLACK, fully opaque
+
+    Keeping only layer0 renders the wisps with nothing behind them, which is why
+    the skymap came in as a white haze instead of a black sky with moving
+    wisps. 18 of the arena's 238 materials paint base colour on more than one
+    layer; 13 of those carry a blend mask and 5 do not.
+    """
+    out = []
+    for entry in spec.get("layers") or []:
+        channel = (entry.get("channels") or {}).get("base_color")
+        if channel and channel.get("file"):
+            out.append((int(entry.get("index") or 0), channel))
+    out.sort(key=lambda pair: pair[0])
+    return out
+
+
+def supersede_opaque_top_layer(spec: dict, channels: dict) -> dict:
+    """Let a fully-replacing upper albedo layer win over the merged view.
+
+    `channels` keeps only "the lowest layer that provides it"
+    (`le_mesh.materials.classify_roles_layered`), which silently discards an
+    upper albedo painted on top of a lower one -- COLOUR AND ALPHA BOTH.
+
+    ⭐ The sky is built exactly that way. `mpl_arena_a`'s sky-layer materials
+    (matidx 114/115 -- 520-byte near-stubs that still declare
+    `auxillaryinputs: 2`, read cleanly as `bind_source=offset`) bind:
+
+        layer0  e36cdae9c6eaa43a  2048x2048  bright wisps, ~5% alpha
+        layer1  50988725d240e5fe    64x64    PURE BLACK, fully OPAQUE
+
+    Keeping layer0 gives a 95%-transparent white haze; the black never appears
+    and neither does the opacity. That is why the skymap imported as a pale
+    smear instead of the black sky it is in game.
+
+    ## Only when the upper layer provably covers everything
+
+    The test is the spec's own `blend["amount_constant"]`: the layer's blend
+    amount resolved to a compile-time constant, which is `1.0` exactly when the
+    mask is absent (`"mask": null`, so the engine's `blend_mask` sampler falls
+    back to `common_white` and `mask.R == 1.0`) and the scale/offset leave it
+    saturated. A masked layer has `amount_constant: null` because it opens and
+    closes per texel -- it gates, it does not replace, and those keep the
+    existing behaviour untouched.
+
+    ⛔ Do NOT use "has no blend record" as the test. Tried, and it fires on
+    NOTHING: layer 1 of matidx 113/114/115 does carry a blend record, it simply
+    has `"mask": null` inside it. The record's presence says nothing; its
+    resolved amount says everything.
+
+    ⚠ Deliberately narrow. On `mpl_arena_a` 18 of 238 materials paint base
+    colour on more than one layer and this fires only on those whose upper layer
+    resolves to a constant 1.0. Widening it to masked layers needs a rendered
+    comparison, not a reading of the file.
+    """
+    stack = base_color_layers(spec)
+    if len(stack) < 2:
+        return channels
+    top_index, top_channel = stack[-1]
+    blend = layer_blend_of(spec, top_index)
+    if blend is None:
+        return channels                      # layer 0 is the base; nothing above it
+    if blend.get("amount_constant") != 1.0:
+        return channels                      # masked: it gates, it does not replace
+
+    merged = dict(channels)
+    merged["base_color"] = top_channel
+
+    # ⛔ COLOUR ONLY. Do NOT move `alpha` onto the same layer as well -- tried,
+    # and every superseded surface VANISHED. `50988725d240e5fe`, the black tile
+    # these sky layers stack on, is `BC1_UNORM_SRGB`: BC1 carries at most one bit
+    # of alpha, and Blender's decoder reads a pure-black block as PUNCH-THROUGH
+    # TRANSPARENT, so alpha comes back 0 for the whole texture. (An external
+    # decoder reports alpha 255 for the same file, which is why this looked safe
+    # on paper.) Driving opacity from it deletes the surface.
+    #
+    # Leaving alpha on the lower layer keeps the authored coverage and still
+    # fixes the colour, which is the part that was demonstrably wrong.
+    return merged
+
+
 def _blend_amount_socket(nt, pkg_dir: Path, blend: dict, opts: dict, x, y):
     """-> (socket, constant). Exactly one is not None.
 
@@ -1424,6 +1668,7 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     out_node = next((n for n in nt.nodes if n.type == "OUTPUT_MATERIAL"), None)
 
     channels = spec.get("channels", {}) or {}
+    channels = supersede_opaque_top_layer(spec, channels)
     alpha_ch, trans_ch = split_opacity_channels(channels)
     render_mode = resolve_render_mode(spec)
     mattype = spec.get("mattype")
@@ -1474,6 +1719,66 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     base_in = _principled_input(bsdf, "Base Color")
     bc_node = None
     bc_factor = base_color_fallback(spec)
+
+    # ⚠ An emissive TRANSPARENT surface that binds no albedo must not fall back
+    # to the white multiplier.
+    #
+    # `base_color_factor` is `bakecolor`, and bakecolor is an identity
+    # multiplier -- (1,1,1,1) on 294 of 318 `mpl_combat_fission` materials. The
+    # engine's own default is the same (`MatShaderDefaultOutput`:
+    # `output.basecolor = 1.0`), and that is harmless in-engine because these
+    # surfaces are drawn BLENDED and their look comes from the emissive term.
+    # Imported into a DCC they land as OPAQUE WHITE, which is why light strips,
+    # holograms and glow panels showed up as solid white blobs.
+    #
+    # Measured on `mpl_combat_fission`: 117 of 318 materials bind no albedo or
+    # diffuse role at ALL (not a resolution failure -- every texture their
+    # models stream is already bound to some other role). 112 of those are
+    # BLEND and 107 carry an emission channel.
+    #
+    # Restricted to exactly that case: no base-colour channel AND a real
+    # emissive source AND a blended render mode. A genuinely opaque untextured
+    # material keeps the flat fallback, since black would be a worse answer
+    # there than white.
+    # Widened: the emission channel is NOT required. `aa7dfd7c3d316d01`
+    # (mpl_combat_fission matidx 88, the 5286- and 1764-vertex pieces of
+    # `570677a85028cfa9`) binds rim, blend-mask, normal and alpha roles and no
+    # emission at all, and came out an opaque white body. A BLENDED surface
+    # that binds no albedo has no diffuse reflectance to show either way, so
+    # white is never the better answer there. 112 of the 117 albedo-less
+    # fission materials are BLEND; the 5 OPAQUE ones keep the flat fallback.
+    # ⛔ Only when the material is AUTHORED as blended. `resolve_render_mode`
+    # forces BLEND onto `eMTSkirt` (the decal pass) because Blender has no
+    # separate decal pass -- that is an IMPORT decision, not something the
+    # material said. Treating an imposed BLEND as "this surface is transparent"
+    # made every rim-only DECAL vanish: `a2630eab179ee4a2` is `eMTSkirt` +
+    # `eBlendOpaque`, and its props (`mpl_lobby_b2` i663/i899) imported
+    # see-through instead of merely untextured.
+    #
+    # The material this rule WAS written for, `aa7dfd7c3d316d01`, is
+    # `eMTForwardTransparent` + `eBlendTransparent` -- authored blended, and
+    # still handled exactly as before. The two cases separate cleanly: of the
+    # lobby's 31 no-colour-source BLEND materials, the 16 that are
+    # `eBlendOpaque` are all `eMTSkirt`, and the other 15 are Additive /
+    # LinearDodge / Translucent.
+    #
+    # An opaque decal with nothing to draw is the case the rim-map note already
+    # calls correct: "a flat colour with NO texture is the faithful result" --
+    # untextured, NOT invisible.
+    authored_blended = int(spec.get("blend_mode") or 0) != 0
+    nothing_to_draw = (bc is None
+                       and channels.get("emission") is None
+                       and resolve_render_mode(spec) == "BLEND"
+                       and authored_blended)
+    # Black base ONLY when emission is the colour source -- otherwise a white
+    # base would be added on top of the glow and double it. With no emission
+    # either there is nothing to double, and zeroing turns an untextured decal
+    # into a black one; the flat `bakecolor` fallback is the faithful result.
+    if (bc is None and not nothing_to_draw
+            and channels.get("emission") is not None
+            and resolve_render_mode(spec) == "BLEND"):
+        bc_factor = (0.0, 0.0, 0.0, 1.0)
+        mat["le_basecolor_zeroed_emissive"] = True
     # A base colour that lives on layer >= 1 is composited over the lower layers
     # by that layer's blend mask; with no lower-layer albedo the engine's lerp
     # runs from the flat fallback colour to the texture (`inferred` base value --
@@ -1483,6 +1788,7 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     bc_gate = (None, None)
     if bc_blend is not None:
         bc_gate = _layer_gate(nt, pkg_dir, bc_blend, "base_color", opts, -2400, 700)
+
     if bc and base_in and bc_gate[1] != 0.0:
         img = _load_image(pkg_dir, bc.get("file", ""), bc.get("colorspace", "sRGB"),
                           image_alpha_mode(bc))
@@ -1811,7 +2117,29 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                         mix.inputs[fi].default_value = float(const)
                     acc = mix.outputs[ri]
                     mat["le_layer_blend_alpha"] = a_blend["layer"]
-        if acc is not None:
+        if nothing_to_draw:
+            # ⚠ A BLENDED surface that binds NO base colour and NO emission has
+            # no colour source at all -- the same situation the eBlendAdditive
+            # branch below already resolves by contributing the identity rather
+            # than guessing. `aa7dfd7c3d316d01` (mpl_combat_fission matidx 88)
+            # is one: rim + normal + blend masks + an alpha map that is 1.0
+            # across every texel, wrapped around the model as a second shell.
+            #
+            # In-engine it is a rim term that shows only at grazing angles. A
+            # Principled BSDF cannot express that, and BOTH flat answers are
+            # wrong in the same way -- white hid the model behind a white shell,
+            # black (this file's previous fix) hid it behind a black one. The
+            # honest result is a surface that contributes nothing, which is
+            # what deleting the object by hand achieves.
+            #
+            # 10 of `mpl_combat_fission`'s 117 albedo-less materials are in
+            # this class; the other 107 carry emission and keep it.
+            acc = None
+            alpha_in.default_value = 0.0
+            mat["le_no_color_source_transparent"] = (
+                "BLEND with no base colour and no emission: rim/mask-only "
+                "shell, contributes nothing rather than a flat guess")
+        elif acc is not None:
             if ka != 1.0:
                 acc = _math(nt, "MULTIPLY", -400, -700, acc, ka, label="k_alpha").outputs[0]
             alpha_socket = acc
@@ -1901,8 +2229,57 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
             # that: one channel, `layer0_emissive_map`, no base colour. Treated
             # as AO it was inverted and multiplied into an empty Base Colour,
             # which painted the sky dome with its own signage texture.
-            has_albedo = bool(spec.get("channels", {}).get("base_color"))
-            if not has_albedo:
+            # ★ NARROWED. `has_albedo` alone said "AO" for every emissive
+            # map in the reference extract -- all 1347 of them bind an albedo,
+            # so NOTHING ever reached Emission and every glow mask was
+            # inverted into Base Colour instead. `emissive_is_ao` keeps this
+            # test and adds two that outrank it; see its docstring.
+            treat_as_ao = emissive_is_ao(spec, spec.get("channels", {}))
+
+            # ⛔ DO NOT gate this on the texture's COLORSPACE. Tried, wrong,
+            # reverted -- and it broke 41 materials before it was caught.
+            #
+            # The reasoning was "an _SRGB view means the texture is authored as
+            # colour, so it cannot be an occlusion mask". Measured, that is
+            # false for this data. Of the 22 distinct emissive textures on
+            # `mpl_combat_fission` materials that bind BOTH an albedo and an
+            # emissive map, **20 are near-greyscale** (mean channel saturation
+            # 0.000-0.096) -- i.e. masks -- and every single one of them is
+            # sRGB. The engine stores greyscale AO masks in sRGB views quite
+            # happily.
+            #
+            # Gating on colorspace therefore flipped those 20 from "invert and
+            # multiply into base colour" to "drive Emission", so surfaces that
+            # should have been DARKENED by ambient occlusion instead GLOWED
+            # with the occlusion pattern.
+            #
+            # ⛔ TWO REFINEMENTS WERE TRIED AND REVERTED, both because they
+            # guessed from how the texture LOOKED:
+            #
+            #   1. gating on the texture's COLORSPACE -- false premise, all 22
+            #      candidates are sRGB yet 20 are greyscale masks;
+            #   2. MEASURING per-texture saturation and calling coloured maps
+            #      emissive -- flipped maps that are genuinely AO over to
+            #      emissive in the viewport.
+            #
+            # Neither is used. Note that (2) would fail on the very case this
+            # code now fixes: a character glow mask is GREYSCALE (measured
+            # saturation 0.013), so "coloured means emissive" calls it AO.
+            #
+            # ⚠ `has_albedo` alone is no longer the whole test, because it
+            # could not be: every one of the 1347 emissive-binding materials
+            # in the reference extract binds an albedo, so it classified ALL
+            # of them as AO and no material could ever emit light. It is kept
+            # as the first test inside `emissive_is_ao`, which adds two that
+            # outrank it -- one structural (the shader's own AO channel is
+            # already bound), one that rejects a map too black to be an
+            # occlusion term at all.
+            #
+            # The bar for changing this remains evidence from the RENDERED
+            # result. What motivated the narrowing: a user-reported character
+            # import where the glow mask was inverted into Base Colour, and a
+            # decode of that map showing 98.1% of its texels pure black.
+            if not treat_as_ao:
                 # Genuinely emissive: drive Emission with the map and leave
                 # Base Colour alone.
                 node.label = "emissive_map"
@@ -2305,7 +2682,10 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     # nothing driving its Vector yet, which is the whole graph in practice and
     # keeps this to a single hook instead of eleven call sites.
     uv_scale = spec.get("uv_scale")
-    if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0):
+    scroll_u, scroll_v = uv_scroll_axes(spec)
+    scroll_rate = opts.get("uv_scroll_rate", UV_SCROLL_RATE_DEFAULT)
+    wants_scroll = (scroll_u or scroll_v) and scroll_rate
+    if (uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0)) or wants_scroll:
         try:
             targets = [n for n in nt.nodes
                        if n.type == "TEX_IMAGE" and not n.inputs["Vector"].links]
@@ -2314,12 +2694,29 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 coord.location = (-2800, 400)
                 mapping = nt.nodes.new("ShaderNodeMapping")
                 mapping.location = (-2600, 400)
-                mapping.label = f"uv scale {uv_scale[0]:g}x{uv_scale[1]:g}"
-                mapping.inputs["Scale"].default_value = (
-                    float(uv_scale[0]), float(uv_scale[1]), 1.0)
+                labels = []
+                if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0):
+                    mapping.inputs["Scale"].default_value = (
+                        float(uv_scale[0]), float(uv_scale[1]), 1.0)
+                    labels.append(f"uv scale {uv_scale[0]:g}x{uv_scale[1]:g}")
                 nt.links.new(coord.outputs["UV"], mapping.inputs["Vector"])
                 for node in targets:
                     nt.links.new(mapping.outputs["Vector"], node.inputs["Vector"])
+                if wants_scroll:
+                    driven = _drive_uv_scroll(
+                        mapping, (scroll_u, scroll_v), float(scroll_rate))
+                    if driven:
+                        labels.append("uv scroll %s @ %g/s"
+                                      % ("".join(driven), scroll_rate))
+                        mat["le_uv_scroll_rate"] = float(scroll_rate)
+                        mat["le_uv_scroll_axes"] = "".join(driven)
+                        mat["le_uv_scroll_note"] = (
+                            "the material says its UVs animate but NOT how fast "
+                            "-- no rate, frame count or direction is on disk. "
+                            "This speed is an import option, not a recovered "
+                            "value.")
+                if labels:
+                    mapping.label = " + ".join(labels)
         except Exception:
             pass
 

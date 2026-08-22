@@ -384,6 +384,43 @@ EVR_LIGHTING_FLAGS = ("enablebakedlighting", "enablesglighting",
                       "enabledynamiclighting")
 
 
+#: Names recovered from the ENGINE'S OWN authoring schema.
+#:
+#: Method: harvest every identifier out of `core/types`, `core/materialshaders`,
+#: `core/shaders` and `core/standaloneshaders` (20,395 of them), expand each
+#: with the `layerN_` and `k_` prefixes the shipped names already use (107,445
+#: candidates), hash all of them and keep the ones that land on a property hash
+#: actually present in a shipped material.
+#:
+#: Every hit is a VERIFIED preimage by construction -- the key IS
+#: `symbol64(name)` -- not a guess. Measured against `mpl_arena_a` +
+#: `mpl_combat_fission`, which between them use 1030 property hashes this table
+#: could not name; these 16 are the ones the schema could account for.
+#:
+#: `emissive_intensity` is the one that changes behaviour: unlayered, values up
+#: to 30, and `materials.emissive_intensity_for_layer` already falls back to it
+#: -- it simply never saw one, because the name was unknown. Without it those
+#: materials render at Emission Strength 1.0 instead of their authored value.
+SCHEMA_RECOVERED_PARAMS = (
+    "alpha",
+    "blend_mask_scale",
+    "emissive_intensity",
+    "emissive_tint_color",
+    "intensity",
+    "layer1_color",
+    "layer1_intensity",
+    "layer2_blend",
+    "layer2_color",
+    "layer2_intensity",
+    "lighting_blend_alpha",
+    "locked",
+    "opacity",
+    "rim_intensity",
+    "rim_light_intensity",
+    "rim_tint_color",
+)
+
+
 def build_name_table(max_layer: int = MAX_LAYER) -> dict[int, str]:
     """hash -> authored parameter name.
 
@@ -417,6 +454,8 @@ def build_name_table(max_layer: int = MAX_LAYER) -> dict[int, str]:
     for n in AUX_INPUT_NAMES:
         add(n)
     for n in EVR_PARAMS:
+        add(n)
+    for n in SCHEMA_RECOVERED_PARAMS:
         add(n)
 
     _NAME_TABLE_CACHE[max_layer] = table

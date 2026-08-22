@@ -54,9 +54,15 @@ from . import material_builder
 
 try:
     from . import evr_lighting
+    from . import evr_movers
+    from . import evr_effects
+    from . import evr_texture_arrays
     from . import evr_skeleton
 except ImportError:          # optional: a package without EVR lighting still imports
     evr_lighting = None
+    evr_movers = None
+    evr_effects = None
+    evr_texture_arrays = None
     evr_skeleton = None
 
 #: UV layer the per-instance lightmap UVs are written to on the per-instance mesh
@@ -712,6 +718,13 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
     coll_name = f"lescatter_{pkg.master or Path(pkg.dir).stem}"
     coll = bpy.data.collections.new(coll_name)
     context.scene.collection.children.link(coll)
+    # `collections.new` RENAMES on collision -- a second import of the same
+    # level becomes `...001`. Reporting the requested name instead of the real
+    # one sent the lighting pass to the PREVIOUS import's collection: the new
+    # objects got no lightmap, the old ones got 1020 materials copied for
+    # nothing, and the operator said "loaded but NOT wired -- no reason
+    # recorded" because zero objects matched.
+    coll_name = coll.name
 
     import_proxy = opts.get("import_proxy", False)
     mesh_datablocks = {}
@@ -763,8 +776,22 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
         lm_summary["instances_sharing_base"] = (
             place["placed"] - lm_summary.get("instances_wired", 0))
 
+    backfaces_shown = 0
+    if opts.get("show_backfaces"):
+        seen_mats = set()
+        for ob in coll.objects:
+            for slot in ob.material_slots:
+                m = slot.material
+                if m is None or m.name in seen_mats:
+                    continue
+                seen_mats.add(m.name)
+                if getattr(m, "use_backface_culling", False):
+                    m.use_backface_culling = False
+                    backfaces_shown += 1
+
     return {
         "collection": coll_name,
+        "backfaces_shown": backfaces_shown,
         "master": pkg.master,
         "meshes_total": pkg.num_meshes,
         "meshes_built": len(mesh_datablocks),
@@ -792,6 +819,11 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
 
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={"HIDDEN"})   # type: ignore
+    #: ⚠ `filter_glob` is an EXTENSION filter, not a name filter: Blender
+    #: matches it with `BLI_path_extension_check_glob`, so only `*.ext`
+    #: patterns work. Setting it to "manifest.json" hides EVERY file, which is
+    #: why picking the right sidecar is fixed in `execute` instead --
+    #: see `package_reader.resolve_package_file`.
 
     flip_v: BoolProperty(name="Flip UV V", default=True,
                          description="Convert DX top-left UV origin to Blender bottom-left")   # type: ignore
@@ -847,6 +879,57 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "scripts/evr_apply_skeleton.py). Bones are parentless -- "
                     "rest pose and skinning are correct, but posing a bone does "
                     "not carry its children")   # type: ignore
+    world_ambient: FloatProperty(
+        name="World Ambient",
+        description=("Strength of Blender's world background. The engine has NO "
+                     "constant ambient -- its ambient is the baked SH4/SG "
+                     "lighting -- so the faithful value is 0. Blender's default "
+                     "grey world is what makes the skymap render white and the "
+                     "level look washed out. Raise it only to see geometry while "
+                     "baked lighting is off"),
+        default=0.0, min=0.0, max=10.0, precision=3)
+
+    uv_scroll_rate: FloatProperty(
+        name="UV Scroll Speed",
+        description=("Speed of the sky/background UV scroll, in UV units per "
+                     "second. The materials say THAT they scroll but not how "
+                     "fast -- no rate is on disk -- so this is a tunable, not a "
+                     "recovered value. 0 disables it"),
+        default=0.02, min=0.0, max=1.0, precision=4)
+
+    evr_effects: BoolProperty(
+        name="Fog and Exposure",
+        default=True,
+        description="Apply the level's authored fog, exposure and tonemap "
+                    "coefficients from CGFSEffectsResource. 24 of 32 levels "
+                    "author fog. Exposure maps exactly; the tonemap is the "
+                    "engine's Hable curve, which Blender has no equivalent "
+                    "for, so its five coefficients are recorded on the scene "
+                    "as evr_tonemap_* and the nearest view transform is "
+                    "selected instead")   # type: ignore
+    evr_particles: BoolProperty(
+        name="Particle Emitters (markers)",
+        default=True,
+        description="Add an Empty for each particle emitter placement, named "
+                    "for the effect asset it plays. PLACEMENTS ONLY -- the "
+                    "effect definitions are not decoded, so these mark where "
+                    "something emits and nothing more")   # type: ignore
+    evr_movers: BoolProperty(
+        name="Animate Movers",
+        default=True,
+        description="Keyframe the level geometry that MOVES. Echo VR has no "
+                    "animation curves for level geometry -- a moving platform "
+                    "is an R15 linear constraint between two anchor actors, "
+                    "and the travel is the vector between them. Start and end "
+                    "are authored; the TIMING is not (the trigger and duration "
+                    "live in CScriptCR, which is not decoded), so the frame "
+                    "spacing is a placeholder. Does nothing on a level with no "
+                    "movers")   # type: ignore
+    evr_mover_frames: IntProperty(
+        name="Mover Frames",
+        default=48, min=1, max=1000,
+        description="Frames for one leg of the placeholder there-and-back "
+                    "cycle. Not authored data -- see Animate Movers")   # type: ignore
     evr_lighting: BoolProperty(
         name="Echo VR Lighting",
         default=True,
@@ -856,13 +939,36 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "a lightmap UV. This is unrelated to Per-Instance Lightmap "
                     "below, which is the Lone Echo path")   # type: ignore
     evr_lightmaps: BoolProperty(
-        name="Baked Lightmaps (experimental)",
+        name="Baked Lightmaps (UNFINISHED)",
         default=False,
-        description="Multiply base colour by the baked lightmap atlas. ⚠ The "
-                    "ATLAS decode is verified, but the per-instance UV mapping "
-                    "is NOT: charts still cover far more of the atlas than a "
-                    "chart should, so the lightmap reads as stretched patterning "
-                    "over the albedo. Off until that is fixed")   # type: ignore
+        description="Wire the baked lightmap atlas as EMITTED RADIANCE "
+                    "(albedo x baked irradiance) rather than into base colour. "
+                    "The atlas holds light that has ALREADY arrived at the "
+                    "surface, so feeding it to base colour leaves the renderer "
+                    "to light it a second time -- and Echo VR bakes nearly "
+                    "everything (mpl_arena_a keeps 2 of 138 lights as dynamic), "
+                    "so that came out near-black. Per-instance chart UVs "
+                    "measure a median 2.6-texel edge, i.e. well-formed.\n\n"
+                    "⚠ UNFINISHED, and OFF by default. What works: SH4 levels "
+                    "(mpl_arena_a and the tutorial maps), evaluated against the "
+                    "engine's own Geomerics fit. What does NOT: the 12 SG5 "
+                    "levels still use a fixed-weight collapse with no "
+                    "tangent-space transform; baked specular is not "
+                    "implemented; and the two occlusion maps are decoded and "
+                    "never applied. Turn it on to experiment, not to trust")   # type: ignore
+    show_backfaces: BoolProperty(
+        name="Show Backfaces (ignore single-sided)",
+        default=True,
+        description="Turn OFF backface culling on every imported material. "
+                    "80%% of this level's materials are authored single-sided "
+                    "(eDoubleSided clear), and the geometry winds correctly "
+                    "(verified: 26 of 26 closed meshes have positive signed "
+                    "volume), so Material Preview and Rendered hide their back "
+                    "faces exactly as the engine does -- while Blender's SOLID "
+                    "mode ignores culling and shows them. That mismatch is why "
+                    "surfaces look like they vanish when you switch shading "
+                    "mode. Enable this to see every surface from both sides; "
+                    "it makes the viewport diverge from the game on purpose")   # type: ignore
     evr_dynamic_lights_only: BoolProperty(
         name="Dynamic Lights Only",
         default=False,
@@ -893,7 +999,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "not by name)")   # type: ignore
     lightmap_intensity: FloatProperty(
         name="Lightmap Intensity", default=1.0, min=0.0,
-        description="Multiplies the baked term's Emission Strength (exposure aid)")   # type: ignore
+        description="Scales the baked lighting term (exposure aid). Applied on "
+                    "top of each atlas page's recorded `gain`, which is "
+                    "restored automatically")   # type: ignore
 
     def draw(self, context):
         layout = self.layout
@@ -910,7 +1018,16 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         box = layout.box()
         box.label(text="Echo VR Lighting")
         box.prop(self, "evr_lighting")
+        box.prop(self, "evr_movers")
+        box.prop(self, "uv_scroll_rate")
+        box.prop(self, "world_ambient")
+        box.prop(self, "evr_effects")
+        box.prop(self, "evr_particles")
+        sub_mv = box.column()
+        sub_mv.enabled = self.evr_movers
+        sub_mv.prop(self, "evr_mover_frames")
         box.prop(self, "evr_armature")
+        box.prop(self, "show_backfaces")
         sub = box.column()
         sub.enabled = self.evr_lighting
         sub.prop(self, "evr_dynamic_lights_only")
@@ -925,11 +1042,19 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         sub.prop(self, "lightmap_intensity")
 
     def execute(self, context):
+        # Any file inside the package identifies it, so a mis-picked
+        # sidecar (materials.json, movers.json, ...) resolves to manifest.json
+        # instead of failing. `filter_glob` cannot do this -- it filters by
+        # EXTENSION only.
+        from . import package_reader
+        self.filepath = package_reader.resolve_package_file(
+            self.filepath, "manifest.json")
         opts = {
             "flip_v": self.flip_v,
             "y_up_to_z_up": self.y_up_to_z_up,
             "import_proxy": self.import_proxy,
             "max_instances": self.max_instances,
+            "uv_scroll_rate": self.uv_scroll_rate,
             "lod_level": int(self.lod_level),
             "auto_materials": self.auto_materials,
             "materials_json": self.materials_json or None,
@@ -941,6 +1066,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             # ⛔ `instance_lightmap_uv_source` is deliberately NOT exposed: its
             # only other value renders the documented failure mode.
         }
+        opts["show_backfaces"] = self.show_backfaces
         try:
             summary = import_lescatter(self.filepath, context, opts)
         except Exception as exc:   # noqa: BLE001
@@ -952,6 +1078,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         # chose -- there is nothing extra to select.
         if self.evr_lighting:
             self._import_evr_lighting(context, summary)
+        if self.evr_movers:
+            self._import_evr_movers(context, summary)
+        if self.evr_effects or self.evr_particles:
+            self._import_evr_effects(context, summary)
+        self._tag_texture_overrides(context, summary)
+        self._apply_texture_arrays(context, summary)
         if self.evr_armature:
             self._import_evr_armature(context, summary)
         self.report({"INFO"},
@@ -1014,20 +1146,237 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             doc, context, y_up_to_z_up=self.y_up_to_z_up)
         if armature is None:
             return
+        # ⛔ NOT `summary["objects_by_mesh"]` -- the summary carries no such
+        # key, so asking for it silently bound nothing. Objects already carry
+        # `le_mesh_index` (set in `_place_instances`), so read the map back off
+        # the collection, exactly as the lightmap path does.
+        objects_by_mesh: dict = {}
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_mesh_index")
+            if index is not None:
+                objects_by_mesh.setdefault(int(index), []).append(obj)
         bound = evr_skeleton.bind_weights(
-            doc, self.filepath, armature, names,
-            summary.get("objects_by_mesh") or {})
+            doc, self.filepath, armature, names, objects_by_mesh)
+        parented = bool(doc.get("hierarchy"))
         self.report({"INFO"},
-                    "Armature: %d of %d bones placed, %d mesh(es) skinned. "
-                    "Bones are PARENTLESS -- the hierarchy is not decoded, so "
-                    "posing a bone will not carry its children."
-                    % (counts["bones"], counts["bone_count"], bound["bound"]))
+                    "Armature: %d bones, %d mesh(es) skinned, %s."
+                    % (counts["bones"], bound["bound"],
+                       "parented (%d root%s)"
+                       % (len(doc.get("roots") or []),
+                          "" if len(doc.get("roots") or []) == 1 else "s")
+                       if parented else
+                       "PARENTLESS -- hierarchy table not found in this "
+                       "skeleton, so posing a bone will not carry its children"))
+        hidden = int(armature.get("evr_hidden_sockets") or 0)
+        if hidden:
+            # Say so rather than letting the bone count silently disagree with
+            # what is on screen -- they are hidden, not missing.
+            self.report({"INFO"},
+                        "Armature: %d unweighted attachment socket%s on the "
+                        "model origin hidden (zeroJoint/synchJoint/weapon "
+                        "mounts). Unhide from the Armature tab."
+                        % (hidden, "" if hidden == 1 else "s"))
         if bound.get("skipped_vertex_mismatch"):
             self.report({"WARNING"},
                         "Armature: %d mesh(es) skipped -- vertex count differs "
                         "from when skeleton.json was written (LOD or split "
                         "mismatch). Re-run evr_apply_skeleton.py."
                         % bound["skipped_vertex_mismatch"])
+
+    def _apply_texture_arrays(self, context, summary):
+        """Give each object bound to a texture ARRAY its own slice.
+
+        Without this every object sharing an array material shows slice 0 --
+        `mpl_lobby_b2`'s poster boards all displayed the same poster. The
+        material never names the array; the mapping comes from
+        `texture_arrays.json`. See `evr_texture_arrays` for why the swap is
+        linked to the OBJECT rather than the mesh.
+        """
+        if evr_texture_arrays is None:
+            return
+        doc = evr_texture_arrays.load(self.filepath)
+        if doc is None:
+            return
+
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        by_instance = {}
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_instance_index")
+            if index is not None:
+                by_instance[int(index)] = obj
+        if not by_instance:
+            return
+
+        result = evr_texture_arrays.apply_slices(doc, self.filepath, by_instance)
+        if result.get("applied"):
+            note = ("Texture arrays: %d object(s) given their own slice over %d "
+                    "material variant(s)" % (result["applied"], result["variants"]))
+            skipped = [k for k in ("missing_file", "no_base_node", "no_object")
+                       if result.get(k)]
+            if skipped:
+                note += " (skipped: %s)" % ", ".join(
+                    "%s=%d" % (k, result[k]) for k in skipped)
+            self.report({"INFO"}, note)
+
+    def _tag_texture_overrides(self, context, summary):
+        """Mark objects whose texture the engine replaces at runtime.
+
+        `CTextureOverrideCR` (see `scripts/evr_texture_override.py`) says which
+        actors get a different texture than their material binds. Most records
+        are the rest state and change nothing, but the interesting ones name a
+        RENDER TARGET that is not shipped -- a live scoreboard, a match clock.
+        Those objects legitimately wear a placeholder (often a UV test grid) and
+        there is nothing to apply.
+
+        Left untagged that reads as a broken import, which is exactly how it was
+        reported. So the object gets `le_runtime_texture` and a note saying the
+        surface is drawn per frame by the engine; nothing about its material is
+        changed, because there is no texture to change it to.
+        """
+        path = Path(self.filepath)
+        if path.is_file():
+            path = path.parent
+        sidecar = path / "texture_overrides.json"
+        if not sidecar.is_file():
+            return
+        try:
+            doc = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if doc.get("format") != "evr_texture_overrides":
+            return
+        models = doc.get("models") or {}
+        if not models:
+            return
+
+        pkg = scatter_reader.ScatterPackage(Path(self.filepath))
+        try:
+            meshes = pkg.manifest.get("meshes") or []
+        except Exception:                                    # noqa: BLE001
+            return
+        by_index = {}
+        for mesh in meshes:
+            entry = models.get(str(mesh.get("name_hash") or "").lower())
+            if entry:
+                by_index[int(mesh["index"])] = entry
+
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        tagged = runtime = 0
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_mesh_index")
+            if index is None:
+                continue
+            entry = by_index.get(int(index))
+            if entry is None:
+                continue
+            obj["le_texture_override"] = entry.get("texture", "")
+            obj["le_texture_override_action"] = entry.get("action", "")
+            tagged += 1
+            if entry.get("action") == "runtime":
+                obj["le_runtime_texture"] = True
+                obj["le_runtime_texture_note"] = (
+                    "the engine draws this surface every frame (score, clock, "
+                    "team panel). Its texture is a render target that is not "
+                    "shipped, so the placeholder you see is what the package "
+                    "contains -- not a failed import.")
+                runtime += 1
+        if tagged:
+            self.report({"INFO"},
+                        "Texture overrides: %d object(s) tagged, %d of them "
+                        "runtime-drawn surfaces (placeholder is expected)"
+                        % (tagged, runtime))
+
+    def _import_evr_effects(self, context, summary):
+        """Fog, exposure and particle-emitter markers, when the level has them."""
+        if evr_effects is None:
+            return
+        doc = evr_effects.load(self.filepath)
+        if doc is None:
+            return
+        notes = []
+        if self.evr_effects:
+            exposure = evr_effects.apply_exposure(doc, context.scene)
+            # Fog BEFORE the tonemap: the engine fogs the HDR colour and
+            # tonemaps the result, and `apply_tonemap` chains onto the fog mix
+            # when it finds one.
+            world = evr_effects.apply_world_ambient(
+                context.scene, self.world_ambient)
+            if world.get("world"):
+                notes.append("world %s (the engine has no constant ambient; "
+                             "raise World Ambient to see geometry while baked "
+                             "lighting is off)" % world["world"])
+            fog = evr_effects.apply_fog(doc, context.scene)
+            tonemap = evr_effects.apply_tonemap(doc, context.scene)
+            if tonemap.get("tonemap", "").startswith("built"):
+                # `apply_tonemap` takes exposure over from the view settings so
+                # it lands BEFORE the curve, so do not report it twice.
+                notes.append("exposure %+.2f EV and the engine's own Hable "
+                             "curve, built in the compositor (white point %g)"
+                             % (tonemap["exposure_stops"],
+                                tonemap["coefficients"]["white"]))
+            else:
+                if "exposure" in exposure:
+                    notes.append("exposure %+.2f EV" % exposure["exposure"])
+                if exposure.get("view_transform"):
+                    notes.append("view transform %s (nearest to the engine's "
+                                 "Hable curve, not a match)"
+                                 % exposure["view_transform"])
+                if tonemap.get("tonemap"):
+                    notes.append("tonemap %s" % tonemap["tonemap"])
+            if fog.get("fog") == "built":
+                notes.append("fog %s over %.0f-%.0f m at %.2f (compositor "
+                             "depth ramp, matching the engine's model; the "
+                             "height band is not applied)"
+                             % (fog["color"], fog["band"][0], fog["band"][1],
+                                fog.get("intensity", 0.0)))
+            elif fog.get("fog"):
+                notes.append("fog %s" % fog["fog"])
+        if self.evr_particles:
+            parts = evr_effects.apply_particles(
+                doc, context, y_up_to_z_up=self.y_up_to_z_up)
+            if parts.get("emitters"):
+                notes.append("%d particle emitter marker(s) over %d effect(s) "
+                             "-- PLACEMENTS ONLY, the effects are not decoded"
+                             % (parts["emitters"], parts["effects"]))
+        if notes:
+            self.report({"INFO"}, "Echo VR effects: " + "; ".join(notes))
+
+    def _import_evr_movers(self, context, summary):
+        """Keyframe the level's moving geometry, when it has any."""
+        if evr_movers is None:
+            return
+        doc = evr_movers.load(self.filepath)
+        if doc is None:
+            return
+        objects_by_instance: dict = {}
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_instance_index")
+            if index is not None:
+                objects_by_instance.setdefault(int(index), []).append(obj)
+        result = evr_movers.apply(
+            doc, objects_by_instance,
+            y_up_to_z_up=self.y_up_to_z_up,
+            frames=self.evr_mover_frames,
+            scene=context.scene)
+        counts = evr_movers.summarize(doc)
+        if result.get("animated"):
+            self.report(
+                {"INFO"},
+                "Echo VR movers: %d object(s) keyframed, %d motion(s), travel %s m "
+                "-- start/end authored, TIMING IS A PLACEHOLDER (trigger lives "
+                "in CScriptCR, not decoded)%s"
+                % (result["animated"], counts["movers"],
+                   ", ".join(str(d) for d in (result.get("distances") or [])),
+                   " -- %d mover(s) had no imported object (LOD filtered?)"
+                   % result["no_object"] if result.get("no_object") else ""))
+        elif counts["movers"]:
+            self.report({"WARNING"},
+                        "Echo VR movers: %d in the level but none matched an "
+                        "imported object%s"
+                        % (counts["movers"],
+                           " (%s)" % result["reason"] if result.get("reason") else ""))
 
     def _import_evr_lighting(self, context, summary):
         """Load the package's `lightmaps.json`, if it has one."""
@@ -1058,7 +1407,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         objects_by_mesh: dict = {}
         objects_by_instance: dict = {}
         coll = bpy.data.collections.get(summary.get("collection") or "")
-        for obj in (coll.objects if coll else ()):
+        for obj in (coll.all_objects if coll else ()):
             index = obj.get("le_mesh_index")
             if index is not None:
                 objects_by_mesh.setdefault(int(index), []).append(obj)
@@ -1072,7 +1421,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         # a mesh-level wire would put the wrong atlas region on it.
         if counts["bound_instances"]:
             result = evr_lighting.wire_instance_lightmaps(
-                doc, self.filepath, objects_by_instance)
+                doc, self.filepath, objects_by_instance,
+                intensity=self.lightmap_intensity,
+                y_up_to_z_up=self.y_up_to_z_up)
             total += result.get("wired", 0)
             if result.get("reason"):
                 notes.append(result["reason"])
@@ -1081,7 +1432,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                              % result["mismatched"])
         if counts["bound_meshes"]:
             result = evr_lighting.wire_lightmaps(
-                doc, self.filepath, objects_by_mesh)
+                doc, self.filepath, objects_by_mesh,
+                intensity=self.lightmap_intensity)
             total += result.get("wired", 0)
             if result.get("reason"):
                 notes.append(result["reason"])

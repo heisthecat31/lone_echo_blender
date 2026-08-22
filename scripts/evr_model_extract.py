@@ -120,6 +120,10 @@ def extract(root: Path, model_hash: str, out_dir: Path, *,
     write_package(package, model_hash, meshes, instances)
 
     if specs:
+        # Measure how black each emissive map is BEFORE writing, so the add-on
+        # can tell a glow mask from an ambient-occlusion map without decoding
+        # textures itself.
+        EM.annotate_emissive_masks(specs, package)
         (package / "materials.json").write_text(json.dumps(
             {"format": "le_materials", "version": 2, "master": model_hash,
              "source": "evr_model_extract", "textures_subdir": "textures",

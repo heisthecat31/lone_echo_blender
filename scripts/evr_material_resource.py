@@ -36,10 +36,16 @@ Descriptor order and stride (a `CTable` is 56 B, a `CMap` is 56 + 8 = 64 B)::
     0x118  56  CTable<SShaderInputData>  auxillaryinputs
     0x150  56  CTable<?>              trailing (unreversed)
 
-`RadArrayDescriptor56` puts `capacity` at +40 and `count` at +48, and on disk
-the two are equal.  Lone Echo's `le_mesh.material_scalars` reads the +40 slot
-and calls it `iused`; this module reads the same slot for the same reason, and
-cross-checks it against +48.
+`RadArrayDescriptor56` puts `capacity` at +40 and `count` at +48, and the two
+are **NOT** equal on disk: measured over 400 shipped Echo VR materials they
+differ on 1059 of 2400 descriptor slots, because materials routinely
+over-allocate (`materialprops` capacity 32 / count 8).  So the two slots are
+not interchangeable, and this module reads the COUNT at +48 -- reading +40
+sizes the payload off the ALLOCATION and overshoots by thousands of bytes.
+
+Lone Echo's `le_mesh.material_scalars` reads the +40 slot and calls it
+`iused`.  That is only safe where that game's own materials never
+over-allocate; do not carry the constant across.
 
 The header offsets above are *derived* from the reference parser
 (`rad-archive-viewer/echomod/resources/cgmaterial_resource.py`, byte-identical
@@ -672,6 +678,148 @@ class MaterialResource:
         from le_mesh import materials as le_materials
 
         return le_materials.roles_from_input_rows(self.binds, names or {})
+
+
+#: XOR distance between the two members of a `uscale`/`vscale` property pair.
+#:
+#: The two names differ in exactly ONE character -- `...u...` vs `...v...` --
+#: and `ord('u') ^ ord('v') == 3`.  CSymbol64 is a CRC, which is linear over
+#: GF(2), so a one-character difference near the end of the name lands as a
+#: fixed XOR on the finished hash.  Measured on every such pair in the corpus it
+#: is always this constant, which is what makes the pairs findable at all: the
+#: preimages themselves have NOT been recovered.
+UV_SCALE_PAIR_DELTA = 0x0000030000000000
+
+#: Pairs whose members are both 1.0 say "no transform" and are skipped.
+_UV_SCALE_IDENTITY = (1.0, 1.0)
+
+
+def uv_scale_from_props(props: dict, slots: set | None = None) -> tuple:
+    """`(uscale, vscale)` this material applies to its texture reads.
+
+    A material addresses a SHARED atlas by scaling its UVs, and the scale lives
+    in the material's own `materialprops` -- not only in the shader set.  That
+    matters because the shader set covers almost nothing here: of `mpl_arena_a`'s
+    238 materials only 8 resolve to one, while 75 carry a scale pair of their
+    own.  Dropping it makes an atlas-shared texture sample the wrong BAND of the
+    atlas, which is unreadable rather than merely mis-tiled.
+
+    ## Why a pair search rather than two known names
+
+    Both preimages are uncracked, so the members cannot be looked up by name.
+    They are found STRUCTURALLY instead: the two hashes differ by exactly
+    `UV_SCALE_PAIR_DELTA`, so any property whose partner is also present forms a
+    candidate pair.  Within a pair the LOW-hash member is `vscale` and the high
+    one is `uscale`.
+
+    ## Evidence for that assignment
+
+    Texels on a correctly-mapped surface are square, so `u_texels_per_unit /
+    v_texels_per_unit` measured from the per-triangle Jacobian must equal
+    `vscale / uscale`.  Across the arena's unambiguous single-pair materials
+    that prediction holds 12 times of 15, including exact hits (8.000 predicted
+    against 8.000 measured on `da3c875c0de28470`, 0.500 against 0.519 on four
+    separate materials).  The three misses are multi-texture materials where the
+    pair belongs to a different layer than the one measured, not a counterexample
+    to the ordering.
+
+    The case that motivated it: `48934ca5455ad912`, the CATAPULT sign in
+    `mpl_arena_a`.  It maps 1033 texels/unit across and 515 down -- exactly 2:1
+    -- so its face sampled only the top half of its lettering and the sign was
+    unreadable.  Its pair is `(2.0, 1.0)`, and applying `vscale=2` makes the
+    sign read "CATAPULT 2" with its rules and underbar landing correctly.
+
+    ## `slots` is not optional in production
+
+    ⛔ Do NOT accept every pair the XOR delta finds.  Measured over all 1713
+    materials, three pair hashes (`983b599cd5edb4c9`, `a3b28d304d58e457`,
+    `681878e6112f9ad9`) are present on 710 materials each and hold `(3,5)` or
+    `(5,3)` on EVERY ONE of them -- they are fixed engine constants that merely
+    happen to sit a `UV_SCALE_PAIR_DELTA` apart.  Taking them as UV scales
+    applied a bogus 3x5 mapping to 41% of the corpus, which is far worse than
+    applying nothing.
+
+    The discriminator is that an optional transform DEFAULTS TO IDENTITY: a real
+    UV-scale slot is `(1,1)` on most materials and authored on a few (the sign's
+    pair is identity on 616 of the 636 materials that carry it), while a
+    constant is never identity.  `build_uv_scale_slots` measures that over the
+    corpus once; pass the result as `slots`.  `slots=None` disables the filter
+    and is for synthetic test data only.
+
+    ⚠ Returns `(1.0, 1.0)` when nothing is authored, which is the caller's
+    signal to skip the Mapping node entirely.  A material carrying SEVERAL
+    qualifying non-unit pairs (one per texture layer) is ambiguous -- there is
+    no decoded edge from a pair to the layer it drives -- so the most common one
+    wins, matching `evr_shaderset.dominant_uv_scale`'s policy for the same
+    problem.
+    """
+    from collections import Counter
+
+    votes: Counter = Counter()
+    for name_hash, value in props.items():
+        partner = name_hash ^ UV_SCALE_PAIR_DELTA
+        if partner <= name_hash or partner not in props:
+            continue                       # only visit each pair once, low first
+        if slots is not None and name_hash not in slots:
+            continue                       # a constant, not a transform
+        vscale, uscale = float(value), float(props[partner])
+        if vscale != vscale or uscale != uscale:
+            continue                       # NaN
+        if not (0.0 < vscale < 4096.0 and 0.0 < uscale < 4096.0):
+            continue
+        if (uscale, vscale) == _UV_SCALE_IDENTITY:
+            continue
+        votes[(uscale, vscale)] += 1
+    if not votes:
+        return _UV_SCALE_IDENTITY
+    return votes.most_common(1)[0][0]
+
+
+def build_uv_scale_slots(root, *, min_identity_rate: float = 0.6,
+                         min_present: int = 8, progress=None) -> set:
+    """Which property pairs behave like a UV scale, measured over the corpus.
+
+    Same shape as `evr_material_textures.build_default_textures`: one pass over
+    every material, deciding by how the value BEHAVES rather than by a
+    hard-coded list, so it recalibrates itself on a different game's data.
+
+    A pair qualifies when it is present on at least `min_present` materials and
+    is identity `(1,1)` on at least `min_identity_rate` of them -- that is what
+    separates an optional per-material transform from a fixed engine constant.
+    On `H:/pcvr-extracted` this keeps the pairs that vary (identity rates 0.86
+    to 0.98) and rejects the three that are `(3,5)`/`(5,3)` on all 710 materials
+    that carry them (identity rate 0.00).
+    """
+    from collections import Counter
+
+    directory = resolve_type_dir(Path(root), MATERIAL_RESOURCE)
+    if not directory.is_dir():
+        return set()
+
+    present: Counter = Counter()
+    identity: Counter = Counter()
+    paths = sorted(p for p in directory.iterdir() if p.is_file())
+    for i, path in enumerate(paths):
+        if progress and i and i % 500 == 0:
+            progress(i, len(paths))
+        try:
+            _words, slots = parse_material_prop_slots(path.read_bytes())
+        except (struct.error, OSError, ValueError):
+            continue
+        props = {h: _words[i] for h, i in slots.items() if i < len(_words)}
+        for name_hash, value in props.items():
+            partner = name_hash ^ UV_SCALE_PAIR_DELTA
+            if partner <= name_hash or partner not in props:
+                continue
+            a, b = float(value), float(props[partner])
+            if a != a or b != b:
+                continue
+            present[name_hash] += 1
+            if (a, b) == _UV_SCALE_IDENTITY:
+                identity[name_hash] += 1
+
+    return {h for h, n in present.items()
+            if n >= min_present and (identity[h] / n) >= min_identity_rate}
 
 
 def decode(data: bytes, *, material_hash="", known_textures=None) -> MaterialResource:

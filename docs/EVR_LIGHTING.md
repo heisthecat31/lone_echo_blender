@@ -3,16 +3,40 @@
 Recovered from the engine's own HLSL (`core/shaders`), then confirmed against
 the shipped resources. Nothing here is inferred from appearance.
 
-## Status in our extractor: NOT EXTRACTED
+## Status in our extractor
 
-Every Echo VR scene we write today is **unlit**:
+**SH4 is implemented and verified.** `evr_apply_lighting` exports each page's
+four raw coefficient slices, and the add-on evaluates them per pixel against the
+world normal via the `EVR_SH4_Irradiance` node group. That group was checked
+against a direct transcription of the HLSL below over six cases spanning zero
+DC, strong +/- directional terms and real arena values: **worst absolute error
+2.4e-07**, i.e. float precision.
 
-    lightmap_stats: meshes_lightmapped 0, meshes_unlit 1571,
-                    meshes_with_uv1 0, numlobes_values []
+**SG5 is NOT implemented.** SG5 levels still take the old collapse, which sums
+the five lobes with fixed weights and never transforms them by
+`tangenttoworld`. That is wrong for the same reason the SH4 collapse was wrong
+-- the basis is directional and hemispherical, so it cannot be resolved ahead of
+shading. Affected: `mpl_lobby_b2`, `mpl_tutorial_lobby`, the `mpl_combat_*`
+maps. `mpl_arena_a` and the tutorial maps are SH4 and are correct.
 
-`CGLightMapResourceWin10` (`230554bc3beca38c`, **637 files**) is present in the
-flat extract and never opened. The `numlobes == 4` figure recorded elsewhere in
-this repo came from the Lone Echo path, not from Echo VR.
+### What the SH4 path still approximates
+
+| gap | cost |
+|---|---|
+| BC6H decoded at 8 bit (`texture2ddecoder.decode_bc6` returns BGRA8) | HDR above 1.0 is clamped; measured **0.0052%-0.69% of texels per page** |
+| `EvalSH4PrefilteredSpecular` not implemented | baked specular missing; diffuse only |
+| `k_punctual_occlusion_map` / `k_dirlight_occlusion_map` decoded but unused | baked shadowing of dynamic lights not applied |
+| geometry with no bake at all | see below |
+
+### Geometry the bake does not cover
+
+`CGStaticInstanceResource` binds lightmaps **only to static-instanced
+entities**. On `mpl_arena_a` that is 732 entities -> 2598 package instances, of
+which 2100 are lit. Everything else -- actor-placed props and the level's own
+9-submesh base mesh -- has no baked data in the level at all, and per-mesh
+`CGMeshData` bindings are empty here (only 7 of 123 models carry any, all at
+rows 0/1, not this level's row 10). Those objects are lit in a DCC only by
+importing the authored rig (untick *Dynamic Lights Only*, 136 static lights).
 
 ## The resource
 
@@ -116,10 +140,19 @@ Independent of basis, sampled at the page slice (no lobe offset):
     localshadow    = punctual_occlusion.Sample(lightmapuv)
     dirlightshadow = dirlight_occlusion.Sample(lightmapuv)   # only if lightmapuv != 0
 
-## What blocks us
+## Per-instance UVs
 
-The lightmap UV is already identified: the **UNORM16 TEXCOORD at +16** in
-stream 0, the channel that always spans [0,1] because every face is packed into
-the atlas individually. We currently discard it. To light a scene we need to
-(1) write that channel as UV1, (2) resolve each mesh's page index, and
-(3) extract the five arrays. None of the three is done yet.
+Static-instanced geometry does not carry its lightmap UV in the vertex stream:
+instances of one mesh sit in DIFFERENT atlas regions, so the UVs are per
+instance, in the CGSI GPU sibling (`meshdata.uvoffset` / `.uvcount`, two UNORM16
+each). `uvoffset` counts UVs, not bytes.
+
+Measured on `mpl_arena_a` after import: median UV edge **2.6 atlas texels**, and
+only 2 of 1024 lit objects exceed 60 -- i.e. the charts are continuous and
+well-formed. A large UV *bounding box* is not evidence of a broken chart, since
+one chart legitimately spans several islands; per-edge continuity is the test
+that distinguishes them.
+
+Four instances carry an all-zero UV run. That is the engine's "no bake" marker,
+not a chart at the atlas origin, and wiring it tints the whole object with texel
+(0,0) -- two of the four are 43.7 m across. They are skipped at export.

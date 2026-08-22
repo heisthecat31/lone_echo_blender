@@ -388,3 +388,28 @@ def select_lod_objects(objects, level):
     want = snap_to_ladder(level, set(gated))
     # An object with no recorded level, or one no scene set gates, always draws.
     return [o for o, x, u in zip(objects, lv, ungated) if u or x is None or x == want]
+
+
+def resolve_package_file(path, wanted: str = "manifest.json"):
+    """The `wanted` file for whatever the user actually picked.
+
+    Blender's `filter_glob` can only filter by EXTENSION, so an import file
+    browser pointed at a package shows every sidecar beside the manifest --
+    `materials.json`, `lightmaps.json`, `movers.json`, `static_entities.json`
+    -- and picking the wrong one is easy and annoying.
+
+    Rather than fight the file browser, accept any of them: a package is a
+    DIRECTORY, so anything inside it identifies the package unambiguously.
+    Returns the resolved path, or the original when nothing better exists (the
+    caller then reports its own error).
+    """
+    from pathlib import Path as _Path
+
+    p = _Path(path)
+    if p.is_dir():
+        candidate = p / wanted
+        return str(candidate) if candidate.is_file() else str(p)
+    if p.name == wanted:
+        return str(p)
+    candidate = p.parent / wanted
+    return str(candidate) if candidate.is_file() else str(p)

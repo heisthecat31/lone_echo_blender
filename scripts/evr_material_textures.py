@@ -293,7 +293,39 @@ _ROUTABLE_SUFFIXES = frozenset((
 _SUFFIX_TRANSLATION = {
     "basecolor_map": "albedo_map",
     "components_map": "composite_components",
+    # Names recovered from the RAD authoring tree (see `CORE_NAMES`), each
+    # translated only where a Principled socket is unambiguous AND the corpus
+    # DXGI profile independently agrees. The name alone is not enough: it says
+    # what the artist called the slot, not which socket it drives.
+    #
+    #   suffix                  binds  DXGI evidence            -> socket
+    #   normalmap_map              32  BC5_UNORM 100%              normal
+    #   normalmap_detailmap         4  BC5_UNORM 100%              detail normal
+    #   layerblend_blendmask       82  BC1_UNORM 82% (linear)      blend mask
+    #   emissive_map2               4  BC1_SRGB 50% (colour)       2nd emissive
+    #
+    # BC5 carries two channels and is THE normal-map format, so a slot that is
+    # BC5 on every one of its textures and is spelled `normalmap` is a normal
+    # map on both counts.
+    "normalmap_map": "normal_map",
+    "normalmap_detailmap": "detail_normal_map",
+    "layerblend_blendmask": "blend_mask",
+    "emissive_map2": "secondary_emissive_map",
 }
+
+#: Cracked but deliberately NOT translated, because no Principled socket is the
+#: honest answer for them -- naming one would put a texture somewhere wrong:
+#:
+#:   layerN_height_occlusion_map  14 binds   occlusion is decoded but unapplied
+#:   layerN_rimlighting_map2       9 binds   rim/fresnel, which the BSDF cannot
+#:                                           express (see the note in
+#:                                           `evr_materials` about promoting a
+#:                                           rim map to base colour)
+#:   layer0_anisotropic_map        7 binds   split BC3/BC1, no clear meaning
+#:   pattern_map                   5 binds   no layer prefix, unclear role
+#:
+#: They now resolve to a NAME in `CORE_NAMES`, so they are visible in diagnostics
+#: instead of being anonymous `unknown_s*` hashes -- which is the point.
 
 
 def _translate(role: str) -> str:

@@ -1519,6 +1519,7 @@ class EchoExtractor(tk.Tk):
                 put(("log", f"  exited with code {proc.returncode}\n"))
             elif not raw_tool:
                 self._light(job, put)
+                self._ui(job, put)
             done += 1
             put(("tick", done))
         if raw_tool:
@@ -1547,6 +1548,49 @@ class EchoExtractor(tk.Tk):
             cmd += ["--max-texture", str(cap)]
         return cmd
 
+    def _ui(self, job, put):
+        """Extract the level's UI canvases into the package.
+
+        A level's screens -- scoreboards, the arena's big display, the panels on
+        the tunnel mouths -- are `CUICanvasResource` quads placed by
+        `CCanvasUICR`, and they live in NEITHER the scatter geometry nor the
+        materials. `mpl_arena_a` has 108 placements over 23 canvases and none of
+        it came across, because this step did not exist.
+
+        Written INTO the package next to `manifest.json`, so the add-on finds it
+        beside everything else rather than in a second location.
+        """
+        if job.kind == "model":
+            return                    # UI canvases are a level concept
+        pkg = Path(self.outdir.get())
+        for cand in (pkg / "Scenes_Full" / job.label, pkg / "scenes" / job.label,
+                     pkg / "scenes" / job.level):
+            if not (cand / "manifest.json").is_file():
+                continue
+            put(("log", f"  ui \u2192 {cand.name}\n"))
+            cmd = [sys.executable, str(SCRIPTS / "evr_ui_extract.py"),
+                   job.level, "--dir", self.source.get(),
+                   "--out", str(cand / "ui")]
+            cap = self.texture.get()
+            if cap:
+                cmd += ["--max-texture", str(cap)]
+            try:
+                proc = subprocess.run(
+                    cmd, cwd=str(REPO), capture_output=True, text=True,
+                    encoding="utf-8", errors="replace",
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                for ln in [x for x in (proc.stdout or "").splitlines()
+                           if "quad" in x or "canvas" in x][-2:]:
+                    put(("log", f"  {ln.strip()}\n"))
+                if proc.returncode != 0:
+                    tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
+                    put(("log", "  ui FAILED: %s\n"
+                         % (tail[-1].strip() if tail else
+                            "exit %d" % proc.returncode)))
+            except OSError as exc:
+                put(("log", f"  ui could not start: {exc}\n"))
+            return
+
     def _light(self, job, put):
         if job.kind == "model":
             return                    # lighting is a level concept
@@ -1558,15 +1602,23 @@ class EchoExtractor(tk.Tk):
                 try:
                     proc = subprocess.run(
                         [sys.executable, str(SCRIPTS / "evr_apply_lighting.py"),
-                         str(cand), job.level],
+                         str(cand), job.level, "--dir", self.source.get()],
                         cwd=str(REPO), capture_output=True, text=True,
                         encoding="utf-8", errors="replace",
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                     for ln in [x for x in (proc.stdout or "").splitlines()
                                if "atlas" in x or "lights" in x][-2:]:
                         put(("log", f"  {ln.strip()}\n"))
-                except OSError:
-                    pass
+                    # Report failures. This step used to fail silently on EVERY
+                    # run (no --dir -> TypeError), so packages shipped unlit and
+                    # nothing in the log said so.
+                    if proc.returncode != 0:
+                        tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
+                        put(("log", "  lighting FAILED: %s\n"
+                             % (tail[-1].strip() if tail else
+                                "exit %d" % proc.returncode)))
+                except OSError as exc:
+                    put(("log", f"  lighting could not start: {exc}\n"))
                 return
 
     def _drain(self):

@@ -119,8 +119,9 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
     # instance, both in CGSI -- and because instances of one mesh occupy
     # DIFFERENT atlas regions, their UVs are per instance too, in the CGSI GPU
     # sibling rather than the vertex stream.
+    sh_pages: dict = {}
     instance_uv, instance_pages = _static_instances(pkg, root, images, out_dir,
-                                                    gains)
+                                                    gains, sh_pages)
 
     payload = {
         "format": "evr_lighting",
@@ -138,6 +139,11 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
         # irradiance is `stored * gain`. Exposure, not decoded data.
         "gains": gains,
         "meshes": bindings,
+        # SH4 pages kept as RAW coefficients: {page_key: {basis, slices[4]}}.
+        # slice 0 is the DC term; 1-3 are packed to [0,1] and must be unpacked
+        # as `c*2-1` then rescaled by `dc*2` before evaluating irradiance with
+        # the surface normal (core/shaders/materials/material_base_ps.hlsl:1129).
+        "sh_pages": sh_pages,
         "lights": lights,
         # Per-instance lightmap: {package instance index: {"image", "uv_offset",
         # "uv_count"}} into `instance_uv_blob` (float32 u,v pairs).
@@ -154,7 +160,7 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
 
 
 def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
-                      gains: dict) -> tuple:
+                      gains: dict, sh_pages: dict) -> tuple:
     """`(uv_blob, {instance_index: binding})` for static-instanced geometry.
 
     Reads `static_entities.json` -- written by the extractor because flattening
@@ -188,8 +194,9 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
             cgsi = cgsi_path.read_bytes() if cgsi_path else None
             gpu = gpu_path.read_bytes() if gpu_path else None
             pages = evr_lm.static_instance_lightmaps(cgsi)[1] if cgsi else {}
-            cache[level] = (cgsi, gpu, evr_lm.level_lightmap(root, level), pages)
-        cgsi, gpu, info, page_by_entity = cache[level]
+            cache[level] = (cgsi, gpu, evr_lm.level_lightmap(root, level),
+                            pages, [None, None])
+        cgsi, gpu, info, page_by_entity, decoded = cache[level]
         if not cgsi or not gpu or not info:
             continue
         entity = int(entity_hex, 16)
@@ -198,9 +205,20 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
             continue
         key = f"{level}_p{page}"
         if key not in images:
-            slices, width, height = evr_lm.decode_ambient(root, info["ambient"])
+            if decoded[0] is None:
+                decoded[0] = evr_lm.decode_ambient(root, info["ambient"])
+            slices, width, height = decoded[0]
             images[key] = _write_page(out_dir, key, slices, page, info,
                                       width, height, gains)
+            # SH4 additionally keeps its four RAW coefficient slices, because
+            # world-space SH cannot be collapsed ahead of shading.
+            if info["basis"] == "SH4":
+                if decoded[1] is None:
+                    decoded[1] = evr_lm.ambient_dds(root, info["ambient"])[0]
+                names = _write_sh4_page(out_dir, key, decoded[1], page,
+                                        width, height)
+                if len(names) == 4:
+                    sh_pages[key] = {"basis": "SH4", "slices": names}
         uvs = evr_lm.static_instance_uvs(cgsi, gpu, entity, submesh)
         if not uvs:
             continue
@@ -208,15 +226,55 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
             if vert_hi > len(uvs):
                 continue          # the slice is not inside this UV run
             uvs = uvs[vert_lo:vert_hi]
+        # A UV run that is ALL (0,0) is the engine's "no bake" marker, not a
+        # chart at the atlas origin. Wiring it anyway tints the whole object
+        # with whatever single texel sits at (0,0). Four instances on
+        # `mpl_arena_a`, two of them 43.7 m across.
+        if not any(u or v for u, v in uvs):
+            continue
+
         offset = len(blob) // 8
         for u, v in uvs:
             blob += struct.pack("<2f", u, v)
         out[str(index)] = {"image": images[key], "page": page,
+                           "page_key": key,
                            "uv_offset": offset, "uv_count": len(uvs)}
     if out:
         print(f"  static instances: {len(out)} lit, "
               f"{len(blob) // 8} UV pairs")
     return bytes(blob), out
+
+
+#: Slice order inside one SH4 page, from `core/textures/ambient_lightmap_sh*.radtex`
+#: and confirmed by content: slice 0 is the DC term (mean 16/255, HDR), slices
+#: 1-3 sit at 128/255 on lit texels -- exactly the zero point of the shader's
+#: `*2-1` unpack.
+SH4_SLICE_NAMES = ("sh0", "sh1", "sh2", "sh3")
+
+
+def _write_sh4_page(out_dir, key, raw_dds, page, width, height) -> list:
+    """Write one SH4 page as FOUR raw coefficient images.
+
+    ⚠ Deliberately NOT collapsed to a single irradiance page. SH4 is baked in
+    WORLD space (`material_base_ps.hlsl:1129`), so irradiance depends on the
+    surface normal and cannot be resolved until shading time. The previous
+    behaviour kept the DC term alone (`weights = [1, 0, 0, 0]`) and dropped all
+    three directional coefficients, which is why lit surfaces came out flat and
+    unlike the game.
+
+    Stored raw and linear -- no exposure divisor, no sRGB curve. These are
+    coefficients, not a picture; the consumer unpacks and evaluates them.
+    """
+    names = []
+    for i in range(4):
+        index = page * 4 + i
+        chunk = evr_lm.single_slice_dds(raw_dds, index)
+        if chunk is None:
+            break
+        name = f"{key}_{SH4_SLICE_NAMES[i]}.dds"
+        (out_dir / name).write_bytes(chunk)
+        names.append(name)
+    return names
 
 
 def _write_page(out_dir, key, slices, page, info, width, height,
@@ -238,7 +296,14 @@ def _write_page(out_dir, key, slices, page, info, width, height,
     if gains is not None:
         gains[key] = round(gain, 6)
 
-    srgb = np.clip(img / gain, 0.0, 1.0) ** (1.0 / 2.2)
+    # TRUE sRGB transfer, not a 2.2 power. Blender decodes an image tagged
+    # "sRGB" with the piecewise sRGB EOTF; encoding with a plain 2.2 gamma is
+    # close but not its inverse, and the mismatch is worst in the darks, which
+    # is most of a lightmap. Using the real curve makes the round-trip exact.
+    norm = np.clip(img / gain, 0.0, 1.0)
+    srgb = np.where(norm <= 0.0031308,
+                    norm * 12.92,
+                    1.055 * np.power(norm, 1.0 / 2.4) - 0.055)
     name = f"{key}.png"
     Image.fromarray((srgb * 255.0 + 0.5).astype(np.uint8)).save(out_dir / name)
     return name
@@ -248,9 +313,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("package")
     ap.add_argument("level")
-    ap.add_argument("--dir", default=None)
+    ap.add_argument("--dir", default=None,
+                    help="flat game extract (or set EVR_EXTRACT_DIR)")
     args = ap.parse_args()
-    apply(Path(args.package), args.level, Path(args.dir))
+    # `Path(None)` raises TypeError, which is what happened every time the app
+    # ran this step without --dir: the crash was swallowed by its capture_output
+    # and every package it produced came out unlit. Resolve through evr_paths so
+    # EVR_EXTRACT_DIR works and a missing root reports itself.
+    import evr_paths
+    root = evr_paths.require_extract(args.dir)
+    apply(Path(args.package), args.level, root)
     return 0
 
 

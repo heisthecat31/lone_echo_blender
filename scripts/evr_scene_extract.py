@@ -813,7 +813,277 @@ def _split_submesh_draws(result, run):
     return out
 
 
-def _group_submeshes_by_lod(results, origins=None):
+def _material_of(materials, index):
+    """`materials[index]`, or a unique sentinel when it is not known.
+
+    An unknown value must never compare EQUAL to another unknown one -- that
+    would re-allow the exact clustering this constraint exists to prevent.
+    """
+    if materials is None or index >= len(materials):
+        return ("unknown", index)
+    value = materials[index]
+    return ("unknown", index) if value is None else value
+
+
+#: Re-split tolerance for a cluster that swallowed a second part, relative to
+#: each axis's own extent. 1%, 2% and 3% produce the SAME partition on every
+#: case measured, so this is not a tuned number -- where two parts are separable
+#: they are far apart, and where they are not, no tolerance helps.
+INTERLEAVED_SPLIT_TOL = 0.02
+
+
+def _faces_non_increasing(members, entries) -> bool:
+    """Do this cluster's face counts never RISE in submesh order?"""
+    seq = [entries[i][1] for i in members if entries[i]]
+    return all(seq[k] >= seq[k + 1] for k in range(len(seq) - 1))
+
+
+def _bbox_close_tight(a, b, tol) -> bool:
+    (amin, asize), (bmin, bsize) = a, b
+    for k in range(3):
+        scale = max(abs(asize[k]), abs(bsize[k]), 0.01)
+        if abs(amin[k] - bmin[k]) > tol * scale:
+            return False
+        if abs(asize[k] - bsize[k]) > tol * scale:
+            return False
+    return True
+
+
+def _geometry_signature(res_group) -> str:
+    """A hash of a submesh's vertex positions, for telling parts apart."""
+    import hashlib
+
+    verts = res_group[0] if res_group else ()
+    digest = hashlib.sha1()
+    for v in verts:
+        digest.update(b"%.4f,%.4f,%.4f;" % (v[0], v[1], v[2]))
+    return digest.hexdigest()[:16]
+
+
+def _cluster_holds_distinct_parts(members, entries, sigs) -> bool:
+    """Do two members share a face count but differ in GEOMETRY?
+
+    ⭐ A LOD chain simplifies, so its levels have different face counts. Two
+    members at the SAME count are either the same mesh repeated -- a level the
+    simplifier could not reduce -- or two DIFFERENT parts that happen to share a
+    bounding box. The vertex data separates those two cases exactly, and
+    nothing else does.
+
+    `2576bbc41db98406` (mpl_lobby_b2, beside i5066) is the second kind: sub2 and
+    sub3 are both 38 faces inside the same 17.01 x 10.08 x 17.01 box, with
+    sub6/sub7 as their 26-face LOD 1s -- 2 parts x 2 levels. Merged, sub3 and
+    everything under it never render.
+
+    `9c9a7e6f6014702d` is the first kind: four members, all 8 faces, all the
+    SAME hash. That is one part whose coarse levels are byte-identical copies,
+    and showing one of them is right.
+
+    ⚠ This is why the face-count rise test alone is not enough: `[38, 38, 26,
+    26]` never rises, so `_faces_non_increasing` passes it.
+    """
+    by_faces: dict = {}
+    for i in members:
+        if entries[i] is None:
+            continue
+        by_faces.setdefault(entries[i][1], set()).add(sigs[i])
+    return any(len(v) > 1 for v in by_faces.values())
+
+
+def _split_periodic_cluster(members, entries, sigs=None):
+    """Split a violating cluster on its LOD-MAJOR PERIOD. `[members]` if none.
+
+    ⭐ The engine stores a multi-part model LEVEL-major: all P parts of level 0,
+    then all P parts of level 1, and so on. So a cluster holding P interleaved
+    parts splits by POSITION MOD P, and each class must then be non-increasing.
+
+    This is the fallback for clusters the bounding box cannot separate, where
+    the parts are near-congruent shells a few tenths of a percent apart:
+    `b4860fbc69ee178f` reads `[192, 288, 96, 192, 32, 96]` across six shells
+    whose extents differ by 0.05%, far under any usable bbox tolerance, and
+    splits cleanly at P=2 into `[192, 96, 32]` and `[288, 192, 96]`.
+
+    ⭐ Why this is a storage property and not a fitted rule: run it on
+    `b4860fbc69ee178c`, whose parts ARE far enough apart for the bbox to
+    separate, and P=3 reproduces the bbox clustering's answer exactly
+    (`[914,842,578] / [130,120,96] / [240,144,144]`). On `9c9a7e6f6014702c` it
+    reproduces the tight-bbox split's answer exactly. Two independent methods
+    agreeing on the cases where both apply is what licenses trusting this one
+    where only it applies.
+
+    Guards, so a period is only taken when the layout really is rectangular:
+    the member count must divide by P, and every class must hold at least two
+    members. Without them a long enough sequence always admits some P -- e.g.
+    `ff5afb4e96897159`, which is correctly clustered already, would otherwise
+    match at P=8 with seven singletons. With them it declines, as it must.
+    """
+    n = len(members)
+    for period in range(2, n // 2 + 1):
+        if n % period:
+            continue
+        parts = [members[k::period] for k in range(period)]
+        if not all(len(part) >= 2 for part in parts):
+            continue
+        if not all(_faces_non_increasing(part, entries) for part in parts):
+            continue
+        if sigs is not None and any(
+                _cluster_holds_distinct_parts(part, entries, sigs)
+                for part in parts):
+            continue          # this period still leaves two parts together
+        return parts
+    return [members]
+
+
+def _split_single_rise_cluster(members, entries):
+    """Cut a cluster with exactly ONE rise in two. `[members]` otherwise.
+
+    A chain never rises, so a single rise is a single boundary: everything
+    before it is one part, everything from it on is another. That covers the
+    tail cases the bbox and the period both miss -- `3eff95282bf0807f` reads
+    `[6680, 6872]` (two members, so there is no period to find) and
+    `34918b365c4b7940` reads `[6280, 2652, 912, 464, 6280]`, a full chain with a
+    second part's LOD 0 stuck on the end.
+
+    ⛔ Restricted to exactly one rise, and that restriction is load-bearing.
+    Applied to `9c9a7e6f6014702c`'s `[212, 4, 152, 4, 112, 4, 72, 4]` -- three
+    rises -- cutting at each would yield four two-member chains, and every one
+    of them would place BOTH its members' level 0, stacking the shell and the
+    panel at all four levels. Several rises mean parts are interleaved, which
+    is what the period and the bbox are for; one rise means they are merely
+    concatenated.
+    """
+    seq = [(i, entries[i][1]) for i in members if entries[i]]
+    rises = [k for k in range(1, len(seq)) if seq[k][1] > seq[k - 1][1]]
+    if len(rises) != 1:
+        return [members]
+    cut = rises[0]
+    head = [i for i, _f in seq[:cut]]
+    tail = [i for i, _f in seq[cut:]]
+    if not head or not tail:
+        return [members]
+    return [head, tail]
+
+
+def _split_interleaved_cluster(members, entries, sigs, tol=INTERLEAVED_SPLIT_TOL):
+    """Split a bbox cluster that swallowed a second part. `[members]` if not.
+
+    ⭐ THE SIGNAL: a LOD chain is STORED in decreasing-detail order, so its face
+    counts never RISE. When they do, the cluster holds more than one part.
+    `9c9a7e6f6014702c` (mpl_lobby_b2, the combat modules beside i93) reads
+    `[212, 4, 152, 4, 112, 4, 72, 4]` -- a 4-level shell interleaved with a
+    4-level wall panel. `_bbox_close` merged them because the panel is 3.502
+    across against the shell's 3.691, and the 5% tolerance is 0.195 against a
+    0.189 difference: it passes by 3%. The panel's own LOD 0 was demoted to
+    level 4 of 8, and the importer places level 0, so all four copies vanished
+    -- 12.3 m2 of wall, on 16 placements.
+
+    Measured on `mpl_lobby_b2`: 174 of 181 package-confirmed chains are
+    non-increasing, so the test is quiet. Of the 7 that rise, 5 re-split
+    cleanly (3 of them the interleaved-wall bug) and 2 do not and are left
+    exactly as they were.
+
+    ⛔ Do NOT instead tighten `_bbox_close` globally. Measured against the
+    package's own grouping, at EVERY threshold from 0.5% to 4% it breaks more
+    genuine same-part pairs than it splits wrong ones -- at 2%, 192 of 667 good
+    pairs broken to split 53 of 168 bad. Same-part size differences run to
+    100%: a coarse LOD really can be a different size, so bbox extent does not
+    separate the two classes on its own. It works here only because the
+    face-count rise has ALREADY established that the cluster is wrong.
+    """
+    rises = not _faces_non_increasing(members, entries)
+    # A cluster can be wrong WITHOUT rising: two parts sharing a bbox read as
+    # one chain with plateaus (`[38, 38, 26, 26]`). See
+    # `_cluster_holds_distinct_parts`.
+    if len(members) < 2 or not (
+            rises or _cluster_holds_distinct_parts(members, entries, sigs)):
+        return [members]
+
+    parts: list = []
+    for i in members:
+        bbox = entries[i][0] if entries[i] else None
+        if bbox is None:
+            parts.append([i])
+            continue
+        for part in parts:
+            rep = entries[part[0]][0] if entries[part[0]] else None
+            if rep is not None and _bbox_close_tight(bbox, rep, tol):
+                part.append(i)
+                break
+        else:
+            parts.append([i])
+
+    # Only accept a split that actually resolves the violation. When the bbox
+    # cannot (near-congruent shells), fall back to the LOD-major period; when
+    # neither can, the cluster stays as it was -- the pre-existing behaviour.
+    resolved = (len(parts) >= 2
+                and all(_faces_non_increasing(p, entries) for p in parts)
+                and not any(_cluster_holds_distinct_parts(p, entries, sigs)
+                            for p in parts))
+    if not resolved:
+        parts = _split_periodic_cluster(members, entries, sigs)
+        # The single-rise cut answers a RISE; it says nothing about two parts
+        # that merely share a bounding box, so it is only tried for a rise.
+        if len(parts) < 2 and rises:
+            parts = _split_single_rise_cluster(members, entries)
+        if len(parts) < 2:
+            return [members]
+    _INTERLEAVED_SPLIT[0] += len(parts) - 1
+    return parts
+
+
+#: How many extra LOD groups the interleaved-cluster split created.
+_INTERLEAVED_SPLIT = [0]
+
+
+def _model_lod_period(entries, origins=None, materials=None):
+    """`P` for a model stored as P parts x L levels, level-major. Else None.
+
+    ⭐ THE LAYOUT: a multi-part model stores ALL P parts of level 0, then all P
+    parts of level 1, and so on. So submesh `i` and submesh `i + P` are the
+    same part one level coarser, and `part(i) == i % P`.
+
+    That makes P checkable rather than guessable: for the right P, every
+    `(i, i + P)` pair shares a bounding box and never gains faces. The smallest
+    P that holds is the answer -- P = N is vacuously true (the loop is empty)
+    and is excluded, since it would mean no LOD grouping at all.
+
+    ⭐ Why this is trusted: measured over `mpl_lobby_b2`'s 333 multi-submesh
+    models, a P validates for 265, and on those the INDEPENDENT bbox clustering
+    already agrees for 260 -- 98%. The 5 it disagrees on are all ones the bbox
+    got wrong: `04d2093faf53f4af` and `f4ae7c5ca3c7b665` read as a single
+    8-member chain when they are 2 parts x 4 levels, and `2576bbc41db98406` is
+    4 parts x 2 levels whose sub2/sub3 share a box. Two methods agreeing that
+    widely, and the period winning every disagreement, is what licenses making
+    it primary. The other 68 models fall back to the bbox path below.
+
+    The `origins` and `materials` constraints are applied to the residue
+    classes for the same reasons the bbox clustering applies them: sections of
+    one split draw are never LODs of each other, and a coarser level is the
+    same surface through the same shading path.
+    """
+    n = len(entries)
+    if n < 2 or any(e is None for e in entries):
+        return None
+    for period in range(1, n):
+        if n % period:
+            continue
+        if any(not _bbox_close(entries[i][0], entries[i + period][0])
+               or entries[i][1] < entries[i + period][1]
+               for i in range(n - period)):
+            continue
+        if origins and len(origins) == n:
+            if any(len({origins[i] for i in range(k, n, period)})
+                   != len(range(k, n, period)) for k in range(period)):
+                continue
+        if materials is not None:
+            if any(len({_material_of(materials, i)
+                        for i in range(k, n, period)}) > 1
+                   for k in range(period)):
+                continue
+        return period
+    return None
+
+
+def _group_submeshes_by_lod(results, origins=None, materials=None):
     """Cluster a model's decoded submeshes into LOD groups by bounding box.
 
     `decode.extract_mesh` returns every LOD level of a part as its own
@@ -842,6 +1112,31 @@ def _group_submeshes_by_lod(results, origins=None):
     Treating every split piece as its own singleton instead (the previous rule)
     left both levels permanently visible, stacked, at every placement.
 
+    `materials[i]` is submesh `i`'s MATTYPE -- the shading path, not the
+    material identity. Two submeshes may only cluster when their mattype
+    matches.
+
+    ⚠ The obvious constraint, "same material", is WRONG and was tried: the
+    engine authors a SEPARATE MATERIAL PER LOD LEVEL. `dac6537a23236325`
+    (mpl_arena_a) is one chain of 53841 / 33624 / 23082 / 10143 / 1448 vertices
+    whose five materials are `3ec2bfb7a1248ab4` then `355052b837a3aae{f,c,d,a}`.
+    Requiring identical materials refused to cluster any of them, so every
+    level became its own LOD 0 and they all rendered stacked -- 1925 objects on
+    `mpl_arena_a` and 3312 on `mpl_combat_fission`.
+
+    Mattype is the signal that actually separates the two cases, because a
+    coarser LOD is the same surface through the same shading path:
+
+        LOD chain (dac6537a) : eMTForwardOpaque x5              -> cluster
+        one object's slices  : eMTSkirt / eMTRefraction /
+                               eMTForwardTransparent            -> do NOT
+
+    The second is `570677a85028cfa9` (mpl_combat_fission), whose 5286-vertex
+    rim shell (eMTForwardTransparent) wraps its 2645-vertex body (eMTSkirt) and
+    therefore shares its bounding box without being a LOD of it. Clustering
+    those dropped the body at LOD 0 -- the slice carrying `51224700dc4766eb`,
+    the model's 4096x4096 composite diffuse -- and the object rendered white.
+
     Returns `[(cluster_index, level, cluster_size), ...]`, one entry per
     submesh, in `results` order. `cluster_index` is LOCAL to this call (the
     caller assigns global `lod_group` ids).
@@ -859,6 +1154,21 @@ def _group_submeshes_by_lod(results, origins=None):
     if not origins or len(origins) != len(results):
         origins = list(range(len(results)))
 
+    # ── level-major period, when the model has one ──────────────────────
+    # This is the layout the engine actually uses (see `_model_lod_period`);
+    # the bbox clustering below is the fallback for models where no period
+    # validates.
+    _period = _model_lod_period(entries, origins, materials)
+    if _period is not None:
+        _classes = [list(range(k, len(results), _period)) for k in range(_period)]
+        out = [None] * len(results)
+        for c, members in enumerate(_classes):
+            ordered = sorted(members,
+                             key=lambda i: -(entries[i][1] if entries[i] else 0))
+            for level, i in enumerate(ordered):
+                out[i] = (c, level, len(members))
+        return out
+
     clusters: list = []       # list of [submesh_index, ...]
     cluster_bbox: list = []   # representative bbox per cluster, parallel to clusters
     for i, entry in enumerate(entries):
@@ -873,12 +1183,25 @@ def _group_submeshes_by_lod(results, origins=None):
                 continue
             if any(origins[m] == origins[i] for m in clusters[c]):
                 continue          # a sibling draw section, not a coarser LOD
+            if materials is not None and any(
+                    _material_of(materials, m) != _material_of(materials, i)
+                    for m in clusters[c]):
+                continue          # different material = different slice, not a LOD
             clusters[c].append(i)
             placed = True
             break
         if not placed:
             clusters.append([i])
             cluster_bbox.append(bbox)
+
+    # A cluster whose face counts RISE in submesh order holds more than one
+    # part (see `_split_interleaved_cluster`); split those before levels are
+    # assigned, or the second part's LOD 0 is demoted and never placed.
+    sigs = [_geometry_signature(r) if r else "" for r in results]
+    resolved: list = []
+    for members in clusters:
+        resolved.extend(_split_interleaved_cluster(members, entries, sigs))
+    clusters = resolved
 
     out = [None] * len(results)
     for c, members in enumerate(clusters):
@@ -1293,6 +1616,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     else:
         scene_out_dir = out_dir / "scenes" / label
     scene_out_dir.mkdir(exist_ok=True, parents=True)
+    _placeholder_twins: dict = {}
     tex_out_dir = scene_out_dir / "textures"
     tex_out_dir.mkdir(exist_ok=True)
     
@@ -1434,6 +1758,16 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             pcvr_dir, sorted(unique_models), hash_lookup=hash_lookup)
         mat_ctx.max_texture = _MAX_TEXTURE[0]
         mat_ctx.texture_divisor = _TEXTURE_DIVISOR[0]
+        # Textures already on disk are only reusable when they were written
+        # with the SAME resolution settings; otherwise a stale cache silently
+        # outlives the flags that produced it.
+        mat_ctx.force_texture_rewrite = evr_materials.texture_cache_is_stale(
+            tex_out_dir, _TEXTURE_DIVISOR[0], _MAX_TEXTURE[0])
+        if mat_ctx.force_texture_rewrite:
+            print("  textures: existing files were written with different "
+                  "resolution settings -- rewriting them")
+        evr_materials.write_texture_stamp(
+            tex_out_dir, _TEXTURE_DIVISOR[0], _MAX_TEXTURE[0])
         mat_table = evr_materials.MaterialTable()
         # The decode cache splits merged draws, which needs the corpus material
         # set to read draw records; publish it before any model is decoded.
@@ -1455,13 +1789,27 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             _dres, _dpath = _decode_model_cached(pcvr_dir, mhash)
             model_vertex_counts = [len(rg[0]) for rg in (_dres or []) if rg]
 
+            # A placeholder model carries the geometry but a shared art-less
+            # material; the dressed article is a separate model with
+            # byte-identical geometry. Resolve materials against THAT when one
+            # exists -- see `evr_materials.dressed_geometry_twin`.
+            _mat_source = mhash
+            _twin = evr_materials.dressed_geometry_twin(pcvr_dir, mhash)
+            if _twin:
+                _mat_source = _twin
+                _placeholder_twins[normalise_hash(mhash)] = _twin
+
             draw_materials = evr_materials.materials_for_model(
-                pcvr_dir, mhash, mat_ctx.material_hashes,
+                pcvr_dir, _mat_source, mat_ctx.material_hashes,
                 mat_ctx.mesh_material_offset,
                 vertex_counts=model_vertex_counts)
             draw_shadersets = evr_materials.materials_for_model(
-                pcvr_dir, mhash, mat_ctx.shaderset_hashes,
+                pcvr_dir, _mat_source, mat_ctx.shaderset_hashes,
                 mat_ctx.mesh_shaderset_offset)
+
+            if _twin:
+                model_textures = evr_materials.model_texture_list(pcvr_dir, _twin) \
+                    if hasattr(evr_materials, "model_texture_list") else model_textures
 
             linked = bool([m for m in draw_materials if m])
 
@@ -1707,25 +2055,66 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
         })
 
+    # ── the static scatter must not be placed twice ─────────────────────────
+    # `CStaticInstanceModelCR` is read TWICE from the SAME file: once per-actor
+    # into `actor_map` above, and once in bulk by
+    # `evr_level_reader.parse_static_instances` below. The comment on the
+    # actor-side read calls these "unrelated data"; measured, they are not.
+    # On `mpl_arena_a` all 2598 scatter props came out twice with
+    # BYTE-IDENTICAL transforms -- 2598 of 6350 package instances were
+    # coincident duplicates.
+    #
+    # Only the static-pass copy carries `entity`, and `entity` is what binds a
+    # lightmap page and its atlas UVs. So the actor-path copy is the one to
+    # drop: it lands exactly on top of its lit twin and, having no lightmap,
+    # renders unlit -- which is what "the model is doubled and only one gets
+    # the texture" looks like in the viewport.
+    #
+    # Dropped per (nodeid, model), NOT per actor: an actor that also binds a
+    # model the scatter pass does not place keeps that model. Entities whose
+    # transform row was missing never enter `_placed_static`, so they still
+    # come through the actor path rather than vanishing.
+    _placed_static: dict = {}
+    for inst in static_instances:
+        _mh = inst.model_hash or static_models[inst.model_index]
+        if _mh and _mh != "0" * 16:
+            _placed_static.setdefault(int(inst.entity), set()).add(
+                normalise_hash(_mh))
+
+    _dup_skipped = 0
     for actor in actors:
         nid_str = str(actor['nodeid'])
         if nid_str not in actor_map:
             continue
-            
+
         t = actor.get('transform')
         if not t:
             continue
 
+        _already = _placed_static.get(actor['nodeid'], ())
         # Every model on this actor is placed, at the actor's transform. An
         # actor with two model components draws both in game; keeping one was
         # the bug.
         for _m in actor_map[nid_str]:
+            mhash = _m.replace('0x', '').replace('0X', '').lower().rjust(16, '0')
+            if normalise_hash(mhash) in _already:
+                _dup_skipped += 1
+                continue
             instances_to_process.append({
-                'mhash': _m.replace('0x', '').replace('0X', '').lower().rjust(16, '0'),
+                'mhash': mhash,
                 'pos': t.get('position', [0, 0, 0]),
                 'rot': t.get('rotation', [0, 0, 0, 1]),
-                'scale': t.get('scale', [1, 1, 1])
+                'scale': t.get('scale', [1, 1, 1]),
+                # Carried so the mover pass can join a package instance back to
+                # the actor an R15 constraint names. Nothing else preserves it
+                # once instances are flattened.
+                'actor': actor['nodeid'],
             })
+    if _dup_skipped:
+        print(f"  scatter de-duplication: {_dup_skipped} actor placement(s) "
+              f"dropped, already placed by the static-instance pass (with "
+              f"their lightmap binding)")
+
         
     for inst in static_instances:
         mhash = inst.model_hash or static_models[inst.model_index]
@@ -1748,8 +2137,23 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             'level': inst.level,
         })
         
+    #: `matidx -> mattype`, for the LOD constraint in `_group_submeshes_by_lod`.
+    #: Falls back to the render mode when a material has no mattype, and to
+    #: None when neither is known -- which `_material_of` treats as "never
+    #: equal", so an unknown never licenses a merge.
+    _mattype_by_matidx: dict = {}
+    for _entry in (global_materials or ()):
+        try:
+            _spec = _entry.get("spec") or {}
+            _mattype_by_matidx[int(_entry.get("matidx"))] = (
+                _spec.get("mattype_name") or _spec.get("render_mode") or None)
+        except (AttributeError, TypeError, ValueError):
+            continue
+
     # Parallel to `all_instances`: [entity_hex, level_hash, submesh] or None.
     static_entity_map: list = []
+    #: Parallel to `all_instances`: the placing actor's nodeid, or None.
+    actor_of_instance: list = []
 
     for inst_data in instances_to_process:
         mhash = inst_data['mhash']
@@ -1773,8 +2177,12 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             # bbox math over already-decoded results) rather than cached
             # alongside `results`, so the global group ids stay assigned in
             # the order this phase actually visits models.
+            _draw_idx = model_draw_materials.get(mhash)
+            _draw_mattypes = ([_mattype_by_matidx.get(mi) for mi in _draw_idx]
+                              if _draw_idx else None)
             submesh_clusters = _group_submeshes_by_lod(
-                results, origins=_SPLIT_PIECES.get(mhash))
+                results, origins=_SPLIT_PIECES.get(mhash),
+                materials=_draw_mattypes)
             submesh_lod: list = []
             local_to_global: dict = {}
             for cluster_index, level, cluster_size in submesh_clusters:
@@ -1927,6 +2335,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             # produced this package instance. A static instance's lightmap page
             # and its atlas UVs are both keyed by entity, and nothing else in
             # the package preserves that link once instances are flattened.
+            actor_of_instance.append(inst_data.get('actor'))
             entity = inst_data.get('entity')
             if not entity:
                 static_entity_map.append(None)
@@ -1954,6 +2363,11 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 # full PBR one. `to_sidecar` also emits the v1 flat fields,
                 # DERIVED from the same spec, for older add-on builds.
                 materials_json = mat_table.to_sidecar(scene_hash, mat_ctx)
+                # Tag emissive maps with how black they are, so the add-on can
+                # tell a glow mask from an ambient-occlusion map. Only the
+                # materials that bind no `composite_components` are measured.
+                evr_materials.annotate_emissive_masks(
+                    materials_json.get("materials"), out_pkg)
             else:
                 materials_json = {"master": scene_hash,
                                   "materials": global_materials,
@@ -2022,6 +2436,10 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             print(f"⛔ {guessed} model(s) fell through every described path -- "
                   f"the vertex format was guessed and the geometry is probably "
                   f"wrong. These are the models to chase.")
+        if _INTERLEAVED_SPLIT[0]:
+            print(f"  LOD split: {_INTERLEAVED_SPLIT[0]} cluster(s) held a "
+                  f"second part interleaved with a LOD chain and were "
+                  f"separated (their level 0 would otherwise never be placed)")
         if _FAILED_MODELS:
             print(f"⛔ {len(_FAILED_MODELS)} model(s) produced no geometry at "
                   f"all: {sorted(_FAILED_MODELS)[:6]}")
@@ -2030,6 +2448,209 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         write_package(out_pkg, scene_hash, all_meshes, all_instances)
         # Sidecar, not manifest: this is an EVR-only join key and the manifest
         # contract is shared with the Lone Echo path.
+        # ── movers ──────────────────────────────────────────────────────
+        # Level geometry that MOVES. Echo VR has no animation curves for it --
+        # the motion is an R15 linear constraint between two anchor actors (see
+        # `evr_movers`). Emitted whenever the level has any, so a consumer can
+        # build the motion without knowing which levels are animated.
+        try:
+            import evr_movers
+            _mv = evr_movers.movers_for(pcvr_dir, scene_group)
+        except Exception as _exc:                            # noqa: BLE001
+            _mv = {}
+            print(f"  movers: not read ({_exc})")
+        if _mv:
+            _rows = {}
+            for _i, _actor in enumerate(actor_of_instance):
+                if _actor is None:
+                    continue
+                _rec = _mv.get(str(_actor))
+                if _rec is not None:
+                    _rows[str(_i)] = _rec
+            if _rows:
+                (out_pkg / "movers.json").write_text(json.dumps({
+                    "format": "evr_movers",
+                    "version": 1,
+                    "note": ("Package instance index -> a straight-line mover. "
+                             "`rest` is the instance's authored position and "
+                             "`travel` the offset to the far end, both in GAME "
+                             "axes (Y up). Recovered from "
+                             "CR15LinearPositionConstraintCR, whose travel is "
+                             "the vector between two anchor ACTORS -- no axis "
+                             "or distance is stored in the record itself. "
+                             "\u26a0 TIMING AND TRIGGER ARE NOT DECODED: when a "
+                             "mover fires and whether it returns live in "
+                             "CScriptCR, so a consumer's keyframe timing is a "
+                             "placeholder, not authored data."),
+                    "instances": _rows,
+                }, indent=1), encoding="utf-8")
+                print(f"  movers: {len(set((r['level'], tuple(r['travel'])) for r in _rows.values()))} "
+                      f"distinct motion(s) over {len(_rows)} instance(s) -> movers.json")
+
+        # ── fog / tonemap / exposure / particle emitters ────────────────
+        # `CGFSEffectsResource` is per level and 24 of 32 levels author fog;
+        # the tonemap block is the Hable curve the engine exposes with, which
+        # is why raw baked lighting looks dark in a DCC. `CParticleEffectCR`
+        # gives emitter placements. See `evr_fx`.
+        try:
+            import evr_fx
+            import evr_movers as _mv_mod
+            _positions = _mv_mod.actor_positions(pcvr_dir, scene_group)
+            _fx = evr_fx.sidecar(pcvr_dir, scene_hash, scene_group, _positions)
+        except Exception as _exc:                            # noqa: BLE001
+            _fx = None
+            print(f"  effects: not read ({_exc})")
+        if _fx and (_fx.get("fog") or _fx.get("particles")):
+            (out_pkg / "effects.json").write_text(
+                json.dumps(_fx, indent=1), encoding="utf-8")
+            _fogbit = _fx.get("fog") or {}
+            print("  effects: fog %s, %d particle emitter(s) -> effects.json"
+                  % ("authored" if not _fogbit.get("is_default") else "at defaults",
+                     len(_fx.get("particles") or [])))
+
+        # ── texture-array slices ────────────────────────────────────────
+        # Which ARRAY SLICE each poster/board uses. The material never names the
+        # array, so this is the only thing that says a board shows slice 12
+        # rather than slice 0 -- see `evr_texture_array_binding`.
+        try:
+            import evr_texture_array_binding as _tab
+            import evr_texture_resource as evr_tex
+            import evr_movers as _mv3
+            _apos = _mv3.actor_positions(pcvr_dir, scene_group)
+            _bindings = _tab.read_bindings(pcvr_dir, scene_group, set(_apos))
+        except Exception as _exc:                            # noqa: BLE001
+            _bindings, _apos = [], {}
+            print(f"  texture arrays: not read ({_exc})")
+        if _bindings:
+            import math as _math
+            # `SceneInstance` carries no index -- it IS its position
+            # in the list, which is what the add-on names objects by.
+            _inst_at = [(rec.translation, i) for i, rec in enumerate(all_instances)] \
+                if all_instances and hasattr(all_instances[0], "translation") else []
+            _rows = []
+            _sliced = {}
+            for _b in _bindings:
+                _slices = mat_ctx.texture_array_slices.get(_b["array"])
+                if _slices is None:
+                    try:
+                        _blob, _note = evr_tex.rebuild_dds(pcvr_dir, _b["array"])
+                    except Exception:                        # noqa: BLE001
+                        _blob = None
+                    _slices = (evr_materials.write_array_slices(
+                        pcvr_dir, _b["array"], _blob, tex_out_dir) if _blob else [])
+                    mat_ctx.texture_array_slices[_b["array"]] = _slices
+                _sliced[_b["array"]] = len(_slices)
+                _row = dict(_b)
+                _row["file"] = ("textures/%s" % _slices[_b["slice"]]) \
+                    if _b["slice"] < len(_slices) else None
+                # The bindings key on ACTORS; the scatter places static
+                # instances. Match by position, which is exact here (every
+                # binding landed within a millimetre of its board).
+                _p = _apos.get(int(_b["actor"], 16))
+                if _p and _inst_at:
+                    _best = min(_inst_at, key=lambda t: _math.dist(t[0], _p))
+                    if _math.dist(_best[0], _p) <= 0.05:
+                        _row["instance"] = _best[1]
+                _rows.append(_row)
+            # Boards that SWITCH between two posters: the binding records only
+            # the first and leaves the second unbound. See `alternate_slices`.
+            try:
+                _alts = _tab.alternate_slices(
+                    _bindings, mat_ctx.texture_array_slices, tex_out_dir)
+            except Exception:                                # noqa: BLE001
+                _alts = {}
+            for _row in _rows:
+                _alt = _alts.get((_row["array"], int(_row["slice"])))
+                if _alt is not None:
+                    # A CANDIDATE, not a decoded fact -- see `alternate_slices`.
+                    _row["alternate_slice"] = _alt
+                    _row["alternate_is_candidate"] = True
+                    _row["alternate_file"] = "textures/%s.s%02d.dds" % (_row["array"], _alt)
+            (out_pkg / "texture_arrays.json").write_text(json.dumps({
+                "format": "evr_texture_arrays",
+                "version": 1,
+                "note": ("Which slice of a texture ARRAY each actor uses. The "
+                         "material does not name the array at all, so without "
+                         "this every object bound to one shows slice 0. "
+                         "`file` is the standalone per-slice DDS; `instance` is "
+                         "the scatter instance matched by position, when one "
+                         "sits on the binding."),
+                "arrays": _sliced,
+                "bindings": _rows,
+            }, indent=1), encoding="utf-8")
+            print("  texture arrays: %d binding(s) over %d array(s), %d slice file(s)"
+                  " -> texture_arrays.json"
+                  % (len(_rows), len(_sliced), sum(_sliced.values())))
+
+        # ── texture overrides ───────────────────────────────────────────
+        # `CTextureOverrideCR`: per-actor texture swaps. Keyed by MODEL rather
+        # than by material, because one material is shared by several models and
+        # an override belongs to only one of them -- keying by material would
+        # apply it to objects the engine never touches.
+        try:
+            import evr_texture_override as _tov
+            import evr_movers as _mv2
+            _acts = set(_mv2.actor_positions(pcvr_dir, scene_group))
+            _ov = _tov.read_overrides(pcvr_dir, scene_group, _acts)
+        except Exception as _exc:                            # noqa: BLE001
+            _ov = {}
+            print(f"  texture overrides: not read ({_exc})")
+        if _ov:
+            import evr_texture_resource as _tex_res
+            _spec_by_matidx = {}
+            for _row in (global_materials or []):
+                _mi = _row.get("matidx") if isinstance(_row, dict) else None
+                if _mi is not None and _mi not in _spec_by_matidx:
+                    _spec_by_matidx[_mi] = _row.get("spec") or {}
+            _spec_of = {}
+            for _m in all_meshes:
+                _mh = normalise_hash(getattr(_m, "name_hash", 0))
+                if _mh and _mh not in _spec_of:
+                    _spec = _spec_by_matidx.get(getattr(_m, "matidx", None))
+                    if _spec is not None:
+                        _spec_of[_mh] = _spec
+            _exists = lambda h: _tex_res.load(pcvr_dir, h) is not None
+            _rows, _tally = {}, {}
+            for _model, _entry in _ov.items():
+                _spec = _spec_of.get(_model) or {}
+                _res = _tov.resolve(_entry, _spec.get("role_textures") or {}, _exists)
+                _res["model"] = _model
+                _rows[_model] = _res
+                _tally[_res["action"]] = _tally.get(_res["action"], 0) + 1
+                # Only an UNAMBIGUOUS override is applied -- see the module
+                # docstring for the two tie-breakers that were tried and are
+                # wrong. Everything else is recorded and left alone.
+                if _res["action"] == "applied" and _spec:
+                    _role = _res["role"]
+                    _spec.setdefault("role_textures", {})[_role] = _res["texture"]
+                    for _ch in (_spec.get("channels") or {}).values():
+                        if _ch.get("role_key") == _role:
+                            _ch["texture"] = _res["texture"]
+                            _ch["file"] = "textures/%s.dds" % _res["texture"]
+                    try:
+                        evr_materials.extract_textures(
+                            mat_ctx, [_res["texture"]], tex_out_dir)
+                    except Exception as _texc:               # noqa: BLE001
+                        # The swap still stands in the spec; say so rather than
+                        # leaving the sidecar pointing at a file that is absent.
+                        _res["texture_write_failed"] = str(_texc)
+                if _spec is not None and _res["action"] == "runtime":
+                    _spec["le_runtime_texture"] = True
+            (out_pkg / "texture_overrides.json").write_text(json.dumps({
+                "format": "evr_texture_overrides",
+                "version": 1,
+                "note": ("CTextureOverrideCR, keyed by MODEL hash. `action` is "
+                         "one of: applied (swapped into the material), identity "
+                         "(the material already binds it), runtime (the texture "
+                         "is a render target that is not shipped -- the object "
+                         "wears a placeholder in game too, until the engine "
+                         "draws it), ambiguous (the record names no slot and the "
+                         "material binds several textures)."),
+                "models": _rows,
+            }, indent=1), encoding="utf-8")
+            print("  texture overrides: %d model(s) -> %s -> texture_overrides.json"
+                  % (len(_rows), ", ".join("%s=%d" % kv for kv in sorted(_tally.items()))))
+
         if any(static_entity_map):
             (out_pkg / "static_entities.json").write_text(json.dumps({
                 "format": "evr_static_entities",

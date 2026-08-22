@@ -452,3 +452,87 @@ def test_jacks_legs_carry_a_suppressed_normal_gating_damage_layer():
     assert (got is None) == (ch_layer is None)
     if got is not None:
         assert got["layer"] == ch_layer
+
+
+# --- emissive map vs ambient occlusion --------------------------------------
+
+def _spec(*, albedo=True, emission=True, components=False, black=None):
+    """A spec carrying just the channels the AO/emissive decision reads."""
+    channels = {}
+    if albedo:
+        channels["base_color"] = {"texture": "a" * 16, "role_key": "layer0_albedo_map"}
+    if emission:
+        channels["emission"] = {"texture": "e" * 16, "role_key": "layer0_emissive_map"}
+        if black is not None:
+            channels["emission"]["black_fraction"] = black
+    role_textures = {"layer0_albedo_map": "a" * 16} if albedo else {}
+    if components:
+        channels["roughness"] = {"texture": "c" * 16,
+                                 "role_key": "layer0_composite_components"}
+        role_textures["layer0_composite_components"] = "c" * 16
+    return {"channels": channels, "role_textures": role_textures}
+
+
+def test_a_material_with_no_emissive_map_is_never_ao():
+    spec = _spec(emission=False)
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is False
+
+
+def test_an_emissive_map_with_no_albedo_has_nothing_to_occlude():
+    """The original discriminator, verified in-game on `d09afd15b1c75c04` i1535."""
+    spec = _spec(albedo=False)
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is False
+
+
+def test_a_mostly_black_map_is_a_glow_mask_not_occlusion():
+    """AO is a visibility term; a mostly-black one would occlude everything.
+
+    This is the case that was rendering wrong: a character glow mask inverted
+    and multiplied into Base Colour, which punches the glowing texels black.
+    """
+    spec = _spec(black=0.978)
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is False
+
+
+def test_a_bright_map_in_the_emissive_slot_is_still_occlusion():
+    """The content test decides BOTH ways -- this is the reverted attempts' bug.
+
+    Gating on colorspace or saturation flipped genuine AO maps over to
+    emissive. A bright map keeps its occlusion reading even when the material
+    also binds `composite_components`, so the structural rule cannot overrule
+    what the texture plainly is.
+    """
+    spec = _spec(black=0.02, components=True)
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is True
+
+
+def test_measurement_outranks_the_structural_rule():
+    bright = _spec(black=0.10, components=True)
+    dark = _spec(black=0.90, components=True)
+    assert _mb().emissive_is_ao(bright, bright["channels"]) is True
+    assert _mb().emissive_is_ao(dark, dark["channels"]) is False
+
+
+def test_without_a_measurement_a_bound_components_map_settles_it():
+    """Older sidecars carry no `black_fraction`, so the shader fact decides.
+
+    AO is `composite_components.y`, so a material binding that texture already
+    has its occlusion; reading the emissive map as a second AO double-counts.
+    """
+    spec = _spec(components=True)
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is False
+
+
+def test_without_a_measurement_or_components_the_old_rule_stands():
+    """Nothing to go on but `has_albedo` -- unchanged, so no silent widening."""
+    spec = _spec()
+    assert _mb().emissive_is_ao(spec, spec["channels"]) is True
+
+
+def test_the_threshold_sits_in_the_gap_between_the_two_populations():
+    """Measured: AO maps 0.000, albedo <=0.373, emissive >=0.587.
+
+    The threshold must fall in that empty band, so it is a majority statement
+    rather than a number fitted to one sample.
+    """
+    assert 0.373 < _mb().EMISSIVE_BLACK_FRACTION < 0.587

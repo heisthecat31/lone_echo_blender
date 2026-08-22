@@ -68,6 +68,22 @@ IB_STRIDE = 16
 POSITION_STRIDE = 28          # stream-1 record: xyz + normal/tangent packing
 UV_OFFSET = 8                 # float2 UV0 inside stream 0 (see docs §7.7)
 
+
+def _uv_offset(gpu, base, count, stride):
+    """`UV_OFFSET`, but VALIDATED against the vertices actually present.
+
+    +8 is right for stride 20 and 28 and WRONG for stride 16 and 24 (+4 on
+    both). Reading half a vertex late yields finite nonsense -- 1.1e38 on the
+    arena's rules panel -- which no `isfinite` check catches. Defers to
+    `evr_mesh_importer.decode.uv_stream_offset`, which does the probing; falls
+    back to the constant when this module is used standalone without it.
+    """
+    try:
+        from decode import uv_stream_offset
+    except ImportError:
+        return UV_OFFSET
+    return uv_stream_offset(gpu, base, count, stride, UV_OFFSET)
+
 #: Header slot -> the array it counts.
 HDR_MESHES, HDR_RENDERPARAMS, HDR_VERTEXBUFFERS, HDR_INDEXBUFFERS = 0, 1, 2, 5
 
@@ -174,7 +190,8 @@ def decode(root: Path, model_hash) -> tuple:
 
         uvs = None
         if stride >= UV_OFFSET + 8:
-            uvs = [struct.unpack_from("<ff", gpu, base + j * stride + UV_OFFSET)
+            _uv = _uv_offset(gpu, base, vcount, stride)
+            uvs = [struct.unpack_from("<ff", gpu, base + j * stride + _uv)
                    for j in range(vcount)]
 
         fmt = "<H" if kind == 2 else "<I"

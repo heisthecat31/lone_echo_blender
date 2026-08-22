@@ -166,7 +166,33 @@ C_ELEMENT_COUNT = 0x28    # u32
 #: The UV offsets survive their own probe: in 0..1 and correctly ordered for
 #: 2993/3000 (Win10) and 1270/1275 (Win7) elements, beating the runner-up
 #: ordering roughly 3:1.
-CANVAS_LAYOUT_WIN10 = (568, 232, 0x00, 0x10, 0x74)
+#:
+#: ⛔ CORRECTED. The Win10 triple above was `(568, 232, 0x00, 0x10, 0x74)` and it
+#: decoded **zero elements from every one of the 277 canvases in the extract**,
+#: so the whole UI system silently produced nothing -- `extract()` skips a
+#: canvas with no elements, so no error was ever raised. All three of stride,
+#: uv and rect were 8 bytes high; the reasoning above is kept because its
+#: *relative* findings still hold, but its absolute anchor was off.
+#:
+#: The stride is not a judgement call. Scanning a canvas for u64s that are real
+#: texture hashes puts every hit at `568 + 224*k` exactly, and the NUMBER of
+#: hits equals the file's own declared element count on every canvas checked
+#: (111, 111, 116, 116, 117, 127 on the six largest). A stride of 232 slides
+#: every element after the first, which is why only element 0 was ever readable
+#: and why the texture filter then rejected the rest.
+#:
+#: With `(568, 224, 0x00, 0x08, 0x6c)` the corpus decodes 3526 of 4970 declared
+#: elements (70.9%) across 203 of 277 canvases. Of the remainder, 1164 name a
+#: texture that is not in the extract -- the same runtime render targets
+#: `CTextureOverrideCR` points at -- and only 280 fail structurally. Reading
+#: element 0 of `1c1650705edcb5f5` (a 425x40 strip) gives rects
+#: 12..197, 200..234, 237..271, 274..308 all at y 0..26: adjacent, in order, and
+#: inside the canvas, which is what a row of labels should look like.
+#:
+#: ⚠ `CANVAS_LAYOUT_WIN7` is UNCHANGED and unverified against this evidence --
+#: note it already used `0x08` for uv, which is what the corrected Win10 value
+#: agrees with.
+CANVAS_LAYOUT_WIN10 = (568, 224, 0x00, 0x08, 0x6c)
 CANVAS_LAYOUT_WIN7 = (488, 144, 0x00, 0x08, 0x30)
 
 

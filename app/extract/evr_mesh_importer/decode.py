@@ -89,6 +89,68 @@ def _find_prefix_pair_run(data, stride, prefix_pairs, min_records=16):
     return count if count >= min_records else 0
 
 
+#: Where UV0 sits inside a stream-0 vertex, when the usual place works.
+UV_PREFERRED_OFFSET = 8
+
+
+def uv_stream_offset(data, base, count, stride, preferred=UV_PREFERRED_OFFSET):
+    """Byte offset of UV0 inside a stream-0 vertex, VALIDATED against the data.
+
+    ⛔ The offset is not always 8. That was hard-coded at six sites and it is
+    wrong for some vertex formats:
+
+        stride 16 -> +4        stride 20 -> +8
+        stride 24 -> +4        stride 28 -> +8
+
+    Reading a stride-16 vertex at +8 lands half a vertex late: `u` comes back
+    holding the real `v`, and `v` holds whatever follows -- on
+    `e9a348e00ca6f7e9` (the arena's "RULES OF THE GAME" panel) that is 1.1e38.
+
+    ⚠ An `isfinite` guard does NOT catch it: 1.1e38 is a perfectly finite float.
+    The guard that was already here passed the garbage straight through, which
+    is why the panel imported with unusable UVs and no visible texture rather
+    than with an obvious error.
+
+    Rather than a stride table -- which would still be a guess for a stride
+    nobody has seen -- this TRIES the usual offset and keeps it when the values
+    it yields are real UVs, falling back to the first offset that is. Measured
+    over `mpl_arena_a`'s 324 submeshes: 313 are fine at +8 and are left exactly
+    as they were; 11 are not (3 at stride 16, 8 at stride 24) and every one of
+    them has exactly one sane alternative.
+    """
+    def plausible(offset):
+        if offset + 8 > stride:
+            return False
+        span_u = span_v = 0.0
+        lo_u = lo_v = float("inf")
+        hi_u = hi_v = float("-inf")
+        for j in range(count):
+            try:
+                u, v = struct.unpack_from("<ff", data, base + j * stride + offset)
+            except struct.error:
+                return False
+            # NOT just isfinite -- a wrong offset yields finite nonsense.
+            if not (math.isfinite(u) and math.isfinite(v)):
+                return False
+            if abs(u) > 64.0 or abs(v) > 64.0:
+                return False
+            lo_u, hi_u = min(lo_u, u), max(hi_u, u)
+            lo_v, hi_v = min(lo_v, v), max(hi_v, v)
+        span_u, span_v = hi_u - lo_u, hi_v - lo_v
+        # A field that never varies is a dead slot, not a UV set (stride 24's
+        # +0x10 is all zeros on every vertex).
+        return (span_u + span_v) > 1e-6
+
+    if count <= 0 or stride < 16:
+        return preferred
+    if plausible(preferred):
+        return preferred
+    for offset in range(0, stride - 7, 4):
+        if offset != preferred and plausible(offset):
+            return offset
+    return preferred
+
+
 def _extract_submesh(data, s0_start, Nv, s0_stride):
     """Given a validated stream-0 run, extract verts, faces + UVs.
     Returns (verts, faces, uvs) or None if stream-1 XYZ is invalid."""
@@ -127,9 +189,10 @@ def _extract_submesh(data, s0_start, Nv, s0_stride):
     has_valid_bones = False
 
     if s0_stride >= 16:
+        _uv_off = uv_stream_offset(data, s0_start, Nv, s0_stride)
         for j in range(Nv):
             s0_off = s0_start + j * s0_stride
-            u, v = struct.unpack_from("<ff", data, s0_off + 8)
+            u, v = struct.unpack_from("<ff", data, s0_off + _uv_off)
             if not (math.isfinite(u) and math.isfinite(v)):
                 u, v = 0.0, 0.0
             uvs.append((u, v))
@@ -263,9 +326,10 @@ def _extract_primary_described_cimr_mesh(gpu_data, primary_data):
             has_valid_bones = False
             
             if s0_stride >= 16:
+                _uv_off = uv_stream_offset(gpu_data, s0_start, vertex_count, s0_stride)
                 for j in range(vertex_count):
                     s0_off = s0_start + j * s0_stride
-                    u, v = struct.unpack_from("<ff", gpu_data, s0_off + 8)
+                    u, v = struct.unpack_from("<ff", gpu_data, s0_off + _uv_off)
                     if not (math.isfinite(u) and math.isfinite(v)):
                         u, v = 0.0, 0.0
                     uvs.append((u, v))
@@ -379,9 +443,10 @@ def _extract_hero_cimr_mesh(gpu_data, primary_data):
             s0_stride = stream0_size // vertex_count
             uvs = []
             if s0_stride >= 16:
+                _uv_off = uv_stream_offset(gpu_data, s0_start, vertex_count, s0_stride)
                 for j in range(vertex_count):
                     s0_off = s0_start + j * s0_stride
-                    u, v = struct.unpack_from("<ff", gpu_data, s0_off + 8)
+                    u, v = struct.unpack_from("<ff", gpu_data, s0_off + _uv_off)
                     if not (math.isfinite(u) and math.isfinite(v)):
                         u, v = 0.0, 0.0
                     uvs.append((u, v))
@@ -503,9 +568,10 @@ def _extract_crossref_ib_cimr_mesh(gpu_data, primary_data):
                 s0_stride = s0_1 // vc1
                 uvs = []
                 if s0_stride >= 16:
+                    _uv_off = uv_stream_offset(gpu_data, 0, effective_vc, s0_stride)
                     for j in range(effective_vc):
                         s0_off = j * s0_stride
-                        u, v = struct.unpack_from("<ff", gpu_data, s0_off + 8)
+                        u, v = struct.unpack_from("<ff", gpu_data, s0_off + _uv_off)
                         if not (math.isfinite(u) and math.isfinite(v)):
                             u, v = 0.0, 0.0
                         uvs.append((u, v))
@@ -575,9 +641,10 @@ def _extract_cgml_ranges(gpu_data, base_offset, stream0_size, vertex_count,
     has_valid_bones = False
     
     if s0_stride >= 16:
+        _uv_off = uv_stream_offset(gpu_data, base_offset, vertex_count, s0_stride)
         for j in range(vertex_count):
             s0_off = base_offset + j * s0_stride
-            u, v = struct.unpack_from("<ff", gpu_data, s0_off + 8)
+            u, v = struct.unpack_from("<ff", gpu_data, s0_off + _uv_off)
             if not (math.isfinite(u) and math.isfinite(v)):
                 u, v = 0.0, 0.0
             uvs.append((u, v))
@@ -723,6 +790,86 @@ def _decode_zero_tail_kind4_u32_cgml(meta, gpu_data):
     return [(verts, faces)]
 
 
+def _extract_descriptor_span_meshes(gpu_data, primary_data):
+    """Decode submeshes from the DESCRIPTOR table alone, sizing each index run
+    by the span to the next descriptor.
+
+    Why this exists: `CGInstancedModelResource` primaries do not carry the
+    `CGMeshListResource` array header, so `_extract_metadata_meshes` reads
+    counts of 0/0 and bails, and the `stream_records` pairing finds nothing
+    (that scan requires `vals[5] in (0x2008, 0x2048)`, which these primaries do
+    not contain). What was left was a chain of heuristics that paired a vertex
+    count from one submesh with an index count from another.
+
+    Measured on `9604a7cc66c81b37` (mpl_combat_fission): 4 descriptors of
+    16 / 2037 / 96 / 213 vertices. The old path returned ONE submesh of 2037
+    vertices and 73 triangles -- 73 being the triangle count that belongs to
+    the 96-vertex submesh. 2037 vertices with 73 triangles leaves ~1900
+    vertices no triangle references, which is what "the model is falling in on
+    itself" looks like in the viewport.
+
+    The descriptors are laid out back-to-back in the GPU blob:
+
+        base_offset .. base_offset+stream0_size      stream 0 (uv/skin)
+        .. + vertex_count*28                         stream 1 (pos/normal)
+        .. next descriptor's base_offset             INDEX BUFFER
+
+    so the index run needs no separate count -- it is the gap. Verified against
+    the smallest submesh, where 72 bytes / 2 = 36 u16 = 12 triangles is exactly
+    a 16-vertex box.
+    """
+    if not primary_data:
+        return []
+    meta = primary_data
+    n = len(meta)
+
+    def u32(off):
+        if off < 0 or off + 4 > n:
+            return 0
+        return struct.unpack_from("<I", meta, off)[0]
+
+    descriptors = []
+    for doff in range(0, max(0, n - 0x40), 4):
+        vals = [u32(doff + i * 4) for i in range(14)]
+        if vals[0] != 0xFFFFFF0C or vals[1] != 0xFFFFFFFF:
+            continue
+        if vals[2] not in (0x0B, 0x0D) or vals[3] != 0:
+            continue
+        vertex_count = vals[9]
+        if vertex_count == 0 or vals[10] != vertex_count:
+            continue
+        descriptors.append((vals[4], vals[6], vertex_count))   # base, s0size, vcount
+
+    if len(descriptors) < 2:
+        return []
+    descriptors.sort(key=lambda d: d[0])
+
+    out = []
+    for i, (base_offset, stream0_size, vertex_count) in enumerate(descriptors):
+        ib_start = base_offset + stream0_size + vertex_count * 28
+        ib_end = (descriptors[i + 1][0] if i + 1 < len(descriptors)
+                  else len(gpu_data))
+        span = ib_end - ib_start
+        if span <= 0 or ib_end > len(gpu_data):
+            continue
+        # u16 first (every shipped case measured), u32 as the fallback; an index
+        # >= vertex_count makes `_extract_cgml_ranges` reject the whole run, so
+        # a wrong guess fails loudly rather than producing scrambled triangles.
+        result = None
+        for stride in (2, 4):
+            count = (span // stride) - ((span // stride) % 3)
+            if count < 3:
+                continue
+            result = _extract_cgml_ranges(gpu_data, base_offset, stream0_size,
+                                          vertex_count, count, 28, ib_start,
+                                          stride)
+            if result is not None:
+                break
+        if result is not None:
+            out.append(result)
+    return out
+
+
 def _extract_metadata_meshes(gpu_data, primary_data):
     """Use Primary/CGMeshListResource metadata to extract split GPU streams.
     Returns [(verts, faces), ...] or []."""
@@ -829,6 +976,8 @@ def _extract_metadata_meshes(gpu_data, primary_data):
             used_streams[stream_index] = True
             submeshes.append(result)
 
+    if not submeshes:
+        submeshes.extend(_extract_descriptor_span_meshes(gpu_data, primary_data))
     if not submeshes:
         submeshes.extend(_decode_scan_metadata_fallback(meta, gpu_data))
     if not submeshes:

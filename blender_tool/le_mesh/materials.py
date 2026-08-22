@@ -1690,8 +1690,25 @@ def build_material_spec(key: str, *, shaderset_hash: str = "", material_hash: st
             if "alpha" not in blend["gated_channels"]:
                 blend["gated_channels"] = sorted(blend["gated_channels"] + ["alpha"])
     # carry through the material-scalar audit extras when present
+    #
+    # `lighting_flags` / `receives_lighting` / `self_illuminated` were computed
+    # by `evr_materials` and then dropped here, so the one decoded signal that
+    # says whether a surface is lit at all never reached a consumer.
+    #
+    # They are u32 booleans sharing the f32 property blob -- read as a float,
+    # `true` arrives as the denormal 1.4e-45, so anything comparing them as
+    # floats sees `false` everywhere. `evr_materials._flag` recovers the integer;
+    # these keys carry that recovered value, not the raw word.
+    #
+    # ⛔ These are carried for AUDIT. Do NOT wire `self_illuminated` into the
+    # AO-vs-emissive decision in `material_builder` on the strength of this
+    # alone: that test has been "improved" twice and reverted twice, and the
+    # standing note there requires evidence from the RENDERED result, not from
+    # the file. The signal is real but documented as insufficient -- the light
+    # fixture at `mpl_arena_a` mesh 160 reads fully lit yet glows in game.
     for extra in ("flags", "flag_names", "materialfx", "is_emissive",
-                  "named_scalars", "named_scalars_resolved"):
+                  "named_scalars", "named_scalars_resolved",
+                  "lighting_flags", "receives_lighting", "self_illuminated"):
         if extra in scalars:
             spec[extra] = scalars[extra]
     return spec
