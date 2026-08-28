@@ -352,6 +352,20 @@ class ScatterPackage:
         rel = mesh.get("uv1")
         return self._floats(rel) if rel else None
 
+    def baked_color(self, mesh):
+        """Flat float32 LINEAR `[r, g, b, ...]` per vertex, or None if absent.
+
+        Quest packages only: the level's baked lighting, which that build keeps
+        in the vertex stream rather than only in a lightmap atlas. Already
+        decoded from sRGB by the exporter (`evr_quest.scene`), so this is a
+        straight linear multiplier on surface colour.
+
+        A PC package has no `"color0"` key and reports None, so nothing about
+        the existing path changes.
+        """
+        rel = mesh.get("color0")
+        return self._floats(rel) if rel else None
+
     def indices(self, mesh):
         """Flat uint32 triangle indices, or [] if absent."""
         rel = mesh.get("indices")

@@ -17,6 +17,13 @@ so the motion is visible and scrubbable, not because the game does it that way.
 Every object gets `evr_mover_timing_is_placeholder` set so this cannot be
 mistaken for real data later.
 
+## Two kinds of mover
+
+`instances` is the straight-line kind above. `skeletal` is the other kind: an
+actor `CAnimationCR` marks as animated whose model owns a `CSkeletonResource`
+and a `CAnimSetResource`. Those deform a rig rather than translating, so they
+have no `travel` and are TAGGED, not keyframed -- see `_tag_skeletal`.
+
 ## Axis conversion
 
 `mesh_builder` stands the scene upright with a +90 deg rotation about X, i.e.
@@ -93,8 +100,11 @@ def apply(doc: dict, objects_by_instance: dict, *, y_up_to_z_up: bool = True,
     from it -- the same map the lighting pass uses.
     """
     entries = (doc or {}).get("instances") or {}
+    tagged = _tag_skeletal(doc, objects_by_instance)
     if not entries:
-        return {"animated": 0, "reason": "no movers in sidecar"}
+        out = {"animated": 0, "reason": "no straight-line movers in sidecar"}
+        out.update(tagged)
+        return out
 
     frames = max(1, int(frames))
     animated = missing = 0
@@ -154,13 +164,71 @@ def apply(doc: dict, objects_by_instance: dict, *, y_up_to_z_up: bool = True,
         out["no_object"] = missing
     if distances:
         out["distances"] = sorted({round(d, 3) for d in distances})
+    out.update(tagged)
+    return out
+
+
+def _tag_skeletal(doc: dict, objects_by_instance: dict) -> dict:
+    """Mark rig-driven movers. NO keyframes -- the pose curves are not decoded.
+
+    `mpl_combat_dyson`'s fire fixtures are the case this exists for: they are
+    real moving geometry that neither mover component sees, because they deform
+    a 20-bone rig instead of sliding along a line. What IS authored is the rig
+    and the animation inventory (two of that model's four animations resolve to
+    `open` and `close`); the channel data behind them is lossy-compressed fitted
+    curves that `evr_animset` does not read.
+
+    ⛔ Deliberately NOT keyframed. The straight-line path above fabricates a
+    placeholder SCHEDULE for motion whose endpoints are authored; here the
+    motion itself is unknown, and inventing a pose would be inventing data.
+    """
+    entries = (doc or {}).get("skeletal") or {}
+    if not entries:
+        return {}
+    tagged = missing = 0
+    models = set()
+    for key, rec in entries.items():
+        try:
+            index = int(key)
+        except (TypeError, ValueError):
+            continue
+        objects = objects_by_instance.get(index) or ()
+        if not objects:
+            missing += 1
+            continue
+        animations = [a.get("name") or a.get("hash") or ""
+                      for a in (rec.get("animations") or ())]
+        for obj in objects:
+            obj["evr_mover"] = True
+            obj["evr_mover_kind"] = "skeletal"
+            obj["evr_mover_source"] = str(rec.get("source") or "")
+            obj["evr_mover_level"] = str(rec.get("level") or "")
+            obj["evr_rig_model"] = str(rec.get("model") or "")
+            obj["evr_rig_bones"] = int(rec.get("bones") or 0)
+            obj["evr_rig_bone_names"] = list(rec.get("bone_names") or ())
+            obj["evr_animations"] = animations
+            obj["evr_mover_motion_is_not_decoded"] = (
+                "this mover deforms a rig; CAnimSetResource names its "
+                "animations but its channels are lossy-compressed fitted "
+                "curves and are not decoded, so no pose is applied here")
+            tagged += 1
+        models.add(str(rec.get("model") or ""))
+    out = {"skeletal_tagged": tagged, "skeletal_models": sorted(models)}
+    if missing:
+        out["skeletal_no_object"] = missing
     return out
 
 
 def summarize(doc: dict) -> dict:
     entries = (doc or {}).get("instances") or {}
-    return {
+    skeletal = (doc or {}).get("skeletal") or {}
+    out = {
         "movers": len(entries),
         "distances": sorted({round(float(r.get("distance") or 0.0), 3)
                              for r in entries.values()}),
     }
+    if skeletal:
+        out["skeletal"] = len(skeletal)
+        out["skeletal_models"] = sorted({str(r.get("model") or "")
+                                         for r in skeletal.values()})
+    return out

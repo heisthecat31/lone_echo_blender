@@ -92,6 +92,10 @@ def _find_prefix_pair_run(data, stride, prefix_pairs, min_records=16):
 #: Where UV0 sits inside a stream-0 vertex, when the usual place works.
 UV_PREFERRED_OFFSET = 8
 
+#: A UV component must vary by at least this to count as live. Below it the
+#: slot is a constant, and a constant "UV" samples a single texture row.
+UV_MIN_SPAN = 1e-4
+
 
 def uv_stream_offset(data, base, count, stride, preferred=UV_PREFERRED_OFFSET):
     """Byte offset of UV0 inside a stream-0 vertex, VALIDATED against the data.
@@ -118,7 +122,7 @@ def uv_stream_offset(data, base, count, stride, preferred=UV_PREFERRED_OFFSET):
     as they were; 11 are not (3 at stride 16, 8 at stride 24) and every one of
     them has exactly one sane alternative.
     """
-    def plausible(offset):
+    def plausible(offset, both=False):
         if offset + 8 > stride:
             return False
         span_u = span_v = 0.0
@@ -139,10 +143,40 @@ def uv_stream_offset(data, base, count, stride, preferred=UV_PREFERRED_OFFSET):
         span_u, span_v = hi_u - lo_u, hi_v - lo_v
         # A field that never varies is a dead slot, not a UV set (stride 24's
         # +0x10 is all zeros on every vertex).
+        if both:
+            return span_u > UV_MIN_SPAN and span_v > UV_MIN_SPAN
         return (span_u + span_v) > 1e-6
 
     if count <= 0 or stride < 16:
         return preferred
+    # ⭐ PASS 1 -- an offset where BOTH components vary.
+    #
+    # ⛔ Summing the spans is what let a HALF-DEAD slot win. On a stride-16
+    # vertex, +8 lands half a vertex late (this docstring's own case): `u`
+    # comes back holding the real `v` and `v` reads the dead slot after it, so
+    # `span_v == 0` while `span_u` is healthy -- and `span_u + span_v > 1e-6`
+    # accepts it. The result is a UV set with V collapsed to a constant, which
+    # samples ONE texture row and renders as a flat wash of colour.
+    #
+    # The war room hull proves it by duplication: records 3-7 and 8-11 are the
+    # same panels twice. The twins that happened to fail at +8 fell back to +4
+    # and decode correctly; the ones that "passed" at +8 returned `u` equal to
+    # their twin's `v` -- exactly one field late. Requiring both components to
+    # vary moves 62 of that resource's 64 submeshes from +8 to +4, and the two
+    # that stay at +8 are precisely the stride-20 records, which is what the
+    # table above says they should be.
+    #
+    # Measured: `mpl_combat_war_room` 52 collapsed -> 0, `mpl_combat_dyson`
+    # 106 -> 0, `mpl_arena_a` 0 -> 0 (its 402 meshes are untouched).
+    if plausible(preferred, both=True):
+        return preferred
+    for offset in range(0, stride - 7, 4):
+        if offset != preferred and plausible(offset, both=True):
+            return offset
+    # PASS 2 -- the original, laxer rule. A UV set genuinely constant in one
+    # axis (a strip mapped along U only) is legitimate, so this never loses a
+    # case that worked before; it only stops a half-dead slot WINNING over a
+    # fully-varying one.
     if plausible(preferred):
         return preferred
     for offset in range(0, stride - 7, 4):
@@ -870,6 +904,241 @@ def _extract_descriptor_span_meshes(gpu_data, primary_data):
     return out
 
 
+#: `CGMeshListResource` record strides, per build.
+#:
+#: The Win7 records are SMALLER than the Win10 ones -- array0 0x98 -> 0x80,
+#: array1 0x70 -> 0x68, array2/3 0x150 -> 0x130.  Lone Echo 2 ships Win7
+#: resources, so parsing its primaries with the Win10 table walks straight off
+#: the rails: the count word for array3 reads as 4294967051 and every
+#: structured decode path fails.  The mesh then falls through to
+#: `_decode_summer_heuristics`, which guesses -- and guesses partly right,
+#: which is why the models looked *mostly* correct rather than obviously
+#: broken.
+MESHLIST_ARRAY_SIZES = {
+    "win10": (0x98, 0x70, 0x150, 0x150, 0x10, 0x10, 0x04, 0x04, 0x10, 0x18),
+    "win7":  (0x80, 0x68, 0x130, 0x130, 0x10, 0x10, 0x04, 0x04, 0x10, 0x18),
+}
+
+#: A count word above this is not a count -- it is a misparse.
+MESHLIST_MAX_COUNT = 8192
+#: Bytes of tail a correct parse may leave. Each build leaves a CONSTANT
+#: residual (16 on Win10, 8 on Win7); measured over 120 Echo VR and 106 Lone
+#: Echo 2 primaries, so a varying residual means the wrong table.
+MESHLIST_MAX_RESIDUAL = 31
+
+
+def _try_meshlist_arrays(meta, sizes, nslots):
+    """`(arrays, end_offset)` for one stride table, or `(None, None)`."""
+    n = len(meta)
+    arrays = []
+    off = 0
+    for stride in sizes[:nslots]:
+        if off + 4 > n:
+            return None, None
+        count = struct.unpack_from("<I", meta, off)[0]
+        if count > MESHLIST_MAX_COUNT:
+            return None, None
+        base = off + 4
+        end = base + count * stride
+        if end > n:
+            return None, None
+        arrays.append((base, count, stride))
+        off = end
+    if not (0 <= n - off <= MESHLIST_MAX_RESIDUAL):
+        return None, None
+    return arrays, off
+
+
+#: Trailing arrays a primary may simply not have.
+#:
+#: A LEVEL's mesh-list carries EIGHT arrays and a 16-byte tail where a model's
+#: carries ten and an 8-byte tail. That is why `4b2e4df6dadaa3d9` -- the Lone
+#: Echo 2 level shell itself -- parsed under neither table and fell through to
+#: the heuristics, which rendered it as triangle fans radiating from the
+#: origin. Its arrays 0/2/5 are all count 157 and perfectly well formed; the
+#: parse was simply demanding two arrays that are not there.
+MESHLIST_MIN_SLOTS = 6
+MESHLIST_MAX_SLOTS = 10
+
+
+def _meshlist_arrays(meta):
+    """`(arrays, end_offset)` from whichever build's table actually fits.
+
+    Tried rather than configured: the file either closes cleanly under a table
+    or it does not, so this needs no build flag from the caller and cannot be
+    set wrong. Win10 first because it is the common case, and the FULL slot
+    count first so a ten-array file is never mistaken for an eight-array one
+    that happens to leave a small tail.
+
+    `MESHLIST_MIN_SLOTS` is 6 because the decoder reads arrays 0, 1, 2 and 5;
+    accepting a shorter parse would hand it a table it cannot use.
+    """
+    for nslots in range(MESHLIST_MAX_SLOTS, MESHLIST_MIN_SLOTS - 1, -1):
+        for build in ("win10", "win7"):
+            arrays, off = _try_meshlist_arrays(
+                meta, MESHLIST_ARRAY_SIZES[build], nslots)
+            if arrays is not None:
+                return arrays, off
+    return [], 0
+
+
+#: Field offsets inside a Win7 `array2` mesh record (0x130 bytes).
+#: The Win10 record is 0x150 and puts `vertex_count` at +0x13c; here it is at
+#: +0x12c.  `base_offset` happens to sit at +0x128 in both.  Confirmed by the
+#: primary's OWN per-submesh AABB (array0 +0x24 min / +0x30 max) matching the
+#: decoded vertex bounds to within 1e-3 on every submesh.
+W7_REC_FORMAT = 0x120
+W7_REC_BASE = 0x128
+W7_REC_VCOUNT = 0x12c
+#: `array0` record (0x80): the authored AABB, which is what makes this
+#: decoder checkable rather than merely plausible.
+W7_AABB_MIN = 0x24
+W7_AABB_MAX = 0x30
+#: Smallest believable interleaved vertex: three float32 and nothing else.
+W7_MIN_VSTRIDE = 12
+#: Slack on the authored AABB, absolute plus relative.
+W7_AABB_TOL = 1e-3
+#: UVs are the first sane float2 at or after this -- see `_w7_uv_offset`.
+W7_UV_SEARCH_START = 12
+#: A UV outside this is not a UV. Tiling means it is NOT limited to [0,1].
+W7_UV_LIMIT = 64.0
+
+
+def _w7_uv_offset(gpu_data, base, vstride, vertex_count, sample=256):
+    """Byte offset of the UV pair inside a Win7 interleaved vertex, or None.
+
+    Found rather than tabulated. Position occupies the first 12 bytes and is
+    followed by packed (normal/tangent) words that read as NaN or absurd
+    floats, so the first offset whose float2 is finite, in range AND actually
+    varies across vertices is the UV. Measured on Lone Echo 2 that yields
+    +0x10 for the 44-byte vertex and +0x14 for the 56- and 64-byte ones, which
+    is exactly the packed-word difference between those formats.
+    """
+    n = min(vertex_count, sample)
+    if n <= 1:
+        return None
+    for off in range(W7_UV_SEARCH_START, vstride - 8 + 1, 4):
+        us = []
+        vs = []
+        ok = True
+        for j in range(n):
+            at = base + j * vstride + off
+            if at + 8 > len(gpu_data):
+                ok = False
+                break
+            u, v = struct.unpack_from("<ff", gpu_data, at)
+            if not (math.isfinite(u) and math.isfinite(v)):
+                ok = False
+                break
+            if abs(u) > W7_UV_LIMIT or abs(v) > W7_UV_LIMIT:
+                ok = False
+                break
+            us.append(u)
+            vs.append(v)
+        # A constant "UV" is a padding field, not a texture coordinate. This
+        # is the check that catches the failure this decoder was written for:
+        # the old path produced v == 0.0 for every vertex of every 44-byte
+        # submesh, which collapses the whole texture onto one scanline.
+        if ok and us and (max(us) - min(us)) > 1e-6 and (max(vs) - min(vs)) > 1e-6:
+            return off
+    return None
+
+
+def _extract_win7_cgml(gpu_data, meta, arrays):
+    """Decode Lone Echo 2 / Win7 `CGMeshListResource` geometry.
+
+    Returns `[(verts, faces, uvs), ...]` or `[]`.
+
+    Everything here is read from the primary rather than guessed: the vertex
+    stride is `(index_offset - base_offset) / vertex_count`, which the file
+    states three independent ways, and the result is checked against the
+    authored AABB before it is accepted.
+    """
+    if len(arrays) < 6:
+        return []
+    a2_base, a2_count, a2_stride = arrays[2]
+    a5_base, a5_count, a5_stride = arrays[5]
+    a0_base, a0_count, a0_stride = arrays[0]
+    if a2_count == 0 or a2_count != a5_count:
+        return []
+
+    out = []
+    for i in range(a2_count):
+        rec = a2_base + i * a2_stride
+        if rec + a2_stride > len(meta) or a5_base + (i + 1) * a5_stride > len(meta):
+            return []
+        base = struct.unpack_from("<I", meta, rec + W7_REC_BASE)[0]
+        vcount = struct.unpack_from("<I", meta, rec + W7_REC_VCOUNT)[0]
+        idx_off, idx_count, kind, extra = struct.unpack_from(
+            "<IIII", meta, a5_base + i * a5_stride)
+        if vcount == 0 or idx_count == 0 or kind not in (2, 4) or extra != 0:
+            return []
+        if idx_off <= base:
+            return []
+        vstride = (idx_off - base) // vcount
+        if vstride < W7_MIN_VSTRIDE or base + vcount * vstride > len(gpu_data):
+            return []
+        idx_stride = 4 if kind == 4 else 2
+        if idx_off + idx_count * idx_stride > len(gpu_data):
+            return []
+
+        verts = []
+        for j in range(vcount):
+            x, y, z = struct.unpack_from("<fff", gpu_data, base + j * vstride)
+            if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
+                return []
+            verts.append((x, y, z))
+
+        # ⭐ The primary states each submesh's AABB. Checking against it turns
+        # this from "these numbers look like coordinates" into a decode that
+        # cannot silently drift: a wrong stride or offset puts vertices outside
+        # the box immediately.
+        #
+        # CONTAINMENT, not equality. The authored box is usually tight -- it
+        # matches the decoded extent to 1e-3 on most submeshes -- but not
+        # always: 4 of 14 on `196af8f66fbdd374` are authored LARGER than the
+        # bind-pose geometry fills, which is what a conservative or animated
+        # bound looks like. Demanding equality rejected that whole model and
+        # dropped it into the heuristics, where a 14 MB blob takes minutes.
+        # A vertex outside the box is still a hard failure.
+        if i < a0_count:
+            arec = a0_base + i * a0_stride
+            if arec + W7_AABB_MAX + 12 <= len(meta):
+                amin = struct.unpack_from("<3f", meta, arec + W7_AABB_MIN)
+                amax = struct.unpack_from("<3f", meta, arec + W7_AABB_MAX)
+                if all(math.isfinite(v) for v in amin + amax):
+                    got_min = tuple(min(p[k] for p in verts) for k in range(3))
+                    got_max = tuple(max(p[k] for p in verts) for k in range(3))
+                    tol = W7_AABB_TOL + W7_AABB_TOL * max(
+                        abs(v) for v in amin + amax + (1.0,))
+                    if any(lo < a - tol or hi > b + tol for lo, hi, a, b in
+                           zip(got_min, got_max, amin, amax)):
+                        return []
+
+        uv_off = _w7_uv_offset(gpu_data, base, vstride, vcount)
+        uvs = []
+        if uv_off is not None:
+            for j in range(vcount):
+                u, v = struct.unpack_from("<ff", gpu_data, base + j * vstride + uv_off)
+                uvs.append((u, v))
+        else:
+            uvs = [(0.0, 0.0)] * vcount
+
+        faces = []
+        fmt = "<III" if idx_stride == 4 else "<HHH"
+        for k in range(0, idx_count - idx_count % 3, 3):
+            a, b, c = struct.unpack_from(fmt, gpu_data, idx_off + k * idx_stride)
+            if a >= vcount or b >= vcount or c >= vcount:
+                return []
+            if a == b or b == c or a == c:
+                continue
+            faces.append((a, b, c))
+        if not faces:
+            return []
+        out.append((verts, faces, uvs))
+    return out
+
+
 def _extract_metadata_meshes(gpu_data, primary_data):
     """Use Primary/CGMeshListResource metadata to extract split GPU streams.
     Returns [(verts, faces), ...] or []."""
@@ -884,25 +1153,17 @@ def _extract_metadata_meshes(gpu_data, primary_data):
             return 0
         return struct.unpack_from("<I", meta, off)[0]
 
-    sizes = (0x98, 0x70, 0x150, 0x150, 0x10, 0x10, 0x04, 0x04, 0x10, 0x18)
-    arrays = []
-    off = 0
-    for stride in sizes:
-        if off + 4 > len(meta):
-            arrays = []
-            break
-        count = u32(off)
-        base = off + 4
-        end = base + count * stride
-        if end > len(meta):
-            arrays = []
-            break
-        arrays.append((base, count, stride))
-        off = end
+    arrays, off = _meshlist_arrays(meta)
 
     submeshes = []
 
-    if arrays and len(meta) - off >= 16:
+    # ⚠ This branch reads Win10 field offsets (+0x128/+0x130/+0x13c/+0x140)
+    # out of a 0x150 record. Gate it on the stride the parse ACTUALLY found,
+    # not on the tail size: a Win7 LEVEL primary also leaves a 16-byte tail,
+    # and reading Win10 offsets out of its 0x130 records runs off the end of
+    # the file.
+    _win10_shape = bool(arrays) and arrays[2][2] == MESHLIST_ARRAY_SIZES["win10"][2]
+    if arrays and _win10_shape and len(meta) - off >= 16:
         tail_a, mesh_data_end, gpu_size = struct.unpack_from("<IIQ", meta, off)
         if gpu_size == len(gpu_data) and (mesh_data_end <= len(gpu_data)):
             array1_base, array1_count, _ = arrays[1]
@@ -978,6 +1239,10 @@ def _extract_metadata_meshes(gpu_data, primary_data):
 
     if not submeshes:
         submeshes.extend(_extract_descriptor_span_meshes(gpu_data, primary_data))
+    # Win7 (Lone Echo 2) before any heuristic: it is checked against the
+    # primary's own AABBs, so if it returns anything the answer is right.
+    if not submeshes and arrays:
+        submeshes.extend(_extract_win7_cgml(gpu_data, meta, arrays))
     if not submeshes:
         submeshes.extend(_decode_scan_metadata_fallback(meta, gpu_data))
     if not submeshes:

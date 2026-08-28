@@ -536,3 +536,59 @@ def test_the_threshold_sits_in_the_gap_between_the_two_populations():
     rather than a number fitted to one sample.
     """
     assert 0.373 < _mb().EMISSIVE_BLACK_FRACTION < 0.587
+
+
+# --- the emission strength multiplier ----------------------------------------
+
+def test_emission_multiplier_defaults_to_the_authored_value():
+    """No option, or no opts at all, must render what the material authored."""
+    mb = _mb()
+    assert mb.emission_multiplier(None) == mb.EMISSION_STRENGTH_AUTHORED
+    assert mb.emission_multiplier({}) == mb.EMISSION_STRENGTH_AUTHORED
+    assert mb.EMISSION_STRENGTH_AUTHORED == 1.0
+
+
+def test_emission_multiplier_passes_ordinary_values_through():
+    mb = _mb()
+    for value in (0.0, 0.5, 1.0, 4.0, 16.0):
+        assert mb.emission_multiplier({"emission_strength": value}) == value
+
+
+def test_a_negative_emission_multiplier_clamps_to_zero():
+    """Emission Strength is a radiance scale; negative SUBTRACTS light."""
+    mb = _mb()
+    assert mb.emission_multiplier({"emission_strength": -3.0}) == 0.0
+
+
+def test_junk_emission_multiplier_falls_back_to_authored_not_zero():
+    """Emitting nothing on junk looks like the decode bug, not a setting."""
+    mb = _mb()
+    for junk in ("bright", None, object(), [2.0]):
+        assert mb.emission_multiplier(
+            {"emission_strength": junk}) == mb.EMISSION_STRENGTH_AUTHORED
+
+
+def test_the_multiplier_scales_and_does_not_replace():
+    """Relative grading between materials must survive any setting.
+
+    A material authored at 2.0 has to stay twice as bright as its 1.0
+    neighbour -- replacing the authored value would flatten the artists'
+    grading into one uniform glow.
+    """
+    mb = _mb()
+    bright = {"emissive_intensity": 2.0}
+    dim = {"emissive_intensity": 1.0}
+    for scale in (0.5, 1.0, 4.0):
+        opts = {"emission_strength": scale}
+        a = mb.emission_strength(bright) * mb.emission_multiplier(opts)
+        b = mb.emission_strength(dim) * mb.emission_multiplier(opts)
+        assert a == 2.0 * b
+
+
+def test_the_authored_strength_still_includes_the_emissive_scale():
+    """The multiplier rides on top of `intensity * k_emissive_scale`."""
+    mb = _mb()
+    spec = {"emissive_intensity": 2.0, "emissive_scale": 3.0}
+    assert mb.emission_strength(spec) == 6.0
+    assert mb.emission_strength(spec) * mb.emission_multiplier(
+        {"emission_strength": 0.5}) == 3.0

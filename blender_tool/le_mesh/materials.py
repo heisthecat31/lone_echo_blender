@@ -1481,6 +1481,41 @@ def layer_blend_for(index: int, layer_channels: dict, scalars: dict | None = Non
     }
 
 
+#: Engine DEBUG assets, never art. Dropping them is evidence-based, not a
+#: heuristic: `34dfbe67e4424f76` is a UV TEST GRID -- a checkerboard captioned
+#: "(0, 0)" / "(1, 1)" with U and V axis arrows -- and `5c4bbfab65b919dd` is a
+#: byte-identical copy of it. Across the seven shipped packages that bind them
+#: they appear 15 times and **only ever** as `layer0_emissive_map`, never in
+#: any other role, on both the PC and the Quest side.
+#:
+#: That is the same shape as the Quest white 8x8 stub: the engine's stand-in
+#: for an emissive slot the material declares but does not author. Routed as
+#: art it goes to EMISSION at full strength, which is what put a glowing
+#: green-and-yellow test grid on the arena scoreboards.
+PLACEHOLDER_TEXTURES = {
+    "34dfbe67e4424f76": "uv test grid",
+    "5c4bbfab65b919dd": "uv test grid (byte-identical copy)",
+}
+
+
+def drop_placeholder_roles(role_textures: dict) -> tuple:
+    """`(kept, {role: reason})` -- strip engine placeholders from a role table.
+
+    The binding is REAL; it is the artwork that is a stand-in. So the drop is
+    reported rather than silent: a material that renders unlit because its only
+    emissive map was a test grid is a stated result, not a mystery.
+    """
+    kept, dropped = {}, {}
+    for role, tex in (role_textures or {}).items():
+        stem = str(tex).replace("\\", "/").rsplit("/", 1)[-1].split(".")[0].lower()
+        reason = PLACEHOLDER_TEXTURES.get(stem)
+        if reason:
+            dropped[role] = f"{stem}: {reason}"
+        else:
+            kept[role] = tex
+    return kept, dropped
+
+
 def build_material_spec(key: str, *, shaderset_hash: str = "", material_hash: str = "",
                         role_textures: dict[str, str] | None = None,
                         dxgi_by_tex: dict[str, int] | None = None,
@@ -1509,7 +1544,7 @@ def build_material_spec(key: str, *, shaderset_hash: str = "", material_hash: st
     `{}`) and purely audit: nothing in the routing reads them. They exist so a
     corpus-VOTED role can never be mistaken for an array-DECLARED one.
     """
-    role_textures = role_textures or {}
+    role_textures, placeholder_roles = drop_placeholder_roles(role_textures)
     dxgi_by_tex = dxgi_by_tex or {}
     scalars = scalars or {}
     texture_files = texture_files or {}
@@ -1636,6 +1671,9 @@ def build_material_spec(key: str, *, shaderset_hash: str = "", material_hash: st
         # --- additive keys (A3 contract) -------------------------------------
         "layers": layers,
         "primary_layer": layered["primary_layer"],
+        # Roles whose texture was an engine placeholder, not art. Reported so
+        # an unlit material is a stated result rather than a silent one.
+        "placeholder_roles": placeholder_roles,
         "unrouted_roles": layered["unrouted"],
         # E3: every entry of `unrouted_roles`, classified. Always present (often
         # `{}`) so the level and `.lemesh` specs keep identical key sets.

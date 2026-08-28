@@ -161,7 +161,60 @@ def locate_tables(blob: bytes):
     bind_off = hier_off - sum(tables[k][1] for k in range(bind[0], hier[0]))
     if bind_off < 0 or bind_off + count * BONE_STRIDE > len(blob):
         return None
-    return count, bind_off, hier_off
+    return count, _snap_bind(blob, bind_off, count), hier_off
+
+
+#: How far either side of the derived offset a phase correction may look.
+BIND_SNAP = (0, 4, -4, 8, -8)
+
+
+def _bind_window_is_clean(blob: bytes, off: int, count: int) -> bool:
+    """Does every record here hold a unit quaternion and a scale of exactly 1?
+
+    Both hold for a real bind pose -- the scale column reads `0x3F800000` on
+    every bone of every skeleton in the corpus -- and a window read at the wrong
+    PHASE fails the scale test immediately, which is what makes this usable as a
+    phase check rather than just a sanity check.
+    """
+    for i in range(count):
+        base = off + i * BONE_STRIDE
+        if base < 0 or base + BONE_STRIDE > len(blob):
+            return False
+        quat = struct.unpack_from("<4f", blob, base)
+        if not all(math.isfinite(c) for c in quat):
+            return False
+        if abs(math.sqrt(sum(c * c for c in quat)) - 1.0) > 1e-3:
+            return False
+        if abs(struct.unpack_from("<f", blob, base + 28)[0] - 1.0) > 1e-3:
+            return False
+    return True
+
+
+def _snap_bind(blob: bytes, bind_off: int, count: int) -> int:
+    """Correct a 4-byte PHASE error in the derived bind-pose offset.
+
+    ⛔ `bind_off` is derived by subtracting declared table sizes from the
+    hierarchy offset, and `_hierarchy_offset` returns the first base at which
+    the tree reads consistently. Both the true table start and the one four
+    bytes ahead of it satisfy that, because the record's leading u32 is the
+    PREVIOUS row's trailing column -- so the hierarchy is read correctly either
+    way, and the error is invisible there.
+
+    It is not invisible in the bind pose, which inherits the same phase: the
+    window then straddles records and the scale column stops reading 1.0.
+    Measured over the corpus, 88 files land clean and **20 need +4**; on
+    `de5882fe4cf82580` the unsnapped window gives scale 0.0 and translation
+    (1, 0, 0) for a bone whose real rest is the origin, and on
+    `58173136d23722e4` -- the 66-bone rig `docs/EVR_SKELETONS.md` was written
+    against -- it is wrong too.
+
+    ⚠ Five files satisfy no clean window at any of these phases; four of them
+    have a single bone. Those keep the derived offset rather than a guess.
+    """
+    for delta in BIND_SNAP:
+        if _bind_window_is_clean(blob, bind_off + delta, count):
+            return bind_off + delta
+    return bind_off
 
 
 def read_bind_pose(root: Path, model_hash: str) -> list:

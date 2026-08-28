@@ -49,20 +49,30 @@ from bpy.props import (   # type: ignore
 )
 from bpy_extras.io_utils import ImportHelper                       # type: ignore
 
+#: Colour attribute holding a Quest package's BAKED LIGHTING, linear rgb per
+#: vertex. Named by the importer, like `EchoLightmap` for the lightmap UV.
+BAKED_LIGHT_ATTR = "EchoBake"
+
+
 from . import scatter_reader
 from . import material_builder
+from . import lightmap_builder as _lightmap_builder
 
 try:
     from . import evr_lighting
     from . import evr_movers
     from . import evr_effects
     from . import evr_texture_arrays
+    from . import evr_vertex_tints
+    from . import evr_flowmap
     from . import evr_skeleton
 except ImportError:          # optional: a package without EVR lighting still imports
     evr_lighting = None
     evr_movers = None
     evr_effects = None
     evr_texture_arrays = None
+    evr_vertex_tints = None
+    evr_flowmap = None
     evr_skeleton = None
 
 #: UV layer the per-instance lightmap UVs are written to on the per-instance mesh
@@ -161,11 +171,23 @@ def build_scatter_mesh(pkg, mesh_entry, get_material, opts) -> "bpy.types.Mesh":
 
     # one material slot per draw pair (first-seen order); fall back to the mesh's
     # top-level pair if a package somehow carries no draws.
+    #
+    # A Quest mesh carrying baked lighting takes a variant that emits
+    # `albedo * bake` -- the attribute is IRRADIANCE, not a tint, so it must not
+    # multiply into base colour (see `vertex_radiance_variant`). Per-MESH, so it
+    # cannot go in the shared material.
+    def _slot(matidx, shdidx):
+        mat = get_material(matidx, shdidx)
+        if mesh_entry.get("color0"):
+            mat = material_builder.vertex_radiance_variant(
+                mat, BAKED_LIGHT_ATTR)
+        return mat
+
     if slot_keys:
         for matidx, shdidx in slot_keys:
-            mesh.materials.append(get_material(matidx, shdidx))
+            mesh.materials.append(_slot(matidx, shdidx))
     else:
-        mesh.materials.append(get_material(
+        mesh.materials.append(_slot(
             int(mesh_entry.get("matidx", -1)), int(mesh_entry.get("shdidx", -1))))
     if face_slot:
         mesh.polygons.foreach_set("material_index", face_slot)
@@ -200,8 +222,11 @@ def build_scatter_mesh(pkg, mesh_entry, get_material, opts) -> "bpy.types.Mesh":
         loop_vidx = [0] * len(mesh.loops)
         mesh.loops.foreach_get("vertex_index", loop_vidx)
         flip = opts.get("flip_v", True)
+        # The package names its lightmap set; PC packages omit the key and
+        # fall back to the legacy transport name, so their layers do not move.
+        lm_name = pkg.manifest.get("lightmap_uv") or _lightmap_builder.UV_LAYER
         for uv_name, uv in (("uv0", pkg.uv0(mesh_entry)),
-                            ("uv1", pkg.uv1(mesh_entry))):
+                            (lm_name, pkg.uv1(mesh_entry))):
             if uv is None or len(uv) < n_verts * 2:
                 continue                   # absent key (pre-uv1 package) or short blob
             layer = mesh.uv_layers.new(name=uv_name)
@@ -212,6 +237,24 @@ def build_scatter_mesh(pkg, mesh_entry, get_material, opts) -> "bpy.types.Mesh":
                 uv_flat[li * 2] = u
                 uv_flat[li * 2 + 1] = (1.0 - v) if flip else v
             layer.data.foreach_set("uv", uv_flat)
+
+    # --- baked vertex lighting (Quest packages only) ---------------------
+    # Stored per VERTEX and linear; Blender colour attributes on POINT domain
+    # take it directly. Absent on PC packages, so this simply does not run.
+    baked = pkg.baked_color(mesh_entry)
+    if baked is not None and len(baked) >= n_verts * 3:
+        try:
+            attr = mesh.color_attributes.new(
+                name=BAKED_LIGHT_ATTR, type="FLOAT_COLOR", domain="POINT")
+            flat = [0.0] * (n_verts * 4)
+            for vi in range(n_verts):
+                flat[vi * 4] = baked[vi * 3]
+                flat[vi * 4 + 1] = baked[vi * 3 + 1]
+                flat[vi * 4 + 2] = baked[vi * 3 + 2]
+                flat[vi * 4 + 3] = 1.0
+            attr.data.foreach_set("color", flat)
+        except (RuntimeError, AttributeError):
+            pass
 
     mesh.update()
 
@@ -801,6 +844,8 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
         "instances_placed": place["placed"],
         "instances_skipped_missing_mesh": place["skipped_missing_mesh"],
         "lod_level": lod_level,
+        "accent_tint": opts.get("accent_tint", True),
+        "rim_lighting": opts.get("rim_lighting", True),
         "lod_max_level": pkg.max_lod_level,
         "lod_groups": int(pkg.lod.get("num_groups", 0)),
         "triangles_unique": n_tris,
@@ -835,6 +880,28 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
     max_instances: IntProperty(name="Max Instances", default=0, min=0,
                                description="Cap placed instances for a fast preview "
                                            "(0 = place all)")   # type: ignore
+    evr_flowmap_anim: BoolProperty(
+        name="Animate Flowmaps", default=True,
+        description="Distort flowmap surfaces (moving water) using the "
+                    "material's flow direction field")   # type: ignore
+    evr_flowmap_rate: FloatProperty(
+        name="Flow Rate", default=0.15, min=0.0, max=5.0,
+        description="Flow cycles per second. NOT decoded from the game data "
+                    "-- a presentation choice")   # type: ignore
+    evr_flowmap_strength: FloatProperty(
+        name="Flow Strength", default=0.15, min=0.0, max=1.0,
+        description="How far a texel is pushed, in UV units. NOT decoded "
+                    "from the game data")   # type: ignore
+    evr_rim_lighting: BoolProperty(
+        name="Rim Lighting", default=True,
+        description="Build the Fresnel rim glow from the material's "
+                    "rimlighting map and accent colour -- the arena's team "
+                    "edge glow. The map is otherwise unused")   # type: ignore
+    evr_accent_tint: BoolProperty(
+        name="Team / Accent Tint", default=True,
+        description="Apply the per-material accent colour. On mpl_arena_a this "
+                    "is what makes the two goal ends blue and orange -- their "
+                    "textures are greyscale and carry no colour at all")   # type: ignore
     lod_level: EnumProperty(
         name="LOD Level",
         description="Which level of detail to place. Every LOD level of a prop is a "
@@ -907,6 +974,26 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "for, so its five coefficients are recorded on the scene "
                     "as evr_tonemap_* and the nearest view transform is "
                     "selected instead")   # type: ignore
+    emission_strength: FloatProperty(
+        name="Emission Strength",
+        description="Multiplier on each material's AUTHORED emissive "
+                    "intensity. 1.0 is what the material specifies. This "
+                    "scales rather than replaces, so a material authored "
+                    "at 2.0 stays twice as bright as its 1.0 neighbour at "
+                    "every setting. Raise it to make glowing surfaces read "
+                    "stronger; 0 turns emission off. Bloom Strength widens "
+                    "the halo, this brightens the source",
+        default=1.0, min=0.0, soft_max=16.0, precision=2)   # type: ignore
+    bloom_strength: FloatProperty(
+        name="Bloom Strength",
+        description="Multiplier on the authored bloom gain. 1.0 is what the "
+                    "engine grades -- the blurred image added back at about "
+                    "5.5%%, subtle by design, which is what makes an emissive "
+                    "surface read as glowing rather than flat. Raise it for a "
+                    "stronger glow than the game's; 0 disables bloom. Only the "
+                    "AMOUNT scales: magnitude, exposure offset, octaves and "
+                    "blur radii keep the shape the level authored",
+        default=1.0, min=0.0, soft_max=8.0, precision=2)   # type: ignore
     evr_particles: BoolProperty(
         name="Particle Emitters (markers)",
         default=True,
@@ -923,7 +1010,11 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "and the travel is the vector between them. Start and end "
                     "are authored; the TIMING is not (the trigger and duration "
                     "live in CScriptCR, which is not decoded), so the frame "
-                    "spacing is a placeholder. Does nothing on a level with no "
+                    "spacing is a placeholder. Also TAGS the other kind of "
+                    "mover -- geometry that deforms a rig rather than sliding "
+                    "(mpl_combat_dyson's fire fixtures) -- with its bones and "
+                    "animation names; those get no keyframes because the pose "
+                    "curves are not decoded. Does nothing on a level with no "
                     "movers")   # type: ignore
     evr_mover_frames: IntProperty(
         name="Mover Frames",
@@ -939,7 +1030,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "a lightmap UV. This is unrelated to Per-Instance Lightmap "
                     "below, which is the Lone Echo path")   # type: ignore
     evr_lightmaps: BoolProperty(
-        name="Baked Lightmaps (UNFINISHED)",
+        name="Baked Lightmaps",
         default=False,
         description="Wire the baked lightmap atlas as EMITTED RADIANCE "
                     "(albedo x baked irradiance) rather than into base colour. "
@@ -949,13 +1040,17 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "everything (mpl_arena_a keeps 2 of 138 lights as dynamic), "
                     "so that came out near-black. Per-instance chart UVs "
                     "measure a median 2.6-texel edge, i.e. well-formed.\n\n"
-                    "⚠ UNFINISHED, and OFF by default. What works: SH4 levels "
-                    "(mpl_arena_a and the tutorial maps), evaluated against the "
-                    "engine's own Geomerics fit. What does NOT: the 12 SG5 "
-                    "levels still use a fixed-weight collapse with no "
-                    "tangent-space transform; baked specular is not "
-                    "implemented; and the two occlusion maps are decoded and "
-                    "never applied. Turn it on to experiment, not to trust")   # type: ignore
+                    "SH4 levels are evaluated against the engine's own "
+                    "Geomerics fit; SG5 levels collapse their five lobes in the "
+                    "shader from the raw BC6H slices, so nothing is clamped.\n\n"
+                    "⚠ Still approximate: the SG5 collapse is for the "
+                    "UNPERTURBED normal, so a normal-mapped SG5 surface is lit "
+                    "as though it were flat; baked specular is not implemented; "
+                    "and the two occlusion maps are decoded and never applied.\n\n"
+                    "⛔ OFF by default only because it doubles the mesh "
+                    "datablock count -- a lightmapped instance needs its own "
+                    "UVs. The atlas orientation bug that made lit surfaces "
+                    "patchy (V sampled upside down) is fixed")   # type: ignore
     show_backfaces: BoolProperty(
         name="Show Backfaces (ignore single-sided)",
         default=True,
@@ -977,6 +1072,20 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "lights are the static-bake rig -- their contribution is "
                     "already in the lightmap, so importing both double-counts "
                     "it")   # type: ignore
+    evr_light_occlusion: BoolProperty(
+        name="Baked Light Occlusion",
+        default=False,
+        description="Shadow the IMPORTED LIGHTS with the level's baked "
+                    "occlusion map (k_dirlight_occlusion_map / "
+                    "k_punctual_occlusion_map), which the engine samples at the "
+                    "page slice and multiplies into its dynamic light terms.\n\n"
+                    "Applied to base colour, so the BAKED term is untouched: "
+                    "where the mask is 0 a surface keeps its full baked "
+                    "lighting and merely stops responding to lamps.\n\n"
+                    "⚠ OFF by default because it is a large change wherever "
+                    "lights are imported -- on mpl_arena_a the mask is "
+                    "uniformly 0 on 2 of 5 pages, the arena being enclosed. "
+                    "Needs a package re-extracted since the masks were added")   # type: ignore
     instance_lightmap: BoolProperty(
         name="Per-Instance Lightmap",
         default=False,
@@ -1056,6 +1165,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             "max_instances": self.max_instances,
             "uv_scroll_rate": self.uv_scroll_rate,
             "lod_level": int(self.lod_level),
+            "emission_strength": float(self.emission_strength),
+            "accent_tint": self.evr_accent_tint,
+            "rim_lighting": self.evr_rim_lighting,
             "auto_materials": self.auto_materials,
             "materials_json": self.materials_json or None,
             "textures_base": self.textures_base or None,
@@ -1084,6 +1196,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             self._import_evr_effects(context, summary)
         self._tag_texture_overrides(context, summary)
         self._apply_texture_arrays(context, summary)
+        self._apply_vertex_tints(context, summary)
+        self._apply_flowmaps(context, summary)
         if self.evr_armature:
             self._import_evr_armature(context, summary)
         self.report({"INFO"},
@@ -1183,6 +1297,71 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                         "from when skeleton.json was written (LOD or split "
                         "mismatch). Re-run evr_apply_skeleton.py."
                         % bound["skipped_vertex_mismatch"])
+
+    def _apply_flowmaps(self, context, summary):
+        """Animate flowmap surfaces -- the moving water.
+
+        A flowmap pushes each texel along its own direction, which the UV
+        scroll cannot express; see `evr_flowmap` for the two-phase graph and
+        for why the rate and strength are options rather than decoded values.
+        """
+        if evr_flowmap is None or not self.evr_flowmap_anim:
+            return
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        objects = list(coll.all_objects) if coll else []
+        if not objects:
+            return
+        path = Path(self.filepath)
+        root = path.parent if path.is_file() else path
+        result = evr_flowmap.apply_to_objects(
+            objects, root, self.evr_flowmap_rate, self.evr_flowmap_strength)
+        if result.get("materials"):
+            self.report({'INFO'}, "Flowmaps: %d material(s) animated "
+                                  "(rate %.3f, strength %.3f -- not decoded, "
+                                  "adjust to taste)"
+                        % (result["materials"], self.evr_flowmap_rate,
+                           self.evr_flowmap_strength))
+
+    def _apply_vertex_tints(self, context, summary):
+        """Tint no-albedo surfaces by the flat colour their geometry carries.
+
+        `mpl_combat_combustion`'s water is greyscale emissive facets plus a
+        blue vertex tint; without this it imports white. Applied only where the
+        material samples no albedo of its own -- see `evr_vertex_tints` for why
+        that gate, and why black tints are skipped.
+        """
+        if evr_vertex_tints is None:
+            return
+        doc = evr_vertex_tints.load(self.filepath)
+        if doc is None:
+            return
+
+        specs = {}
+        try:
+            path = Path(self.filepath)
+            root = path.parent if path.is_file() else path
+            raw = json.loads((root / "materials.json").read_text(encoding="utf-8"))
+            for entry in raw.get("materials") or ():
+                specs[entry.get("matidx")] = entry.get("spec") or {}
+        except (OSError, ValueError, AttributeError):
+            specs = {}
+
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        by_mesh = {}
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_mesh_index")
+            if index is not None:
+                by_mesh.setdefault(int(index), []).append(obj)
+        if not by_mesh:
+            return
+
+        result = evr_vertex_tints.apply_tints(doc, self.filepath, by_mesh, specs)
+        if result.get("applied"):
+            self.report({'INFO'}, "Vertex tints: %d object(s) tinted over %d "
+                                  "material variant(s) (%d left alone: they "
+                                  "sample their own albedo)"
+                        % (result["applied"], result.get("variants", 0),
+                           result.get("skipped_has_albedo", 0)))
 
     def _apply_texture_arrays(self, context, summary):
         """Give each object bound to a texture ARRAY its own slice.
@@ -1287,12 +1466,41 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                         "runtime-drawn surfaces (placeholder is expected)"
                         % (tagged, runtime))
 
+    def _apply_default_bloom(self, context):
+        """Bloom from the game's modal preset, for a package with no effects.json."""
+        result = (evr_effects.apply_bloom(evr_effects.default_bloom_doc(),
+                                          context.scene,
+                                          strength=self.bloom_strength)
+                  or {}).get("bloom")
+        if isinstance(result, dict):
+            self.report({"INFO"},
+                        "Bloom: x%g at -%g EV (gain %.4f%s) -- the game's most "
+                        "common preset; this package ships no effects.json of "
+                        "its own. Emissive surfaces render flat without it."
+                        % (result["magnitude"], result["exposure_offset"],
+                           result["gain"],
+                           "" if result["is_authored"]
+                           else ", authored %.4f x%g" % (result["authored_gain"],
+                                                         result["strength"])))
+        elif result:
+            # Never silent: a missing glow reads as a broken material.
+            self.report({"WARNING"}, "Bloom not built: %s" % result)
+
     def _import_evr_effects(self, context, summary):
         """Fog, exposure and particle-emitter markers, when the level has them."""
         if evr_effects is None:
             return
         doc = evr_effects.load(self.filepath)
         if doc is None:
+            # ★ No `effects.json` does not mean "no post-process". Bloom is
+            # what makes an emissive surface read as GLOWING -- without it the
+            # surface renders at exactly its emissive value and stops, which
+            # looks coloured-but-flat and reads as a material bug. Bloom is
+            # authored per LEVEL, so a standalone MODEL package has none of
+            # its own; stand in the game's most common preset rather than
+            # skipping the pass entirely.
+            if self.evr_effects:
+                self._apply_default_bloom(context)
             return
         notes = []
         if self.evr_effects:
@@ -1306,7 +1514,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                 notes.append("world %s (the engine has no constant ambient; "
                              "raise World Ambient to see geometry while baked "
                              "lighting is off)" % world["world"])
-            fog = evr_effects.apply_fog(doc, context.scene)
+            fog = evr_effects.apply_fog(doc, context.scene,
+                                        y_up_to_z_up=self.y_up_to_z_up)
+            # Bloom BEFORE the tonemap: the engine grades `colour + bloom`,
+            # and it is what makes an emissive surface read as glowing.
+            bloom = evr_effects.apply_bloom(doc, context.scene,
+                                            strength=self.bloom_strength)
             tonemap = evr_effects.apply_tonemap(doc, context.scene)
             if tonemap.get("tonemap", "").startswith("built"):
                 # `apply_tonemap` takes exposure over from the view settings so
@@ -1324,12 +1537,36 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                                  % exposure["view_transform"])
                 if tonemap.get("tonemap"):
                     notes.append("tonemap %s" % tonemap["tonemap"])
+            _bl = bloom.get("bloom") if isinstance(bloom, dict) else None
+            if isinstance(_bl, dict):
+                notes.append("bloom magnitude %g at %g stops below exposure "
+                             "(gain %.3f%s) over %d octave(s) %s -- added "
+                             "before the curve, as the engine does"
+                             % (_bl["magnitude"], _bl["exposure_offset"],
+                                _bl["gain"],
+                                # Say so when the render is no longer what the
+                                # level authored -- a scaled gain is a choice.
+                                "" if _bl["is_authored"]
+                                else ", authored %.3f x%g strength"
+                                     % (_bl["authored_gain"], _bl["strength"]),
+                                _bl["iterations"], _bl["octave_radii_px"]))
+            elif _bl:
+                notes.append("bloom %s" % _bl)
             if fog.get("fog") == "built":
-                notes.append("fog %s over %.0f-%.0f m at %.2f (compositor "
-                             "depth ramp, matching the engine's model; the "
-                             "height band is not applied)"
+                notes.append("fog %s over %.0f-%.0f m at %.3f = alpha %.2f x "
+                             "intensity %.2f (compositor depth ramp, matching "
+                             "the engine's model)"
                              % (fog["color"], fog["band"][0], fog["band"][1],
-                                fog.get("intensity", 0.0)))
+                                fog.get("intensity", 0.0),
+                                fog.get("density", 1.0),
+                                fog.get("authored_intensity", 0.0)))
+                _h = fog.get("height")
+                if isinstance(_h, dict):
+                    notes.append("fog height band %.0f-%.0f m on %s (dense "
+                                 "low, clear high; from the Position pass)"
+                                 % (_h["band"][0], _h["band"][1], _h["axis"]))
+                elif _h:
+                    notes.append("fog height band: %s" % _h)
             elif fog.get("fog"):
                 notes.append("fog %s" % fog["fog"])
         if self.evr_particles:
@@ -1377,6 +1614,17 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                         "imported object%s"
                         % (counts["movers"],
                            " (%s)" % result["reason"] if result.get("reason") else ""))
+        # SKELETAL movers deform a rig instead of sliding, so they are tagged
+        # rather than keyframed -- their pose curves are not decoded.
+        if result.get("skeletal_tagged"):
+            self.report(
+                {"INFO"},
+                "Echo VR rigged movers: %d object(s) tagged over %d model(s) "
+                "-- these deform a skeleton, so they carry their bone list and "
+                "animation names (evr_animations) and NO keyframes; the pose "
+                "curves in CAnimSetResource are not decoded"
+                % (result["skeletal_tagged"],
+                   len(result.get("skeletal_models") or ())))
 
     def _import_evr_lighting(self, context, summary):
         """Load the package's `lightmaps.json`, if it has one."""
@@ -1423,7 +1671,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             result = evr_lighting.wire_instance_lightmaps(
                 doc, self.filepath, objects_by_instance,
                 intensity=self.lightmap_intensity,
-                y_up_to_z_up=self.y_up_to_z_up)
+                y_up_to_z_up=self.y_up_to_z_up,
+                occlusion=self.evr_light_occlusion)
             total += result.get("wired", 0)
             if result.get("reason"):
                 notes.append(result["reason"])

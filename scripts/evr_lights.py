@@ -44,6 +44,7 @@ static bake. `dynamic_only()` applies that gate.
 
 from __future__ import annotations
 
+import math
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -55,7 +56,8 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from evr_resource_types import SCENE_RESOURCE, normalise_hash, resolve_type_dir
+from evr_resource_types import (SCENE_RESOURCE, normalise_hash, resolve_type_dir,
+                                resource_path)
 
 #: `SGLightParams` stride, and the offsets within it.
 LIGHT_STRIDE = 360
@@ -75,6 +77,19 @@ L_INTENSITY = 0x28
 L_RANGE = 0x2C
 L_DIRECTION = 0x54
 L_OWNER = 0x158
+
+#: The SPOT cone, stored three ways in the same record. `+0x44` is the FULL
+#: angle in radians; `+0x60` and `+0x64` are the cosines of the HALF inner and
+#: outer angles, i.e. what the shader actually multiplies against.
+#:
+#: ⭐ The identity `2 * acos(+0x64) == +0x44` holds for **77 of 77** spots
+#: across mpl_arena_a, mpl_combat_dyson, mpl_tutorial_lobby and
+#: d09afd15b1c75c04 -- 0 disagreements -- and the angles come out on round
+#: degrees (59, 75, 81 outer; 25 inner), which is what an authored value looks
+#: like. All three are constant across POINT records and vary only for spots.
+L_SPOT_ANGLE = 0x44
+L_SPOT_COS_INNER = 0x60
+L_SPOT_COS_OUTER = 0x64
 
 POINT, SPOT, DIRECTIONAL = 0, 1, 2
 TYPE_NAMES = {POINT: "POINT", SPOT: "SPOT", DIRECTIONAL: "SUN"}
@@ -98,6 +113,10 @@ class Light:
     flags: int = 0
     #: Owning entity, or None when the light is entity-free.
     owner: str | None = None
+    #: SPOT only: the full cone angle in radians, and the full INNER angle
+    #: inside which the light is at full strength. `None` on other types.
+    cone: float | None = None
+    cone_inner: float | None = None
 
     @property
     def type_name(self) -> str:
@@ -107,6 +126,15 @@ class Light:
     def shades_dynamic(self) -> bool:
         """Whether the engine puts this light in the DYNAMIC shading list."""
         return self.kind >= DIRECTIONAL
+
+
+def _cone_from_cos(value: float) -> float | None:
+    """`2 * acos(cos_half)` -- the full angle, in radians, or None if unusable."""
+    if not isinstance(value, float) or value != value:
+        return None
+    if not -1.0 <= value <= 1.0:
+        return None
+    return 2.0 * math.acos(value)
 
 
 def parse_scene_lights(data: bytes) -> list:
@@ -140,6 +168,11 @@ def parse_scene_lights(data: bytes) -> list:
             name=struct.unpack_from("<Q", data, base + L_NAME)[0],
             flags=struct.unpack_from("<I", data, base + L_FLAGS)[0],
             owner=(None if owner == NULL_SYMBOL else f"{owner:016x}"),
+            cone=(struct.unpack_from("<f", data, base + L_SPOT_ANGLE)[0]
+                  if kind == SPOT else None),
+            cone_inner=(_cone_from_cos(
+                struct.unpack_from("<f", data, base + L_SPOT_COS_INNER)[0])
+                if kind == SPOT else None),
         ))
     return out
 
@@ -151,10 +184,13 @@ def dynamic_only(lights) -> list:
 
 def level_lights(root: Path, level_hash: str) -> list:
     """`[Light, ...]` for a level, or `[]`."""
-    path = resolve_type_dir(root, SCENE_RESOURCE) / normalise_hash(level_hash)
-    if not path.exists():
-        path = path.with_suffix(".bin")
-    if not path.exists():
+    # `resource_path` tolerates BOTH on-disk spellings (zero-padded and
+    # leading-zero-stripped) and the optional `.bin` suffix. A raw join sees
+    # only the padded name, so a level such as `mpl_combat_war_room`
+    # (`08a1af9e108def0b`, stored as `8a1af9e108def0b`) silently returned
+    # nothing at all.
+    path = resource_path(root, SCENE_RESOURCE, level_hash)
+    if path is None:
         return []
     return parse_scene_lights(path.read_bytes())
 

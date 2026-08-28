@@ -692,6 +692,37 @@ def emissive_is_ao(spec: dict, channels: dict) -> bool:
     if not channels.get("base_color"):
         return False
 
+    # ⛔ NOTHING TO OCCLUDE, TWICE OVER. Both tests below are STRUCTURAL --
+    # they read what the material IS, not what its texture looks like, which is
+    # the trap the two reverted attempts fell into.
+    #
+    #   * a TRANSPARENT surface has no ambient term to occlude. Ambient
+    #     occlusion darkens light arriving at an opaque surface; a blended one
+    #     is showing what is behind it.
+    #   * a layer that binds a FLOWMAP beside its emissive is an ANIMATED
+    #     GLOW. Occlusion does not flow.
+    #
+    # ⭐ `mpl_arena_a`'s geodesic panels are the case that found this.
+    # `a759b750b7db7253` (9621 m2 over 8 objects) and `a759b750b7db7153`
+    # (1264 m2) are both `eMTForwardTransparent` / BLEND, the second binds
+    # `layer1_flowmap_map` beside its emissive, and both share emissive map
+    # `031c12f11108f92d` -- a greyscale gradient averaging 0.381 with NO pure
+    # black at all. `black_fraction == 0.0` sent them down the AO path, which
+    # inverted a glow into Base Colour and left the panels unlit.
+    #
+    # ⚠ A mean of 0.381 is also far too dark to BE an occlusion map (those sit
+    # near white), but brightness is exactly the kind of appearance test that
+    # was reverted twice, so it is noted and NOT used. These two tests stand on
+    # the material's declared type instead.
+    #
+    # Corpus-wide this moves 20 of the 117 materials the black-fraction test
+    # calls AO: arena 4, combustion 8, dyson 5, lobby_b2 3.
+    if resolve_render_mode(spec) != "OPAQUE" \
+            or spec.get("mattype_name") == "eMTForwardTransparent":
+        return False
+    if channels.get("flowmap"):
+        return False
+
     # ★ WHAT THE MAP ACTUALLY CONTAINS, where the extractor could measure it.
     # This decides BOTH ways and outranks the structural test below, so a
     # material carrying a genuine occlusion map in its emissive slot still
@@ -1069,6 +1100,29 @@ def emission_strength(spec: dict) -> float:
     return _f("emissive_intensity", 1.0) * _f("emissive_scale", 1.0)
 
 
+#: Multiplier that leaves emission exactly as the material authored it.
+EMISSION_STRENGTH_AUTHORED = 1.0
+
+
+def emission_multiplier(opts: dict | None) -> float:
+    """The user's `emission_strength` multiplier, coerced.
+
+    Negatives clamp to zero rather than passing through: Blender's Emission
+    Strength is a radiance scale, and a negative one subtracts light from the
+    surface -- a black hole where a glow should be, which reads as a decode
+    bug rather than a setting.
+
+    Nonsense falls back to the authored 1.0, never to 0.0, for the same reason
+    the bloom multiplier does: silently emitting nothing looks exactly like the
+    bug this pass exists to fix, and gets blamed on the material.
+    """
+    try:
+        return max(0.0, float((opts or {}).get("emission_strength",
+                                               EMISSION_STRENGTH_AUTHORED)))
+    except (TypeError, ValueError):
+        return EMISSION_STRENGTH_AUTHORED
+
+
 def refractive_index(spec: dict) -> float:
     v = spec.get("ior")
     if v is None:
@@ -1078,6 +1132,326 @@ def refractive_index(spec: dict) -> float:
     except (TypeError, ValueError):
         return DEFAULT_IOR
     return v if v > 1.0 else DEFAULT_IOR
+
+
+def rim_lighting_enabled(opts) -> bool:
+    """Is the rim-light term built? Default yes."""
+    if not opts:
+        return True
+    return bool(opts.get("rim_lighting", True))
+
+
+def translucent_emissive_alpha_enabled(opts: dict | None) -> bool:
+    """`opts['translucent_emissive_alpha']` -- default ON.
+
+    (The default is `True` on the line below; this line read "default OFF" and
+    was simply wrong about the code beneath it.)
+
+    ON: a blended surface left at Alpha = 1.0 is an opaque card, which is the
+    one thing an `eBlendTranslucent` surface can never be, and 262 of the 3128
+    materials in the corpus are in that state.
+
+    ⚠ The alpha itself is `inferred`, not shader-confirmed -- the engine reads
+    it from a source these materials do not bind, so the emissive luminance is
+    a reconstruction. It over-dissolves where the winning layer is dark: on
+    `mpl_combat_dyson`'s capture point the sphere goes nearly invisible.
+    `opts['translucent_emissive_alpha'] = False` restores the opaque card.
+    """
+    if not opts:
+        return True
+    return bool(opts.get("translucent_emissive_alpha", True))
+
+
+def build_translucent_emissive_alpha(nt, bsdf, spec, channels, mat) -> bool:
+    """Drive Alpha from the emission for a BLENDED surface that binds no alpha.
+
+    `eBlendTranslucent` (12) and the other non-additive blend equations are
+    alpha blending: `dst = src*a + dst*(1-a)`. The importer sets
+    `surface_render_method` to BLENDED for them and then leaves `Alpha` at 1.0,
+    which is the one value that makes blending a no-op -- the surface renders
+    as a solid card. `eBlendAdditive` had exactly this bug and was fixed by
+    adding a Transparent BSDF beside it; the translucent modes were never
+    given an equivalent.
+
+    **262 of 3128 materials across 18 levels** are blended, bind no alpha
+    anywhere (no alpha plane, no alpha map, `base_color_factor.a == 1`) and are
+    therefore drawn fully opaque today -- combustion 53, fission 49, dyson 47,
+    lobby_b2 34.
+
+    ⭐ Restricted to EMISSION-DRIVEN surfaces (an emission channel and no base
+    colour). For those the emitted colour IS the whole contribution, so its
+    luminance is the coverage: a black texel emits nothing and must not occlude
+    what is behind it, exactly the identity argument the additive path makes.
+    A blended surface that binds a BASE COLOUR is left alone -- there the alpha
+    is a real authored quantity this cannot reconstruct, and guessing would
+    dissolve solid geometry.
+
+    ⚠ `inferred`, not shader-confirmed: the engine reads its alpha from a
+    source this material does not bind, so the luminance is a reconstruction.
+    It can only ever make a surface MORE transparent than the opaque card it
+    replaces. `opts['translucent_emissive_alpha']` turns it off.
+
+    `mpl_combat_dyson`'s capture point (i1822 / i1826, `eMTForwardTransparent`,
+    `eBlendTranslucent`) is the reported case: a hollow holographic sphere that
+    imported as a solid ball.
+    """
+    alpha_in = _principled_input(bsdf, "Alpha")
+    emis_in = _principled_input(bsdf, "Emission Color", "Emission")
+    if alpha_in is None or emis_in is None:
+        return False
+    if alpha_in.is_linked or not emis_in.is_linked:
+        return False
+    try:
+        if float(alpha_in.default_value) < 0.999:
+            return False                      # a real alpha is already set
+    except (TypeError, ValueError):
+        return False
+    if resolve_render_mode(spec) == "OPAQUE":
+        return False
+    if is_additive_blend(spec):
+        return False                          # the Add/Transparent path owns it
+    if channels.get("base_color"):
+        return False
+    # ⭐ A BARE RIM is an emission source too, even though it is a ROLE and
+    # never appears in `channels`. `build_rim_lighting` runs immediately before
+    # this and, for a material that binds nothing but a rim mask, links the
+    # glow straight into Emission Color and sets `le_rim_lighting` WITHOUT an
+    # `le_rim_mode` (there was no prior emission to gate or add to). That is
+    # `rim_gates_emission`'s class 2 -- "the rim is the entire contribution" --
+    # which is the same sentence this function's own docstring uses to justify
+    # luminance-as-coverage. Keying only on `channels` made the two rules
+    # disagree: the surface got its rim glow and then kept Alpha = 1.0, so it
+    # still drew as the opaque card this function exists to eliminate.
+    #
+    # `mpl_combat_war_room`'s 3fde3ed3052c03af and 3aad23060860cdf3 are the
+    # case -- both bind ONLY `layer0_rim_map`, both are eBlendTranslucent, and
+    # both rendered as flat white slabs (the ceiling panels) against dark
+    # panels with bright edges in game.
+    #
+    # Deliberately NOT widened past this: a rim that GATED or ADDED to an
+    # existing emission (`le_rim_mode` set) has a real emissive surface
+    # underneath, and that surface's coverage is not the rim's business.
+    bare_rim = bool(mat.get("le_rim_lighting")) and not mat.get("le_rim_mode")
+    if not channels.get("emission") and not bare_rim:
+        return False
+
+    lum = nt.nodes.new("ShaderNodeRGBToBW")
+    lum.label = "translucent alpha = emissive luminance"
+    lum.location = (bsdf.location.x - 320, bsdf.location.y - 620)
+    nt.links.new(emis_in.links[0].from_socket, lum.inputs[0])
+    nt.links.new(lum.outputs[0], alpha_in)
+    mat["le_translucent_emissive_alpha"] = (
+        "alpha = luminance(emission); the material binds no alpha source "
+        "(inferred, opts['translucent_emissive_alpha'])")
+    return True
+
+
+#: Role keys that name a rim MASK. The corpus spells it two ways and the
+#: matcher only ever knew one of them.
+#:
+#: ⛔ `next(k for k in roles if "rimlighting" in k)` missed every `*_rim_map`.
+#: Across the 18 shipped levels 138 materials bind a rim mask under EIGHT
+#: distinct keys -- `layer0_rimlighting_map` (54) and `layer1_rimlighting_map`
+#: (21) matched, while `layer0_rim_map` (38), `layer2_rim_map` (22),
+#: `layer1_rim_map` (16), `layer3_rim_map` (14) and `layer1_secondary_rim_map`
+#: (2) did not. 72 of 138 never matched at all.
+#:
+#: `_rim_map` as a SUFFIX rather than `"rim" in k`, so a future
+#: `*_primary_*` role cannot be swept up by the substring.
+RIM_ROLE_SUFFIX = "_rim_map"
+
+
+def rim_role_of(roles) -> str | None:
+    """The rim mask role in `roles`, under either spelling, or None."""
+    return next((k for k in sorted(roles or ())
+                 if "rimlighting" in k or k.endswith(RIM_ROLE_SUFFIX)), None)
+
+
+_LAYER_RE = __import__("re").compile(r"^layer(\d+)_")
+
+
+def rim_gates_emission(spec: dict, rim_role: str) -> bool:
+    """Is this rim mask a GATE on the emission rather than a glow of its own?
+
+    ⭐ Three structural classes across the 138 rim-binding materials in the
+    shipped tree, and only the third can be a gate:
+
+      78  the rim shares its layer with an albedo/emissive -- it belongs to
+          that surface and ADDS an edge glow to it. `mpl_arena_a` matidx 95
+          (rim + albedo + normal + specular, accent `(1.0, 0.323, 0.204)`) is
+          the case the additive path was validated on.
+      34  the rim is bare AND the material binds nothing else at all --
+          `mpl_arena_a` matidx 66 and 172 bind ONLY `layer0_rimlighting_map`.
+          The rim is the entire contribution, so additive is the only reading.
+      16  the rim is bare, the material carries EMISSION on other layers, and
+          binds no base colour. A mask on a layer with no surface of its own,
+          sitting above emissive layers, has nothing to add to -- the only
+          thing it can be modulating is that emission.
+
+    ⚠ The third class is one authored archetype, not a statistical residue:
+    every member binds exactly `layer0_emissive_map`, `layer1_emissive_map`,
+    `layer2_rim_map`, `layer3_rim_map` -- the glowing panel, reused across
+    `mpl_combat_war_room`, both celebration rooms, combustion, dyson and the
+    global menus.
+
+    Gating it is what makes such a panel dark face-on with bright edges. Left
+    additive, layer 1's broad fill lights the whole face flat.
+    """
+    roles = spec.get("role_textures") or {}
+    hit = _LAYER_RE.match(rim_role or "")
+    if hit is None:
+        return False
+    index = int(hit.group(1))
+    for key in roles:
+        other = _LAYER_RE.match(key)
+        if key != rim_role and other and int(other.group(1)) == index:
+            return False                       # class 1: shares its layer
+    if not any("emissive" in k for k in roles):
+        return False                           # class 2: nothing to gate
+    if any(("albedo" in k) or ("diffuse" in k) for k in roles):
+        return False                           # a real surface -- leave it
+    return True
+
+
+def build_rim_lighting(nt, bsdf, spec, pkg_dir, mat):
+    """A Fresnel rim glow, tinted by the material's accent colour.
+
+    ## Why this exists
+
+    `mpl_arena_a`'s goal ends bind `layer0_rimlighting_map` and
+    `layer1_rimlighting_map` and BOTH sit in `unrouted_roles` -- nothing
+    consumed them, so the only lit term these surfaces had was a greyscale
+    albedo. In game they read as a coloured edge glow, which is what a rim
+    term is: brightest where the surface turns away from the viewer.
+
+    ## What drives it
+
+    The colour is `accent_tint` (see `evr_materials`, where the slot and the
+    evidence are documented). Its ALPHA carries an intensity -- the arena's two
+    ends author 0.8 and 0.5 -- which is why `PARAM_ARITY` types a rim tint as a
+    Color4 rather than a Real3.
+
+    The rim MAP is a mask, not a colour: `0dc73d47fd33fc29` averages 0.040 and
+    `75501b0000b96699` 0.059, i.e. mostly black with bright edges. It is
+    multiplied in so the glow appears only where the artist painted it.
+
+    ## The Fresnel exponent (`accent_pow`)
+
+    RECOVERED. The accent group is SIX words, not four -- RGB, intensity, a
+    0.0 separator, then the exponent -- so the constant needs no slot name at
+    all, only a fixed offset. `evr_materials` decodes it as `accent_pow`; the
+    arena's blue goal end reads 3.333 and 4.5, the two values that comment
+    always cited. Applied here as `facing ** accent_pow`, which narrows the
+    glow to the silhouette the way the engine does.
+
+    Measured, not assumed: Blender's Layer Weight `Facing` output is 0.0
+    head-on and rises to ~0.80 approaching the silhouette (sphere probe, blend
+    0.35), so it is already the right way round and the power only sharpens it.
+
+    Where no accent group is authored -- `mpl_combat_war_room` has none on any
+    of its 69 materials -- `accent_pow` is None and the term is left linear,
+    exactly as before.
+    """
+    roles = spec.get("role_textures") or {}
+    rim_role = rim_role_of(roles)
+    if rim_role is None:
+        return False
+    accent = spec.get("accent_tint")
+    coloured = bool(accent) and len(accent) >= 3
+    emis_in = _principled_input(bsdf, "Emission Color")
+    str_in = _principled_input(bsdf, "Emission Strength")
+    if emis_in is None:
+        return False
+
+    weight = nt.nodes.new("ShaderNodeLayerWeight")
+    weight.label = "rim fresnel"
+    weight.location = (-900, -700)
+    weight.inputs["Blend"].default_value = 0.35
+
+    rim_img = _load_image(pkg_dir, "textures/%s.dds" % roles[rim_role],
+                          "Non-Color", "CHANNEL_PACKED")
+    factor = weight.outputs["Facing"]
+    rim_pow = spec.get("accent_pow")
+    if rim_pow and float(rim_pow) > 0.0 and abs(float(rim_pow) - 1.0) > 1e-6:
+        powed = nt.nodes.new("ShaderNodeMath")
+        powed.operation = "POWER"
+        powed.label = "rim falloff (accent_pow)"
+        powed.location = (-820, -700)
+        nt.links.new(weight.outputs["Facing"], powed.inputs[0])
+        powed.inputs[1].default_value = float(rim_pow)
+        factor = powed.outputs[0]
+    if rim_img is not None:
+        rim_node = _tex_node(nt, rim_img, "Non-Color", -900, -420,
+                             "CHANNEL_PACKED", label="rimlighting_map")
+        masked, (mfi, mai, mbi, mri) = _mix_node(
+            nt, "FLOAT", "MULTIPLY", -680, -560, label="rim x mask")
+        masked.inputs[mfi].default_value = 1.0
+        nt.links.new(factor, masked.inputs[mai])
+        nt.links.new(rim_node.outputs["Color"], masked.inputs[mbi])
+        factor = masked.outputs[mri]
+
+    # ⚠ UNCOLOURED fallback. `accent_tint` is the authored rim colour, but only
+    # `mpl_arena_a` carries the slot at all -- 123 of the 138 rim-binding
+    # materials in the corpus have none. Dropping the rim for want of a colour
+    # threw away the view-angle term as well, which is the part that does not
+    # need a colour: white x mask x facing is the neutral reading, and the mask
+    # still confines the glow to where the artist painted it. The choice is
+    # recorded on the material so a white rim is never mistaken for a decoded
+    # one.
+    tint_rgb = ((float(accent[0]), float(accent[1]), float(accent[2]))
+                if coloured else (1.0, 1.0, 1.0))
+    intensity = (float(accent[3]) if coloured and len(accent) > 3 else 1.0)
+    tinted, (tfi, tai, tbi, tri) = _mix_node(
+        nt, "RGBA", "MULTIPLY", -460, -560, label="rim tint")
+    tinted.inputs[tfi].default_value = 1.0
+    tinted.inputs[tai].default_value = tint_rgb + (1.0,)
+    scale = max(0.0, intensity)
+    tinted.inputs[tbi].default_value = (scale, scale, scale, 1.0)
+
+    glow, (gfi, gai, gbi, gri) = _mix_node(
+        nt, "RGBA", "MULTIPLY", -260, -560, label="rim glow")
+    glow.inputs[gfi].default_value = 1.0
+    nt.links.new(tinted.outputs[tri], glow.inputs[gai])
+    # the facing/mask term as a colour
+    nt.links.new(factor, glow.inputs[gbi])
+
+    gating = rim_gates_emission(spec, rim_role) and emis_in.is_linked
+    if gating:
+        # MULTIPLY, not add: the mask has no surface of its own, so it can only
+        # be modulating the emission beneath it. See `rim_gates_emission`.
+        upstream = emis_in.links[0].from_socket
+        gate, (qfi, qai, qbi, qri) = _mix_node(
+            nt, "RGBA", "MULTIPLY", -60, -560, label="rim gate (emission x rim)")
+        gate.inputs[qfi].default_value = 1.0
+        nt.links.new(upstream, gate.inputs[qai])
+        nt.links.new(glow.outputs[gri], gate.inputs[qbi])
+        nt.links.new(gate.outputs[qri], emis_in)
+        mat["le_rim_mode"] = "gate (emission x rim x facing)"
+    elif emis_in.is_linked:
+        upstream = emis_in.links[0].from_socket
+        add, (afi, aai, abi, ari) = _mix_node(
+            nt, "RGBA", "ADD", -60, -560, label="rim add")
+        add.inputs[afi].default_value = 1.0
+        nt.links.new(upstream, add.inputs[aai])
+        nt.links.new(glow.outputs[gri], add.inputs[abi])
+        nt.links.new(add.outputs[ari], emis_in)
+        mat["le_rim_mode"] = "additive"
+    else:
+        nt.links.new(glow.outputs[gri], emis_in)
+        if str_in is not None and not str_in.is_linked and str_in.default_value <= 0.0:
+            str_in.default_value = 1.0
+    mat["le_rim_lighting"] = [round(float(c), 6) for c in tint_rgb] + [intensity]
+    mat["le_rim_lighting_source"] = ("accent_tint" if coloured
+                                     else "uncoloured (no accent_tint authored)")
+    mat["le_rim_role"] = rim_role
+    return True
+
+
+def accent_tint_enabled(opts) -> bool:
+    """Is the team/accent tint applied? Default yes."""
+    if not opts:
+        return True
+    return bool(opts.get("accent_tint", True))
 
 
 def base_color_fallback(spec: dict) -> tuple:
@@ -1518,6 +1892,38 @@ def base_color_layers(spec: dict) -> list:
     return out
 
 
+def emission_layers(spec: dict) -> list:
+    """Every layer that binds an EMISSIVE map, lowest index first.
+
+    The exact analogue of `base_color_layers`, and for the same reason:
+    `channels["emission"]` is the MERGED view, which keeps only "the lowest
+    layer that provides it" (`le_mesh.materials.classify_roles_layered`), so a
+    material painting two or three emissive maps on top of each other arrives
+    with every upper one silently dropped.
+
+    ⛔ The emission wiring used to assert this could not happen -- "No lower
+    layer binds an emissive map: if one did, the merged view would have
+    selected it" -- and collapsed the engine's lerp to a plain multiply on that
+    basis. The corpus disagrees: **225 of 3128 materials across 18 levels bind
+    an emissive map on more than one layer**, led by mpl_lobby_b2 (45),
+    combustion (37) and dyson (32).
+
+    ⭐ `mpl_combat_dyson`'s capture point is the case that found it. Material
+    `2fa509e6d8ff9b42` (i1826) binds THREE emissive layers -- 7b279387 on
+    layer0, 76ee2e8c on layer1, fd5bd6bd on layer2 -- and only layer0 reached
+    the graph, so the sphere lost the lock artwork the level wears at the start
+    of a round. Layers 1 and 2 both carry `amount_constant: 1.0`, i.e. they are
+    composited at full strength with no mask and no vertex modulation.
+    """
+    out = []
+    for entry in spec.get("layers") or []:
+        channel = (entry.get("channels") or {}).get("emission")
+        if channel and channel.get("file"):
+            out.append((int(entry.get("index") or 0), channel))
+    out.sort(key=lambda pair: pair[0])
+    return out
+
+
 def supersede_opaque_top_layer(spec: dict, channels: dict) -> dict:
     """Let a fully-replacing upper albedo layer win over the merged view.
 
@@ -1811,6 +2217,34 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 mat["le_layer_blend_base_color"] = bc_blend["layer"]
     if base_in and bc_node is None:
         base_in.default_value = bc_factor
+
+    # ── team / accent tint ──────────────────────────────────────────────
+    # ⭐ `mpl_arena_a`'s goal ends are the same mesh with the same four
+    # GREYSCALE textures; the only thing that differs between the blue end and
+    # the orange end is this per-material colour (see `evr_materials`, where it
+    # is decoded). Without it both import grey, which is what they did.
+    #
+    # ⚠ Multiplied into base colour, which makes the surface read as the right
+    # team colour. The slot's own name is NOT recovered and it sits beside two
+    # unrouted rim maps in a tint+intensity+power group, so a faithful renderer
+    # would more likely drive a Fresnel rim term with it -- that is a bigger
+    # change and is not attempted here. Disable with `evr_accent_tint`.
+    _accent = spec.get("accent_tint") if accent_tint_enabled(opts) else None
+    if _accent and base_in is not None and len(_accent) >= 3:
+        _tint = (float(_accent[0]), float(_accent[1]), float(_accent[2]), 1.0)
+        if base_in.is_linked:
+            _up = base_in.links[0].from_socket
+            _mix, (_fi, _ai, _bi, _ri) = _mix_node(
+                nt, "RGBA", "MULTIPLY", -300, 520, label="accent tint")
+            _mix.inputs[_fi].default_value = 1.0
+            nt.links.new(_up, _mix.inputs[_ai])
+            _mix.inputs[_bi].default_value = _tint
+            nt.links.new(_mix.outputs[_ri], base_in)
+        else:
+            _base = list(base_in.default_value)
+            base_in.default_value = (_base[0] * _tint[0], _base[1] * _tint[1],
+                                     _base[2] * _tint[2], _base[3])
+        mat["le_accent_tint"] = [round(float(c), 6) for c in _accent[:3]]
 
     # roughness / AO ---------------------------------------------------------
     rg = channels.get("roughness")
@@ -2164,7 +2598,12 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     em_col_in = _principled_input(bsdf, "Emission Color", "Emission")
     em_str_in = _principled_input(bsdf, "Emission Strength")
     tint = emission_tint(spec)
-    strength = emission_strength(spec)
+    authored_strength = emission_strength(spec)
+    # Scale the AUTHORED value rather than replacing it, so a material that
+    # deliberately emits at 2.0 stays twice as bright as its 1.0 neighbour at
+    # every setting -- the relative grading the artists authored survives.
+    emission_scale = emission_multiplier(opts)
+    strength = authored_strength * emission_scale
     # An emissive map on layer >= 1 rides in `LayerOutput.lighting` and is
     # composited by that layer's blend mask. No lower layer binds an
     # emissive map -- if one did, the merged view would have selected it -- so
@@ -2216,6 +2655,53 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 em_src = gmix.outputs[ri]
             elif em_gate[1] is not None:
                 strength *= float(em_gate[1])
+
+            # ── EMISSIVE LAYERS ABOVE THE LOWEST ──────────────────────────
+            # `em`/`em_src` above is the MERGED view, i.e. the lowest layer
+            # only. Composite the rest over it in index order, each through its
+            # own blend gate, exactly as `BlendLayers()` does. With a layer's
+            # `amount_constant` at 1.0 the lerp collapses to "upper replaces
+            # lower", which is how a lock/overlay layer is authored.
+            _stack = emission_layers(spec)
+            if len(_stack) > 1:
+                _y = -1100
+                for _idx, _chan in _stack[1:]:
+                    _img = _load_image(pkg_dir, _chan.get("file", ""),
+                                       _chan.get("colorspace", "sRGB"),
+                                       image_alpha_mode(_chan))
+                    if _img is None:
+                        continue
+                    _y -= 260
+                    _node = _tex_node(nt, _img, _chan.get("colorspace", "sRGB"),
+                                      -900, _y, image_alpha_mode(_chan),
+                                      label=f"emissive_map L{_idx}")
+                    _blend = layer_blend_of(spec, _idx)
+                    _sock, _const = (None, 1.0)
+                    if _blend is not None:
+                        _sock, _const = _layer_gate(nt, pkg_dir, _blend,
+                                                    "emission", opts, -2400, _y)
+                    if _sock is None and _const is not None and _const <= 0.0:
+                        continue                 # parked at its OFF extreme
+                    # `le_mesh.materials`: mode 6/10 are the LERP forms
+                    # `(1-m)*base + m*layer` (6 is the authored default), while
+                    # 1/7 are ADDITIVE `base + layer*m`. Using one for the other
+                    # is the difference between an overlay replacing what is
+                    # under it and glowing on top of it.
+                    _lbm = int((_blend or {}).get("blend_mode", 6) or 6)
+                    _op = "ADD" if _lbm in (1, 7) else "MIX"
+                    _mix, (_fi, _ai, _bi, _ri) = _mix_node(
+                        nt, "RGBA", _op, -500, _y,
+                        label=f"emissive layer {_idx} ({_op.lower()})")
+                    nt.links.new(em_src, _mix.inputs[_ai])
+                    nt.links.new(_node.outputs["Color"], _mix.inputs[_bi])
+                    if _sock is not None:
+                        nt.links.new(_sock, _mix.inputs[_fi])
+                    else:
+                        _mix.inputs[_fi].default_value = (
+                            1.0 if _const is None else float(_const))
+                    em_src = _mix.outputs[_ri]
+                mat["le_emissive_layers"] = [int(i) for i, _c in _stack]
+
             # ── AO, OR GENUINELY EMISSIVE? ───────────────────────────────
             # The AO reading is right for most materials (verified against the
             # game on `d09afd15b1c75c04` i1535) but NOT for all, and the
@@ -2288,6 +2774,12 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                     nt.links.new(em_src, em_col_in)
                 if em_str_in:
                     em_str_in.default_value = strength
+                # Keep the authored value alongside the rendered one, so a
+                # scaled import can always be told from a bright material.
+                mat["le_emission_strength"] = strength
+                mat["le_emission_strength_authored"] = authored_strength
+                if emission_scale != EMISSION_STRENGTH_AUTHORED:
+                    mat["le_emission_strength_multiplier"] = emission_scale
             else:
                 inv = nt.nodes.new("ShaderNodeInvert")
                 inv.location = (-700, -1100)
@@ -2720,6 +3212,23 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
         except Exception:
             pass
 
+    # Rim glow: the accent colour through a Fresnel term, masked by the
+    # material's rimlighting map. Those maps are otherwise in
+    # `unrouted_roles` -- see `build_rim_lighting`.
+    if rim_lighting_enabled(opts):
+        try:
+            build_rim_lighting(nt, bsdf, spec, pkg_dir, mat)
+        except Exception:
+            pass
+
+    # A blended surface left at Alpha = 1.0 is an opaque card. Runs LAST so the
+    # emission chain (tint, layer stack, gates) is final before it is measured.
+    if translucent_emissive_alpha_enabled(opts):
+        try:
+            build_translucent_emissive_alpha(nt, bsdf, spec, channels, mat)
+        except Exception:
+            pass
+
     return mat
 
 
@@ -2799,6 +3308,87 @@ def lightmap_variant(mat, lm_spec: dict, opts: dict | None = None, ctx: dict | N
 # Per-mesh vertex-colour variant
 # ---------------------------------------------------------------------------
 
+def vertex_radiance_variant(mat, layer_name: str):
+    """`emission = albedo * baked irradiance`, from a colour ATTRIBUTE.
+
+    ⛔ NOT a base-colour multiply. This is the same trap `evr_lighting.
+    _wire_radiance` documents for the atlas, and the vertex bake falls into it
+    identically: the attribute holds IRRADIANCE -- light that already arrived
+    at the surface -- so multiplying it into base colour leaves it as a
+    reflectance and the renderer lights it AGAIN with the scene lamps. Quest
+    ships four lights for a level it bakes almost entirely, so the second
+    lighting pass contributes nearly nothing and the scene renders essentially
+    black. That is exactly what the first attempt did.
+
+    Feeding `albedo * irradiance` to EMISSION reproduces the outgoing radiance
+    the bake represents, which is what the engine displays. Base Color is left
+    on the albedo texture so the surviving lights still shade normally and
+    nothing is double-counted.
+
+    ⚠ Anything already driving emission -- `build_rim_lighting`'s accent glow,
+    which is the team colour on the arena's geo panels -- is SUMMED rather than
+    replaced. Linking straight into the socket is how the lightmap path once
+    threw away every rim glow in the level.
+    """
+    if mat is None or mat.get("le_vertex_radiance"):
+        return mat
+    name = f"{mat.name}__bake_{layer_name}"
+    existing = bpy.data.materials.get(name)
+    if existing is not None:
+        return existing
+    var = mat.copy()
+    var.name = name
+    var["le_vertex_radiance"] = True
+    nt = var.node_tree
+    bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return var
+    emission = (bsdf.inputs.get("Emission Color")
+                or bsdf.inputs.get("Emission"))
+    base_in = _principled_input(bsdf, "Base Color")
+    if emission is None or base_in is None:
+        return var
+
+    col = nt.nodes.new("ShaderNodeVertexColor")
+    col.layer_name = layer_name
+    col.location = (bsdf.location.x - 900, bsdf.location.y - 420)
+
+    mul = nt.nodes.new("ShaderNodeMix")
+    mul.data_type = "RGBA"
+    mul.blend_type = "MULTIPLY"
+    mul.label = "evr_vertex_bake"
+    mul.location = (bsdf.location.x - 560, bsdf.location.y - 400)
+    mul.inputs["Factor"].default_value = 1.0
+    src = base_in.links[0].from_socket if base_in.links else None
+    if src is not None:
+        nt.links.new(src, mul.inputs[6])
+    else:
+        mul.inputs[6].default_value = tuple(base_in.default_value)
+    nt.links.new(col.outputs["Color"], mul.inputs[7])
+
+    out = mul.outputs[2]
+    if emission.is_linked:
+        keep = emission.links[0].from_socket
+        add = nt.nodes.new("ShaderNodeMix")
+        add.data_type = "RGBA"
+        add.blend_type = "ADD"
+        add.label = "bake + existing emission"
+        add.location = (bsdf.location.x - 320, bsdf.location.y - 380)
+        add.inputs["Factor"].default_value = 1.0
+        nt.links.new(keep, add.inputs[6])
+        nt.links.new(out, add.inputs[7])
+        out = add.outputs[2]
+    nt.links.new(out, emission)
+    strength = bsdf.inputs.get("Emission Strength")
+    if strength is not None and not strength.is_linked:
+        try:
+            if float(strength.default_value) == 0.0:
+                strength.default_value = 1.0
+        except (TypeError, ValueError):
+            pass
+    return var
+
+
 def vertex_color_variant(mat, layer_name: str = "color0"):
     """Return a copy of `mat` with `Color Attribute(layer) -> Mix(MULTIPLY) -> Base Color`.
 
@@ -2810,7 +3400,12 @@ def vertex_color_variant(mat, layer_name: str = "color0"):
     """
     if mat is None or mat.get("le_vertex_color_diffuse"):
         return mat
-    name = f"{mat.name}__vcol"
+    # The cache is keyed by NAME, so a second layer needs a second name --
+    # otherwise a Quest package's `EchoBake` variant would be handed back for a
+    # later `color0` request, silently multiplying by the wrong attribute. The
+    # default layer keeps the bare suffix so existing names do not move.
+    name = (f"{mat.name}__vcol" if layer_name == "color0"
+            else f"{mat.name}__vcol_{layer_name}")
     existing = bpy.data.materials.get(name)
     if existing is not None:
         return existing

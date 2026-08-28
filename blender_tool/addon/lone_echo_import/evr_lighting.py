@@ -116,6 +116,17 @@ def import_lights(doc: dict, context, y_up_to_z_up: bool = True,
         else:
             data.energy = DEFAULT_WATTS * max(intensity, 0.0)
             data.shadow_soft_size = DEFAULT_RADIUS
+            # ⭐ THE AUTHORED CONE. Without it every spot took Blender's 45 deg
+            # default with a near-sharp edge, while the records carry 59-81 deg
+            # outer with a 25 deg inner. `blend` is the fraction of the cone
+            # over which it falls off, which is exactly 1 - inner/outer.
+            if kind == "SPOT":
+                cone = rec.get("cone")
+                if isinstance(cone, (int, float)) and cone > 0:
+                    data.spot_size = float(cone)
+                    inner = rec.get("cone_inner")
+                    if isinstance(inner, (int, float)) and 0 < inner <= cone:
+                        data.spot_blend = max(0.0, min(1.0, 1.0 - inner / cone))
             reach = (rec.get("range") or [0.0])[0]
             if reach:
                 data.use_custom_distance = True
@@ -242,6 +253,62 @@ def _emission_socket(principled):
             or principled.inputs.get("Emission"))
 
 
+def _keep_existing_emission(tree, principled, new_socket, new_strength):
+    """Sum the baked term with whatever already drives Emission Color.
+
+    ⛔ The three wiring paths below used to LINK STRAIGHT INTO the emission
+    socket, which silently discarded anything already there. What was already
+    there is `build_rim_lighting`'s output: the accent colour through a Fresnel
+    term, masked by the material's rimlighting map -- the team colour on
+    `mpl_arena_a`'s geo panels. Importing with lightmaps ON therefore threw
+    away every rim glow in the level, which is why i1914 read
+    `Emission Color <- evr_lightmap_multiply` with its orange
+    `le_rim_lighting = (1.0, 0.323, 0.204)` built but unreachable, while the
+    same material imported WITHOUT lightmaps read `Emission <- rim glow`.
+
+    ⚠ Emission STRENGTH is shared by everything on that socket, and the baked
+    paths retune it (`intensity / Pi` for SH4). Adding the old term unchanged
+    would silently rescale it by `new/old`. So the existing term is pre-scaled
+    by `old_strength / new_strength`, which leaves its final contribution
+    exactly what it was before the lightmap arrived.
+    """
+    emission = _emission_socket(principled)
+    if emission is None or not emission.is_linked:
+        return new_socket
+    old_src = emission.links[0].from_socket
+    strength_in = principled.inputs.get("Emission Strength")
+    try:
+        old_strength = (float(strength_in.default_value)
+                        if strength_in is not None and not strength_in.is_linked
+                        else 1.0)
+    except (TypeError, ValueError):
+        old_strength = 1.0
+
+    kept = old_src
+    if new_strength and abs(old_strength - new_strength) > 1e-9:
+        ratio = old_strength / new_strength
+        rescale = tree.nodes.new("ShaderNodeMix")
+        rescale.data_type = "RGBA"
+        rescale.blend_type = "MULTIPLY"
+        rescale.label = "keep rim glow (x%.3f)" % ratio
+        rescale.location = (principled.location.x - 620,
+                            principled.location.y + 520)
+        rescale.inputs["Factor"].default_value = 1.0
+        tree.links.new(rescale.inputs[6], old_src)
+        rescale.inputs[7].default_value = (ratio, ratio, ratio, 1.0)
+        kept = rescale.outputs[2]
+
+    add = tree.nodes.new("ShaderNodeMix")
+    add.data_type = "RGBA"
+    add.blend_type = "ADD"
+    add.label = "baked + existing emission"
+    add.location = (principled.location.x - 200, principled.location.y + 440)
+    add.inputs["Factor"].default_value = 1.0
+    tree.links.new(add.inputs[6], new_socket)
+    tree.links.new(add.inputs[7], kept)
+    return add.outputs[2]
+
+
 def _wire_radiance(material, image, gain: float = 1.0,
                    intensity: float = 1.0) -> bool:
     """Wire the baked page as EMITTED RADIANCE: `emission = albedo * irradiance`.
@@ -309,7 +376,8 @@ def _wire_radiance(material, image, gain: float = 1.0,
         mix.inputs[6].default_value = tuple(base.default_value)
     tree.links.new(mix.inputs[7], light)
 
-    tree.links.new(emission, mix.outputs[2])
+    tree.links.new(emission,
+                   _keep_existing_emission(tree, principled, mix.outputs[2], 1.0))
     strength = principled.inputs.get("Emission Strength")
     if strength is not None:
         strength.default_value = 1.0
@@ -320,9 +388,69 @@ def _wire_radiance(material, image, gain: float = 1.0,
 _multiply_lightmap = _wire_radiance
 
 
+def _wire_occlusion(material, image) -> bool:
+    """Multiply the material's BASE COLOUR by the baked occlusion mask.
+
+    `material_base_ps.hlsl` samples this at the page slice, with no lobe
+    offset, and uses it to shadow the DYNAMIC lights:
+
+        localshadow    = punctual_occlusion.Sample(lightmapuv)
+        dirlightshadow = dirlight_occlusion.Sample(lightmapuv)
+
+    * Base colour is the right place, and the baked term is deliberately NOT
+    touched. `_wire_sh4` / `_wire_sg5` capture the albedo socket for their
+    emission multiply BEFORE this runs, so emission keeps reading the
+    unattenuated albedo. The consequence is the one that matters: where the
+    mask is 0 the surface still shows its full baked lighting and merely stops
+    responding to lamps -- which is exactly what "the sun cannot reach here"
+    should look like. Multiplying the mask into the bake instead would black
+    the surface out entirely, which the bake already accounts for.
+
+    ⚠ On `mpl_arena_a` this mask is uniformly 0.0 on pages 0 and 1 and
+    near-binary on page 2, so most of that level stops taking lamp light at
+    all. That is coherent for an enclosed arena rather than a fault, but it is
+    a large visible change wherever lights are imported, which is why the
+    option defaults OFF.
+    """
+    tree = getattr(material, "node_tree", None)
+    if tree is None:
+        return False
+    principled = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if principled is None:
+        return False
+    base = principled.inputs.get("Base Color")
+    if base is None or any(n.label == "evr_occlusion" for n in tree.nodes):
+        return False
+
+    uv = tree.nodes.new("ShaderNodeUVMap")
+    uv.uv_map = LIGHTMAP_UV
+    uv.location = (principled.location.x - 1000, principled.location.y + 380)
+    tex = tree.nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.label = "evr_occlusion"
+    tex.location = (principled.location.x - 820, principled.location.y + 380)
+    tree.links.new(tex.inputs["Vector"], uv.outputs["UV"])
+
+    mix = tree.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY"
+    mix.label = "evr_occlusion_multiply"
+    mix.location = (principled.location.x - 300, principled.location.y + 300)
+    mix.inputs["Factor"].default_value = 1.0
+    if base.is_linked:
+        tree.links.new(mix.inputs[6], base.links[0].from_socket)
+    else:
+        mix.inputs[6].default_value = tuple(base.default_value)
+    tree.links.new(mix.inputs[7], tex.outputs["Color"])
+    tree.links.new(base, mix.outputs[2])
+    material["le_lightmap_occlusion"] = True
+    return True
+
+
 def wire_instance_lightmaps(doc: dict, package, objects_by_instance: dict,
                             intensity: float = 1.0,
-                            y_up_to_z_up: bool = True) -> dict:
+                            y_up_to_z_up: bool = True,
+                            occlusion: bool = False) -> dict:
     """Wire the PER-INSTANCE lightmap: static-instanced geometry.
 
     Instances of one mesh sit in different atlas regions, so each carries its
@@ -350,7 +478,8 @@ def wire_instance_lightmaps(doc: dict, package, objects_by_instance: dict,
     directory = root / (doc.get("dir") or "lightmaps")
     gains = _gain_table(doc)
     sh_pages = doc.get("sh_pages") or {}
-    wired = mismatched = sh_wired = already = 0
+    masks = doc.get("masks") or {}
+    wired = mismatched = sh_wired = already = occluded = 0
     for key, entry in entries.items():
         try:
             instance_index = int(key)
@@ -371,14 +500,16 @@ def wire_instance_lightmaps(doc: dict, package, objects_by_instance: dict,
             # rather than multiplied in directly.
             sh_entry = sh_pages.get(entry.get("page_key") or "")
             sh_images = None
-            if sh_entry and sh_entry.get("basis") == "SH4":
+            sh_basis = (sh_entry or {}).get("basis")
+            if sh_entry and sh_basis in ("SH4", "SG5"):
                 # The slices ship as BC6H DDS and Blender decodes them to
                 # FLOAT -- 10332 distinct values per channel against 256 from an
                 # 8-bit PNG, with HDR above 1.0 intact. Non-Color because these
                 # are SH coefficients, not a picture.
+                want = 4 if sh_basis == "SH4" else len(SG5_WEIGHTS)
                 loaded = [_load_image(directory, n, "Non-Color")
                           for n in sh_entry.get("slices", ())]
-                if len(loaded) == 4 and all(loaded):
+                if len(loaded) == want and all(loaded):
                     sh_images = loaded
 
             image = _load_image(directory, entry.get("image", ""))
@@ -393,7 +524,30 @@ def wire_instance_lightmaps(doc: dict, package, objects_by_instance: dict,
             for loop in mesh.loops:
                 base = start + loop.vertex_index * 2
                 if base + 1 < len(uv):
-                    layer.data[loop.index].uv = (uv[base], uv[base + 1])
+                    # ⭐ V IS FLIPPED. The atlas is authored top-down (D3D, V=0
+                    # at the top row); Blender puts V=0 at the BOTTOM, so the
+                    # raw value samples the atlas upside down.
+                    #
+                    # ⛔ An earlier check compared flipped against unflipped by
+                    # asking how many vertices land on a LIT texel -- 86.1% vs
+                    # 76.5% -- and concluded no flip was needed. That metric is
+                    # near-useless here: the pages are 69-81% lit, so a chart
+                    # in the WRONG place still lands on lit texels most of the
+                    # time. It cannot tell "my chart" from "somebody's chart".
+                    #
+                    # What settles it is a physical check that needs no
+                    # knowledge of the atlas layout: where two objects share a
+                    # vertex position AND their normals agree within 20 deg,
+                    # the surface is continuous, so the baked light must match.
+                    # Over 22,494 such pairs in `mpl_arena_a`:
+                    #
+                    #     u, v      median disagreement 0.4521   agree<10% 36.6%
+                    #     u, 1 - v  median disagreement 0.1066   agree<10% 48.7%
+                    #
+                    # and every axis-swapped reading is worse still. Sampling
+                    # the atlas upside down is what made lit surfaces patchy:
+                    # each face picked up fragments of unrelated charts.
+                    layer.data[loop.index].uv = (uv[base], 1.0 - uv[base + 1])
 
             obj["evr_lightmap_page"] = entry.get("page")
             for slot in obj.material_slots:
@@ -409,15 +563,28 @@ def wire_instance_lightmaps(doc: dict, package, objects_by_instance: dict,
                     material = slot.material.copy()
                     slot.material = material
                     if sh_images is not None:
-                        if _wire_sh4(material, sh_images, intensity,
-                                     y_up_to_z_up):
+                        ok = (_wire_sh4(material, sh_images, intensity,
+                                        y_up_to_z_up) if sh_basis == "SH4"
+                              else _wire_sg5(material, sh_images, intensity))
+                        if ok:
                             wired += 1
                             sh_wired += 1
+                    # AFTER the basis wiring, never before: those capture the
+                    # albedo socket for their emission multiply, so the bake
+                    # keeps the unattenuated colour.
+                    if occlusion:
+                        name = (masks.get(entry.get("page_key") or "")
+                                or {}).get("occlusion")
+                        mask = _load_image(directory, name, "Non-Color") if name else None
+                        if mask is not None and _wire_occlusion(material, mask):
+                            occluded += 1
                     elif image is not None and _wire_radiance(
                             material, image,
                             gains.get(entry.get("image", ""), 1.0), intensity):
                         wired += 1
     out = {"wired": wired}
+    if occluded:
+        out["occlusion_applied"] = occluded
     if sh_wired:
         out["sh4_evaluated"] = sh_wired
     if already and not wired:
@@ -466,6 +633,32 @@ def summarize(doc: dict) -> dict:
 #
 # Both the `*2-1` unpack and the rescale by `dc*2` are load-bearing.
 SH4_GROUP_NAME = "EVR_SH4_Irradiance"
+SG5_GROUP_NAME = "EVR_SG5_Irradiance"
+
+#: `constants.hlsl`, duplicated here so the addon stays standalone (the same
+#: reason `COLORSPACE_LIGHTMAP` is). The z components ARE the dot products
+#: against the unperturbed tangent-space normal, which is what makes the
+#: collapse exact for SG5 rather than approximate.
+#: `kLobeDirsSG5` -- the five lobe directions, in TANGENT space
+#: (`material_base_ps.hlsl:1097`, transcribed in docs/EVR_LIGHTING.md). Their z
+#: components run 0.1..0.9, i.e. a HEMISPHERICAL basis, which is precisely why
+#: the shading normal cannot be ignored.
+SG5_LOBE_DIRS = (
+    (0.839526355, -0.534037054, 0.1),
+    (-0.247647554, 0.921233237, 0.3),
+    (-0.399156392, -0.768553317, 0.5),
+    (0.670809269, 0.244979382, 0.7),
+    (-0.402912945, 0.166315958, 0.9),
+)
+SG5_LOBE_Z = tuple(d[2] for d in SG5_LOBE_DIRS)
+SG5_LAMBDA = 3.62780595
+SG5_SCALE = 0.5
+#: `2 * rcp(kLambdaSG5) * kSG5Scale` -- the scalar in `DiffuseTermSG`.
+SG5_K = (2.0 / SG5_LAMBDA) * SG5_SCALE
+#: The FLAT-normal collapse, since `saturate(dot(dir, (0,0,1))) == z`. Kept
+#: because it is what the graph reduces to for a material with no normal map,
+#: and it is what `evr_lightmap.sg5_weights()` bakes into the collapsed PNG.
+SG5_WEIGHTS = tuple(z * SG5_K for z in SG5_LOBE_Z)
 
 
 def _sh4_node_group():
@@ -575,6 +768,239 @@ def _sh4_node_group():
     return group
 
 
+def _sg5_node_group():
+    """Build (or fetch) the node group evaluating SG5 irradiance.
+
+    The engine's `DiffuseTermSG` over five hemispherical lobes
+    (`material_base_ps.hlsl:1097` and `sg.hlsl`):
+
+        diffuse(n_ts) = SUM_i saturate(dot(kLobeDirsSG5[i], n_ts))
+                              * 2 * rcp(kLambdaSG5) * kSG5Scale * lobe_i
+
+    * The lobes are stored in TANGENT space, and a normal map also stores its
+    normal in tangent space, so the dot products need no basis change at all.
+    The shader writes `sg.mean = mul(kLobeDirsSG5[i], tangenttoworld)` and dots
+    that against the WORLD normal; because that matrix is orthonormal the value
+    is identical to dotting the tangent lobe against the tangent normal. Taking
+    the normal map's own vector therefore sidesteps the tangent frame entirely
+    -- the one part of this the importer cannot otherwise reproduce faithfully,
+    since Blender's mikktspace frame is not the engine's.
+
+    An earlier version summed the lobes with a FIXED weight each --
+    `saturate(dot(dir, (0,0,1))) == z` -- i.e. as though every surface were
+    flat. That is still exactly what this graph computes when a material binds
+    no normal map, so the change is confined to normal-mapped surfaces and the
+    flat case is unchanged by construction.
+    """
+    existing = bpy.data.node_groups.get(SG5_GROUP_NAME)
+    # A .blend from an older build holds the 5-input version; rebuild rather
+    # than wire into an interface that has no Normal socket.
+    if existing is not None:
+        try:
+            n_in = len([k for k in existing.interface.items_tree
+                        if getattr(k, "in_out", "") == "INPUT"])
+        except AttributeError:
+            n_in = 0
+        if n_in == len(SG5_LOBE_DIRS) + 1:
+            return existing
+        bpy.data.node_groups.remove(existing)
+
+    group = bpy.data.node_groups.new(SG5_GROUP_NAME, "ShaderNodeTree")
+    iface = group.interface
+    for i in range(len(SG5_LOBE_DIRS)):
+        iface.new_socket(name="sg%d" % i, in_out="INPUT",
+                         socket_type="NodeSocketColor")
+    normal_socket = iface.new_socket(name="Normal", in_out="INPUT",
+                                     socket_type="NodeSocketVector")
+    try:                     # a flat tangent normal reproduces the old collapse
+        normal_socket.default_value = (0.0, 0.0, 1.0)
+    except (AttributeError, TypeError):
+        pass
+    iface.new_socket(name="Irradiance", in_out="OUTPUT",
+                     socket_type="NodeSocketColor")
+
+    nodes, links = group.nodes, group.links
+    gin = nodes.new("NodeGroupInput")
+    gin.location = (-1200, 0)
+    gout = nodes.new("NodeGroupOutput")
+    gout.location = (700, 0)
+
+    unit = nodes.new("ShaderNodeVectorMath")
+    unit.operation = "NORMALIZE"
+    unit.label = "n_ts"
+    unit.location = (-1000, -460)
+    links.new(unit.inputs[0], gin.outputs[len(SG5_LOBE_DIRS)])
+
+    acc = None
+    for i, direction in enumerate(SG5_LOBE_DIRS):
+        y = 460 - i * 190
+        dot = nodes.new("ShaderNodeVectorMath")
+        dot.operation = "DOT_PRODUCT"
+        dot.label = "dot(lobe %d, n)" % i
+        dot.location = (-780, y)
+        dot.inputs[0].default_value = direction
+        links.new(dot.inputs[1], unit.outputs["Vector"])
+
+        sat = nodes.new("ShaderNodeMath")     # the shader's own saturate(): a
+        sat.operation = "MAXIMUM"             # lobe facing away contributes
+        sat.label = "saturate"                # nothing
+        sat.location = (-600, y)
+        sat.inputs[1].default_value = 0.0
+        sat.use_clamp = True
+        links.new(sat.inputs[0], dot.outputs["Value"])
+
+        gain = nodes.new("ShaderNodeMath")
+        gain.operation = "MULTIPLY"
+        gain.label = "x 2/lambda x scale"
+        gain.location = (-420, y)
+        gain.inputs[1].default_value = SG5_K
+        links.new(gain.inputs[0], sat.outputs[0])
+
+        term = nodes.new("ShaderNodeVectorMath")
+        term.operation = "SCALE"
+        term.location = (-240, y)
+        links.new(term.inputs[0], gin.outputs[i])
+        links.new(term.inputs["Scale"], gain.outputs[0])
+
+        if acc is None:
+            acc = term.outputs["Vector"]
+            continue
+        add = nodes.new("ShaderNodeVectorMath")
+        add.operation = "ADD"
+        add.location = (-40 + i * 110, 300 - i * 130)
+        links.new(add.inputs[0], acc)
+        links.new(add.inputs[1], term.outputs["Vector"])
+        acc = add.outputs["Vector"]
+    links.new(gout.inputs[0], acc)
+    return group
+
+
+def _sg5_tangent_normal(tree, principled):
+    """The material's TANGENT-space normal, or None if it binds no normal map.
+
+    Sourced from the normal TEXTURE, deliberately, and not from whatever feeds
+    `ShaderNodeNormalMap.Color`.
+
+    That distinction is load-bearing. `material_builder` builds the shipped
+    tangent basis BY HAND -- `_shipped_tangent_normal` assembles T', B and N in
+    world space and does its own `2 * color - 1` -- so the socket in front of
+    the NormalMap node is partway through that construction, not a [0,1]
+    tangent normal. Tapping it and applying `2c - 1` a second time produced a
+    vector whose z averaged ~0.015 instead of ~1: probed by rendering the
+    arriving vector as emission, it read (0.037, 0.060, 0.125) clamped, i.e.
+    degenerate. The lightmap then changed by 0.20/255 where the lobe maths
+    predicts 16%, which is how the mistake showed up at all.
+
+    The texture itself is a plain tangent-space normal map in [0,1] -- measured
+    across the 34 maps feeding SG5 in `mpl_tutorial_lobby`, median tilt 3.9-10.1
+    degrees, so `2c - 1` is exactly right for it.
+    """
+    nmap = next((n for n in tree.nodes if n.type == "NORMAL_MAP"), None)
+    if nmap is None:
+        return None
+    colour = nmap.inputs.get("Color")
+    if colour is None or not colour.is_linked:
+        return None
+
+    # Walk upstream to the image. ⛔ Never follow a Factor/Fac input: a Mix node
+    # keeps its factor at index 0, so "first linked input" walks into the blend
+    # MASK and finds the wrong texture entirely.
+    node = colour.links[0].from_node
+    seen = set()
+    while node is not None and node.name not in seen:
+        seen.add(node.name)
+        if node.type == "TEX_IMAGE":
+            break
+        nxt = None
+        for socket in node.inputs:
+            if not socket.is_linked:
+                continue
+            if socket.name in ("Factor", "Fac"):
+                continue
+            nxt = socket.links[0].from_node
+            break
+        node = nxt
+    if node is None or node.type != "TEX_IMAGE" or node.image is None:
+        return None
+
+    scale = tree.nodes.new("ShaderNodeVectorMath")
+    scale.operation = "SCALE"
+    scale.location = (principled.location.x - 2300,
+                      principled.location.y - 1150)
+    scale.inputs["Scale"].default_value = 2.0
+    tree.links.new(scale.inputs[0], node.outputs["Color"])
+    shift = tree.nodes.new("ShaderNodeVectorMath")
+    shift.operation = "SUBTRACT"
+    shift.label = "normal map -> n_ts"
+    shift.location = (principled.location.x - 2120,
+                      principled.location.y - 1150)
+    shift.inputs[1].default_value = (1.0, 1.0, 1.0)
+    tree.links.new(shift.inputs[0], scale.outputs["Vector"])
+    return shift.outputs["Vector"]
+
+
+def _wire_sg5(material, slice_images, intensity: float = 1.0) -> bool:
+    """Wire a page's five SG5 lobes as `irradiance * albedo` -> emission.
+
+    The lobes are hemispherical and tangent-space, so the surface's own
+    tangent-space normal drives the dot products; a material binding no normal
+    map falls back to `(0, 0, 1)`, where the graph reduces to the flat collapse
+    this used to hard-code. Emission strength carries `intensity` alone --
+    `DiffuseTermSG` already returns irradiance/Pi, so dividing again would
+    double-count it.
+    """
+    tree = getattr(material, "node_tree", None)
+    if tree is None or len(slice_images) != len(SG5_WEIGHTS):
+        return False
+    principled = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if principled is None:
+        return False
+    emission = _emission_socket(principled)
+    if emission is None or any(n.label == "evr_lightmap" for n in tree.nodes):
+        return False
+    base = principled.inputs.get("Base Color")
+
+    uv = tree.nodes.new("ShaderNodeUVMap")
+    uv.uv_map = LIGHTMAP_UV
+    uv.location = (principled.location.x - 2000, principled.location.y - 400)
+
+    group_node = tree.nodes.new("ShaderNodeGroup")
+    group_node.node_tree = _sg5_node_group()
+    group_node.label = "evr_sg5"
+    group_node.location = (principled.location.x - 1200,
+                           principled.location.y - 300)
+    for i, image in enumerate(slice_images):
+        tex = tree.nodes.new("ShaderNodeTexImage")
+        tex.image = image
+        tex.label = "evr_lightmap" if i == 0 else "evr_lightmap_sg%d" % i
+        tex.location = (principled.location.x - 1800,
+                        principled.location.y - 200 - i * 300)
+        tree.links.new(tex.inputs["Vector"], uv.outputs["UV"])
+        tree.links.new(group_node.inputs[i], tex.outputs["Color"])
+
+    n_ts = _sg5_tangent_normal(tree, principled)
+    if n_ts is not None:
+        tree.links.new(group_node.inputs[len(SG5_LOBE_DIRS)], n_ts)
+
+    mix = tree.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY"
+    mix.label = "evr_lightmap_multiply"
+    mix.location = (principled.location.x - 400, principled.location.y - 300)
+    mix.inputs["Factor"].default_value = 1.0
+    if base is not None and base.is_linked:
+        tree.links.new(mix.inputs[6], base.links[0].from_socket)
+    elif base is not None:
+        mix.inputs[6].default_value = tuple(base.default_value)
+    tree.links.new(mix.inputs[7], group_node.outputs[0])
+    tree.links.new(emission, _keep_existing_emission(
+        tree, principled, mix.outputs[2], float(intensity)))
+    strength = principled.inputs.get("Emission Strength")
+    if strength is not None:
+        strength.default_value = float(intensity)
+    return True
+
+
 def _wire_sh4(material, slice_images, intensity: float = 1.0,
               y_up_to_z_up: bool = True) -> bool:
     """Wire a page's four SH4 slices as `irradiance * albedo / Pi` -> emission.
@@ -666,10 +1092,12 @@ def _wire_sh4(material, slice_images, intensity: float = 1.0,
         mix.inputs[6].default_value = tuple(base.default_value)
     tree.links.new(mix.inputs[7], group_node.outputs[0])
 
-    tree.links.new(emission, mix.outputs[2])
+    _sh4_strength = float(intensity) / 3.14159265358979
+    tree.links.new(emission, _keep_existing_emission(
+        tree, principled, mix.outputs[2], _sh4_strength))
     strength = principled.inputs.get("Emission Strength")
     if strength is not None:
         # The shader's `k1_Pi`: EvalSH4IrradianceGeomerics returns irradiance,
         # and diffuse reflectance divides it by Pi.
-        strength.default_value = float(intensity) / 3.14159265358979
+        strength.default_value = _sh4_strength
     return True

@@ -83,6 +83,7 @@ import evr_texture_resource as evr_tex
 import evr_texture_streaming as evr_stream
 from evr_resource_types import (
     MESH_LIST_RESOURCE,
+    SCENE_RESOURCE,
     mesh_table_layout,
     normalise_hash,
     resource_path,
@@ -567,6 +568,18 @@ def _position_twin(root: Path, model_hash: str):
     return hits[0] if hits else None
 
 
+def is_untextured_placeholder(root: Path, model_hash) -> bool:
+    """Does this model carry geometry but no art of its own?
+
+    The same test `dressed_geometry_twin` opens with. Exposed separately so a
+    caller can tell the two outcomes apart: a placeholder WITH a twin is
+    resolved silently, one WITHOUT a twin imports as a blank shape and should
+    be reported rather than swallowed.
+    """
+    count = _model_real_texture_count(root, normalise_hash(model_hash))
+    return 0 <= count <= _TWIN_POOR_MAX
+
+
 def dressed_geometry_twin(root: Path, model_hash) -> str | None:
     """The TEXTURED model a placeholder is standing in for, or None.
 
@@ -616,6 +629,97 @@ def dressed_geometry_twin(root: Path, model_hash) -> str | None:
     return _position_twin(root, model_hash)
 
 
+# ---------------------------------------------------------------------------
+# Win7 / Lone Echo 2: the level's own submesh -> material table
+# ---------------------------------------------------------------------------
+
+#: A `CGSceneResource` carries the level's material PALETTE as a u32 count
+#: followed by that many `CSymbol64`s, and the level's `CGMeshListResource`
+#: carries a parallel per-submesh INDEX into it (array 7, one u32 each).
+#:
+#: Neither is reachable through the Win10 route. `CGRenderParams.matidx` is not
+#: there to be read, so the probe reports 0% coverage and the extractor falls
+#: back to "per-model material ordering" -- which hands submesh N the Nth
+#: material and puts the right textures on the wrong surfaces. That is the
+#: whole of the "textures are very wrong" symptom: the images decode perfectly,
+#: they are simply bound to the wrong draws.
+WIN7_PALETTE_MIN = 8
+#: Index array inside the mesh-list primary.
+WIN7_MATIDX_ARRAY = 7
+
+
+def win7_material_palette(root: Path, level_hash, material_hashes: set) -> list:
+    """The count-prefixed material palette in a level's `CGSceneResource`.
+
+    Located by scanning for a u32 `n` followed by `n` u64s that are ALL real
+    material hashes, rather than by a fixed offset. A run where even one entry
+    is not a material in this extract is not the palette, which makes a false
+    positive very unlikely and removes any need to hard-code a layout.
+    """
+    path = resource_path(Path(root), SCENE_RESOURCE, level_hash)
+    if path is None or not material_hashes:
+        return []
+    try:
+        blob = path.read_bytes()
+    except OSError:
+        return []
+
+    best: list = []
+    limit = len(blob)
+    for off in range(0, limit - 4, 4):
+        count = struct.unpack_from("<I", blob, off)[0]
+        if count < WIN7_PALETTE_MIN or off + 4 + count * 8 > limit:
+            continue
+        if count <= len(best):
+            continue
+        base = off + 4
+        entries = []
+        for i in range(count):
+            value = struct.unpack_from("<Q", blob, base + i * 8)[0]
+            name = f"{value:016x}"
+            if name not in material_hashes:
+                entries = []
+                break
+            entries.append(name)
+        if entries:
+            best = entries
+    return best
+
+
+def win7_submesh_materials(root: Path, model_hash, material_hashes: set) -> list:
+    """`[material_hash, ...]` per submesh for a Win7 level shell, or `[]`.
+
+    The level's geometry is stored under the level's OWN hash, so the mesh-list
+    primary and the scene resource that holds the palette are found under the
+    same name.
+    """
+    primary = resource_path(Path(root), MESH_LIST_RESOURCE, model_hash)
+    if primary is None:
+        return []
+    try:
+        meta = primary.read_bytes()
+    except OSError:
+        return []
+    try:
+        from evr_mesh_importer import decode as _decode   # type: ignore
+    except ImportError:
+        import decode as _decode                          # type: ignore
+    arrays, _end = _decode._meshlist_arrays(meta)
+    if len(arrays) <= WIN7_MATIDX_ARRAY:
+        return []
+    base, count, stride = arrays[WIN7_MATIDX_ARRAY]
+    if count == 0 or stride != 4:
+        return []
+    indices = [struct.unpack_from("<I", meta, base + i * 4)[0] for i in range(count)]
+
+    palette = win7_material_palette(root, model_hash, material_hashes)
+    # The palette must actually cover the indices; a short one means this is
+    # not the table these indices belong to.
+    if not palette or max(indices) >= len(palette):
+        return []
+    return [palette[i] for i in indices]
+
+
 def materials_for_model(root: Path, model_hash, material_hashes: set,
                         offset: int | None = None, vertex_counts=None) -> list:
     """Per-draw material hashes for a model, in mesh-record order.
@@ -624,6 +728,13 @@ def materials_for_model(root: Path, model_hash, material_hashes: set,
     the caller then falls back to ordering, and should say so in its output
     rather than pretending the link was resolved.
     """
+    # ★ Win7 levels state the link outright: a per-submesh index array in the
+    # mesh-list primary against a palette in the scene resource. Preferred over
+    # everything below because it is a table to read, not a link to infer.
+    win7 = win7_submesh_materials(root, model_hash, material_hashes)
+    if win7:
+        return win7
+
     # THE per-draw material link: `CGRenderParams.matidx` (u32 at +32),
     # resolved through the model's own palette. A direct read of what the file
     # says draw k uses -- not a correspondence, not an ordering assumption.
@@ -1458,16 +1569,24 @@ def build_spec(ctx: MaterialContext, material_hash: str, *,
                             ctx.dxgi_by_tex[tex] = resource.format
             ctx.role_route_tally["material_table"] = (
                 ctx.role_route_tally.get("material_table", 0) + 1)
+            _table_scalars = _scalars_from_material(material)
             table_spec = le_materials.build_material_spec(
                 f"{normalise_hash(material_hash)}__{normalise_hash(shaderset_hash)}",
                 shaderset_hash=normalise_hash(shaderset_hash),
                 material_hash=normalise_hash(material_hash),
                 role_textures=role_textures,
                 dxgi_by_tex=ctx.dxgi_by_tex,
-                scalars=_scalars_from_material(material),
+                scalars=_table_scalars,
                 texture_files=ctx.texture_files,
                 role_sources={r: role_index.SOURCE_ARRAY for r in role_textures},
                 texture_names={})
+            # `build_material_spec` copies only the scalar keys it knows, so the
+            # accent tint has to be set on the spec directly -- the same reason
+            # `uv_scale` is set below rather than passed in.
+            if _table_scalars.get("accent_tint"):
+                table_spec["accent_tint"] = _table_scalars["accent_tint"]
+            if _table_scalars.get("accent_pow"):
+                table_spec["accent_pow"] = _table_scalars["accent_pow"]
             # ⚠ This route returns EARLY, so it used to skip the UV scale that
             # the shader-set route below applies -- and it is the route almost
             # everything takes (224 of `mpl_arena_a`'s 238 materials). Every
@@ -1617,7 +1736,16 @@ def build_spec(ctx: MaterialContext, material_hash: str, *,
     )
     if uv_scale != (1.0, 1.0):
         spec["uv_scale"] = [uv_scale[0], uv_scale[1]]
+    if scalars.get("accent_tint"):
+        spec["accent_tint"] = scalars["accent_tint"]
+    if scalars.get("accent_pow"):
+        spec["accent_pow"] = scalars["accent_pow"]
     return spec
+
+
+#: The two unnamed per-material colour slots that carry the team/accent tint.
+#: See where `accent_tint` is built for the evidence and for what is NOT known.
+ACCENT_TINT_KEYS = (0x8e80f2cd94c2631a, 0x11665b0a6c849e76)
 
 
 def _scalars_from_material(material) -> dict:
@@ -1750,6 +1878,65 @@ def _scalars_from_material(material) -> dict:
             emissive_layers.append(layer)
     scalars["layers"] = layers
     scalars["emissive_layer_indices"] = emissive_layers
+
+    # ── the TEAM / accent tint ──────────────────────────────────────────
+    # ⭐ Two unnamed colour slots carry the only colour these surfaces have.
+    # `mpl_arena_a`'s two goal ends are the case that exposed them: i1934 and
+    # i1914 are the same 584-face mesh with the same four textures, and every
+    # decoded field of their materials is identical EXCEPT these:
+    #
+    #     8e80f2cd94c2631a   blue end (0.263, 0.840, 1.000)
+    #                        orange   (1.000, 0.323, 0.204)
+    #     11665b0a6c849e76   blue end (0.024, 0.561, 1.000)
+    #                        orange   (1.000, 0.272, 0.051)
+    #
+    # Those are the team colours outright. It matters because all four of the
+    # material's textures -- albedo, normal, specular and the rim map -- are
+    # GREYSCALE (mean R=G=B), so without these slots the surface has no colour
+    # at all and imports grey, which is exactly what it did.
+    #
+    # ⚠ The NAMES are not recovered. Neither hash is in `build_name_table`'s
+    # 15024 entries, and neither cracks against the 33570 identifiers harvested
+    # from every shipped shader set and standalone shader. What IS established
+    # is the shape: corpus-wide 60 materials bind the first and 36 the second,
+    # and 100% of those values are 0..1 triples. Each is followed in the word
+    # blob by a scalar (1.0 here, and 0.8/0.5 differing per team) and then by a
+    # power-like 3.33/4.5 -- the layout of a tint + intensity + falloff group.
+    #
+    # ⚠ WHICH term they tint is inferred, not decoded. Both of the material's
+    # rim maps are `unrouted_roles`, and a tint+intensity+power group beside an
+    # unrouted rim map reads as rim lighting. A consumer that only wants the
+    # surface to be the right colour should multiply it in; a faithful renderer
+    # would drive a Fresnel term with it.
+    # Color4: RGB plus an intensity in alpha (0.8 / 0.5 on the arena's
+    # two ends), which is why PARAM_ARITY types a rim tint as 4 words.
+    # ★ The FALLOFF EXPONENT, recovered. The note above says the group is
+    # "tint + intensity + falloff" but stops at 4 words; the group is SIX:
+    #
+    #     word[0..2] RGB tint
+    #     word[3]    intensity
+    #     word[4]    0.0        -- separator, 0.0 on all 96 accent slots corpus-wide
+    #     word[5]    the falloff exponent
+    #
+    # Measured over every material in the extract: 96 accent slots, `word[4]`
+    # is 0.0 on 96/96, and `word[5]` lands on plausible Fresnel exponents
+    # (5.0 x23, 4.0 x12, 2.914 x7, 4.371 x7, 3.333 x3, 4.5 x3). It reproduces
+    # the two values this comment already names for `mpl_arena_a`: material
+    # 1bc9ca79ca8870f7 reads (0.263,0.840,1.000) i=1.0 -> 3.333 on the first
+    # slot and (0.024,0.561,1.000) i=0.8 -> 4.5 on the second -- the blue goal
+    # end, exactly as documented. So "the hash never cracked" was true of the
+    # NAME and irrelevant to the VALUE: the exponent sits at a fixed offset in
+    # the group and needs no name at all.
+    #
+    # It is carried as `accent_pow` and stays None where absent, so a level
+    # that authors no accent group (mpl_combat_war_room: 0 of 69) is unchanged.
+    _accent = [read(key, 6) for key in ACCENT_TINT_KEYS]
+    scalars["accent_tints"] = [c[:4] if c else None for c in _accent]
+    _primary = next((c for c in _accent
+                     if c and len({round(float(x), 3) for x in c[:3]}) > 1), None)
+    scalars["accent_tint"] = list(_primary[:4]) if _primary else None
+    scalars["accent_pow"] = (float(_primary[5])
+                             if _primary and len(_primary) > 5 else None)
     # Layer 0's value wins, then the UNLAYERED `emissive_intensity`.
     #
     # That second property was invisible until its name was recovered from the

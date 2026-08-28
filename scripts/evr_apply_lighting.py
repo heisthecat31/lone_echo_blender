@@ -62,6 +62,12 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
                 "range": [round(v, 4) for v in light.range],
                 "shades_dynamic": light.shades_dynamic,
                 "owner": light.owner,
+                # SPOT only: the authored cone. Without these every spot in the
+                # level renders at Blender's default 45 deg (see evr_lights).
+                "cone": (round(light.cone, 6)
+                         if isinstance(light.cone, float) else None),
+                "cone_inner": (round(light.cone_inner, 6)
+                               if isinstance(light.cone_inner, float) else None),
             })
 
         info = evr_lm.level_lightmap(root, member)
@@ -120,8 +126,9 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
     # DIFFERENT atlas regions, their UVs are per instance too, in the CGSI GPU
     # sibling rather than the vertex stream.
     sh_pages: dict = {}
+    masks: dict = {}
     instance_uv, instance_pages = _static_instances(pkg, root, images, out_dir,
-                                                    gains, sh_pages)
+                                                    gains, sh_pages, masks)
 
     payload = {
         "format": "evr_lighting",
@@ -139,11 +146,12 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
         # irradiance is `stored * gain`. Exposure, not decoded data.
         "gains": gains,
         "meshes": bindings,
-        # SH4 pages kept as RAW coefficients: {page_key: {basis, slices[4]}}.
+        # Pages kept as RAW slices: {page_key: {basis, slices[4 or 5]}}.
         # slice 0 is the DC term; 1-3 are packed to [0,1] and must be unpacked
         # as `c*2-1` then rescaled by `dc*2` before evaluating irradiance with
         # the surface normal (core/shaders/materials/material_base_ps.hlsl:1129).
         "sh_pages": sh_pages,
+        "masks": masks,
         "lights": lights,
         # Per-instance lightmap: {package instance index: {"image", "uv_offset",
         # "uv_count"}} into `instance_uv_blob` (float32 u,v pairs).
@@ -160,7 +168,7 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
 
 
 def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
-                      gains: dict, sh_pages: dict) -> tuple:
+                      gains: dict, sh_pages: dict, masks: dict) -> tuple:
     """`(uv_blob, {instance_index: binding})` for static-instanced geometry.
 
     Reads `static_entities.json` -- written by the extractor because flattening
@@ -170,6 +178,19 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
     import struct
 
     from evr_resource_types import STATIC_RESOURCE
+
+    # ⛔ Do NOT reuse `images` to decide whether a page's EXTRAS (basis slices,
+    # occlusion/AO masks) still need writing. `images` is SHARED with the
+    # mesh-binding pass above, which writes the collapsed PNG and nothing else,
+    # so every page that pass touched first looked "already done" here and
+    # silently lost both. On `mpl_combat_war_room` the mesh pass claims pages
+    # 0, 3 and 6, which carry 818 of the level's 1280 lit instances: 63.9% of
+    # them fell back to the clamped 8-bit PNG with no occlusion at all.
+    #
+    # Tracked separately rather than by `key not in sh_pages` so that a page
+    # which legitimately yields no slices is attempted ONCE, not once per
+    # instance sitting on it.
+    extras_done: set = set()
 
     sidecar = pkg / "static_entities.json"
     if not sidecar.is_file():
@@ -195,7 +216,7 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
             gpu = gpu_path.read_bytes() if gpu_path else None
             pages = evr_lm.static_instance_lightmaps(cgsi)[1] if cgsi else {}
             cache[level] = (cgsi, gpu, evr_lm.level_lightmap(root, level),
-                            pages, [None, None])
+                            pages, [None, None, None, None])
         cgsi, gpu, info, page_by_entity, decoded = cache[level]
         if not cgsi or not gpu or not info:
             continue
@@ -210,15 +231,20 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
             slices, width, height = decoded[0]
             images[key] = _write_page(out_dir, key, slices, page, info,
                                       width, height, gains)
-            # SH4 additionally keeps its four RAW coefficient slices, because
-            # world-space SH cannot be collapsed ahead of shading.
-            if info["basis"] == "SH4":
-                if decoded[1] is None:
-                    decoded[1] = evr_lm.ambient_dds(root, info["ambient"])[0]
-                names = _write_sh4_page(out_dir, key, decoded[1], page,
-                                        width, height)
-                if len(names) == 4:
-                    sh_pages[key] = {"basis": "SH4", "slices": names}
+        if key not in extras_done:
+            extras_done.add(key)
+            # BOTH bases keep their RAW slices now: SH4 because world-space SH
+            # cannot be collapsed ahead of shading, SG5 because collapsing it on
+            # the CPU costs 8-bit clamping. See `_write_basis_slices`.
+            if decoded[1] is None:
+                decoded[1] = evr_lm.ambient_dds(root, info["ambient"])[0]
+            names = _write_basis_slices(out_dir, key, decoded[1], page,
+                                        info["basis"])
+            if len(names) == info["lobes"]:
+                sh_pages[key] = {"basis": info["basis"], "slices": names}
+            occ = _write_mask_page(out_dir, key, root, info, page, decoded)
+            if occ:
+                masks[key] = occ
         uvs = evr_lm.static_instance_uvs(cgsi, gpu, entity, submesh)
         if not uvs:
             continue
@@ -250,10 +276,63 @@ def _static_instances(pkg: Path, root: Path, images: dict, out_dir: Path,
 #: 1-3 sit at 128/255 on lit texels -- exactly the zero point of the shader's
 #: `*2-1` unpack.
 SH4_SLICE_NAMES = ("sh0", "sh1", "sh2", "sh3")
+#: Slice order inside one SG5 page -- five spherical-gaussian lobes.
+SG5_SLICE_NAMES = ("sg0", "sg1", "sg2", "sg3", "sg4")
+#: Slice names per basis.
+BASIS_SLICE_NAMES = {"SH4": SH4_SLICE_NAMES, "SG5": SG5_SLICE_NAMES}
 
 
-def _write_sh4_page(out_dir, key, raw_dds, page, width, height) -> list:
-    """Write one SH4 page as FOUR raw coefficient images.
+#: `SGLightMapTextures` / `SGAOTextures` slot names, by the DXGI family that
+#: identifies them. Every level measured binds ONE texture to both slots of each
+#: pair -- `k_dirlight_occlusion_map` and `k_punctual_occlusion_map` share a
+#: hash, as do `k_ambient_lightmap_ao0` and `ao1` -- so one file each is enough.
+MASK_SUFFIX = {"occlusion": "occ", "ao": "ao"}
+
+
+def _write_mask_page(out_dir, key, root, info, page, decoded) -> dict:
+    """Write one page's occlusion (BC4) and AO (BC5) slices. Returns their names.
+
+    Handed over COMPRESSED, for the same reason the basis slices are: these are
+    single-channel and two-channel masks whose useful range sits low, and a
+    CPU decode through `texture2ddecoder` costs precision for nothing.
+
+    ⚠ What the shipped data looks like, measured on `mpl_arena_a` through
+    Blender's own decode -- worth knowing before trusting it:
+
+      * occlusion pages 0 and 1 are UNIFORMLY 0.0, page 2 is near-binary
+        (mean 0.183, p90 1.0). That is coherent for an enclosed arena: the
+        directional light reaches almost none of it. It is NOT a decode fault.
+      * the AO map's R channel is a high-contrast mask (mean ~0.45), while G
+        sits at ~0.50 with a std of 0.05-0.12 -- a signed quantity about a
+        midpoint, like the SH4 directional slices, NOT a second occlusion term.
+
+    The AO slices are exported but deliberately left unapplied: unlike the
+    occlusion maps, `engineparams.hlsl` names them without the shader ever
+    showing how `SGAOTextures` is consumed, and multiplying a ~0.45-mean mask
+    into the bake on a guess would halve every lit surface.
+    """
+    out = {}
+    for slot, tex in (("occlusion", info.get("occlusion")),
+                      ("ao", (info.get("ao") or [None])[0])):
+        if not tex:
+            continue
+        index = 2 if slot == "occlusion" else 3
+        if decoded[index] is None:
+            try:
+                decoded[index] = evr_lm.ambient_dds(root, tex)[0]
+            except ValueError:
+                continue
+        chunk = evr_lm.single_slice_dds(decoded[index], page)
+        if chunk is None:
+            continue
+        name = f"{key}_{MASK_SUFFIX[slot]}.dds"
+        (out_dir / name).write_bytes(chunk)
+        out[slot] = name
+    return out
+
+
+def _write_basis_slices(out_dir, key, raw_dds, page, basis) -> list:
+    """Write one page's RAW basis slices -- four for SH4, five for SG5.
 
     ⚠ Deliberately NOT collapsed to a single irradiance page. SH4 is baked in
     WORLD space (`material_base_ps.hlsl:1129`), so irradiance depends on the
@@ -262,19 +341,31 @@ def _write_sh4_page(out_dir, key, raw_dds, page, width, height) -> list:
     three directional coefficients, which is why lit surfaces came out flat and
     unlike the game.
 
+    ⭐ SG5 is written for a DIFFERENT reason, and it is about PRECISION, not
+    directionality. Its collapse for the unperturbed normal is a fixed weighted
+    sum, so it *can* be done ahead of shading -- but `page_irradiance` does it
+    on top of `texture2ddecoder.decode_bc6`, which returns **8-bit** BGRA and
+    clamps everything above 1.0. Measured on `576ed3f8428ebc4b_p3`, whose float
+    decode peaks at 10.95: the clamp discards **17.3% of the page's total
+    energy**, all of it in the emitters. Handing the slices over compressed
+    lets Blender decode them at float and the clamp never happens.
+
     Stored raw and linear -- no exposure divisor, no sRGB curve. These are
     coefficients, not a picture; the consumer unpacks and evaluates them.
     """
-    names = []
-    for i in range(4):
-        index = page * 4 + i
-        chunk = evr_lm.single_slice_dds(raw_dds, index)
+    names = BASIS_SLICE_NAMES.get(basis)
+    if not names:
+        return []
+    lobes = len(names)
+    out = []
+    for i in range(lobes):
+        chunk = evr_lm.single_slice_dds(raw_dds, page * lobes + i)
         if chunk is None:
             break
-        name = f"{key}_{SH4_SLICE_NAMES[i]}.dds"
+        name = f"{key}_{names[i]}.dds"
         (out_dir / name).write_bytes(chunk)
-        names.append(name)
-    return names
+        out.append(name)
+    return out
 
 
 def _write_page(out_dir, key, slices, page, info, width, height,

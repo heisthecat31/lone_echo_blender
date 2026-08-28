@@ -46,7 +46,7 @@ for _p in (str(_SCRIPTS), str(_ROOT / "blender_tool")):
 
 from evr_resource_types import (LIGHTMAP_RESOURCE, STATIC_RESOURCE_GPU,
                                 TEXTURE_RESOURCE, normalise_hash,
-                                resolve_type_dir)
+                                resolve_type_dir, resource_path)
 import evr_texture_resource as evr_tex
 
 #: `SLightMapTextureNames`: five CSymbol64 per row.
@@ -70,6 +70,25 @@ BC5_FORMATS = {82, 83, 84}
 def sg5_weights() -> list:
     """Per-slice weight of the SG5 -> irradiance/Pi collapse."""
     return [z * (2.0 / SG5_LAMBDA) * SG5_SCALE for z in SG5_LOBE_Z]
+
+
+def page_count(occlusion_slices: int, ao_slices) -> int:
+    """How many lightmap PAGES this row holds, from its non-HDR siblings.
+
+    The BC4 occlusion map has one slice per page, so it is the natural divisor
+    -- but it is not always shipped. `836c5b14ccc58201` (2366 of
+    `mpl_combat_fission`'s instances) binds a 40-slice ambient and an 8-slice
+    BC5 AO map with NO BC4 map at all, and requiring the BC4 dropped the whole
+    level silently.
+
+    ⭐ The AO map carries the same per-page count, so it is a sound fallback
+    rather than a guess: across every row in the extract that ships both,
+    **24 agree and 0 disagree**.
+    """
+    if occlusion_slices:
+        return int(occlusion_slices)
+    return int(next((n for n in (ao_slices or ()) if n), 0))
+
 
 
 def table_rows(blob: bytes) -> list:
@@ -100,6 +119,12 @@ def table_rows(blob: bytes) -> list:
 #: (77/20/116/115/45 on five levels).
 MESHDATA_BASE = 0x28
 MESHDATA_STRIDE = 0x98
+#: Win7 (Lone Echo 2) ships the SAME record 0x18 bytes shorter. Scanning with
+#: the Win10 stride alone finds nothing on a Win7 primary, so every submesh
+#: reads as unlit and the level imports with no baked lighting at all.
+MESHDATA_STRIDE_WIN7 = 0x80
+#: Strides to try, widest first so a Win10 file can never match as Win7.
+MESHDATA_STRIDES = (MESHDATA_STRIDE, MESHDATA_STRIDE_WIN7)
 MD_LIGHTMAPINDEX = 0x60
 MD_LMSLICEINDEX = 0x64
 MD_NUMLOBES = 0x68
@@ -111,8 +136,13 @@ LIGHTMAP_NONE = 0xFFFFFFFF
 #: Sanity ceiling for a lightmap row / page index.
 MAX_LIGHTMAP_INDEX = 64
 
+#: An unused texture slot in `SLightMapTextureNames`. 126 of the 148 populated
+#: rows in the extract carry it in at least one slot.
+NULL_TEXTURE = "f" * 16
 
-def _read_triples(primary: bytes, field: int, count: int) -> list | None:
+
+def _read_triples(primary: bytes, field: int, count: int,
+                  stride: int = MESHDATA_STRIDE) -> list | None:
     """The `(row, page, numlobes)` triples at absolute offset `field`, or None.
 
     Rejects the offset unless EVERY record is well-formed: `numlobes` is the
@@ -122,18 +152,34 @@ def _read_triples(primary: bytes, field: int, count: int) -> list | None:
     triples = []
     rows = set()
     for i in range(count):
-        base = field + i * MESHDATA_STRIDE
+        base = field + i * stride
         if base + 12 > len(primary):
             return None
         row, page, lobes = struct.unpack_from("<3I", primary, base)
         if lobes != 4:
             return None
         if row != LIGHTMAP_NONE:
-            if row >= MAX_LIGHTMAP_INDEX or page >= MAX_LIGHTMAP_INDEX:
+            if row >= MAX_LIGHTMAP_INDEX:
+                return None
+            # A row WITH a sentinel page is a real, legal state: the submesh
+            # names the atlas row but is not placed on a page, so it is simply
+            # unlit. Rejecting the whole array over one such record threw away
+            # the Lone Echo 2 level shell's binding, where 128 of 157 submeshes
+            # are properly lit and exactly one is in this state.
+            if page != LIGHTMAP_NONE and page >= MAX_LIGHTMAP_INDEX:
                 return None
             rows.add(row)
         triples.append((row, page))
     if len(rows) > 1:
+        return None
+    # ⛔ An ALL-UNLIT run is not a match. Every record being the sentinel
+    # satisfies each per-record test trivially, so the scan used to stop at the
+    # first stretch of 0xFFFFFFFF it met and report the model unlit -- on the
+    # Lone Echo 2 level shell it settled 0x6c bytes before the real array,
+    # which does carry row 2 across pages 0-3. Refusing the empty case costs
+    # nothing: a genuinely unlit model finds no offset either way and still
+    # returns `unlit` at the end of the scan.
+    if not rows:
         return None
     return triples
 
@@ -153,16 +199,20 @@ def mesh_lightmap_bindings(primary: bytes, count: int) -> list:
     unlit = [(None, None)] * count
     if count <= 0:
         return unlit
-    limit = len(primary) - MESHDATA_STRIDE * count
-    if limit < 0:
-        return unlit
 
-    for field in range(0, limit + 1, 4):
-        triples = _read_triples(primary, field, count)
-        if triples is None:
+    # Try each build's record stride. The scan already demands that EVERY
+    # record be well formed, so a wrong stride does not merely give a worse
+    # answer -- it gives none, which is what makes trying both safe.
+    for stride in MESHDATA_STRIDES:
+        limit = len(primary) - stride * count
+        if limit < 0:
             continue
-        return [(None, None) if row == LIGHTMAP_NONE or page == LIGHTMAP_NONE
-                else (row, page) for row, page in triples]
+        for field in range(0, limit + 1, 4):
+            triples = _read_triples(primary, field, count, stride)
+            if triples is None:
+                continue
+            return [(None, None) if row == LIGHTMAP_NONE or page == LIGHTMAP_NONE
+                    else (row, page) for row, page in triples]
     return unlit
 
 
@@ -323,27 +373,39 @@ def level_lightmap(root: Path, level_hash: str, row_index: int | None = None) ->
     `assetdata.lightmapidx`; when omitted the single populated row is used,
     which is what every shipped level has.
     """
-    path = resolve_type_dir(root, LIGHTMAP_RESOURCE) / normalise_hash(level_hash)
-    if not path.exists():
-        path = path.with_suffix(".bin")
-    if not path.exists():
+    # `resource_path` tolerates BOTH on-disk spellings (zero-padded and
+    # leading-zero-stripped) and the optional `.bin` suffix. A raw join sees
+    # only the padded name, so a level such as `mpl_combat_war_room`
+    # (`08a1af9e108def0b`, stored as `8a1af9e108def0b`) silently returned
+    # nothing at all.
+    path = resource_path(root, LIGHTMAP_RESOURCE, level_hash)
+    if path is None:
         return None
     rows = table_rows(path.read_bytes())
     if not rows:
         return None
 
-    tex_dir = resolve_type_dir(root, TEXTURE_RESOURCE)
-    known = {p.name for p in tex_dir.iterdir()} if tex_dir.is_dir() else set()
+    # ⛔ Do NOT gate on the texture-resource directory listing. A lightmap
+    # texture does not have to be a file in `4a4c32c49300b8a0`: some are read
+    # through a sidecar, and `evr_texture_resource.rebuild_dds` resolves those
+    # perfectly well. `mpl_combat_dyson` is the case that found this -- its
+    # ambient map `005faa0367fcfbe1` is absent from the listing yet rebuilds to
+    # a 62.9 MB, 60-slice BC6H array (12 pages x 5 lobes, i.e. SG5). Filtering
+    # on the listing threw it away and reported the level as having no lightmap
+    # at all, silently, with 2943 static instances left unlit.
+    #
+    # The only value that means "no texture here" is the NULL sentinel, so that
+    # is the only thing skipped. A populated row is one with any non-null slot.
     candidates = ([(row_index, rows[row_index])]
                   if row_index is not None and row_index < len(rows)
                   else [(i, r) for i, r in enumerate(rows)
-                        if any(h in known for h in r)])
+                        if any(h != NULL_TEXTURE for h in r)])
     for row_number, row in candidates:
         ambient = occlusion = None
         ao = []
         width = height = 0
         for h in row:
-            if h not in known:
+            if h == NULL_TEXTURE:
                 continue
             blob, _note = evr_tex.rebuild_dds(root, h)
             if not blob or len(blob) < 148:
@@ -355,14 +417,18 @@ def level_lightmap(root: Path, level_hash: str, row_index: int | None = None) ->
                 occlusion = (h, arr)
             elif dxgi in BC5_FORMATS:
                 ao.append((h, arr))
-        if not ambient or not occlusion or not occlusion[1]:
+        if not ambient:
             continue
-        pages = occlusion[1]
+        pages = page_count(occlusion[1] if occlusion else 0,
+                           [arr for _h, arr in ao])
+        if not pages:
+            continue
         lobes = ambient[1] / pages
         if lobes not in (4.0, 5.0):
             continue          # neither shipped basis -- refuse rather than guess
         return {
-            "ambient": ambient[0], "occlusion": occlusion[0],
+            "ambient": ambient[0],
+            "occlusion": occlusion[0] if occlusion else None,
             "ao": [h for h, _ in ao], "pages": pages, "lobes": int(lobes),
             "basis": "SG5" if lobes == 5.0 else "SH4",
             "width": width, "height": height,

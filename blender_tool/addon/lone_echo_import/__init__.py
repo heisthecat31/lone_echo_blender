@@ -36,7 +36,8 @@ from bpy.props import (   # type: ignore  # noqa: E402
 from bpy_extras.io_utils import ImportHelper          # type: ignore  # noqa: E402
 
 from . import (package_reader, mesh_builder, material_builder, scene_reader,   # noqa: E402
-               scatter_reader, scatter_import, light_import, lightmap_builder)
+               scatter_reader, scatter_import, light_import, lightmap_builder,
+               evr_effects)
 
 # Re-export the scatter import entry point so headless callers can use
 # `lone_echo_import.import_lescatter(pkg, context, opts)` alongside import_lemesh.
@@ -442,9 +443,38 @@ def import_lemesh(pkg_path, context, opts: dict) -> dict:
         "variants": sum(1 for m in bpy.data.materials if "le_lightmap_page" in m.keys()),
     }
 
+    # --- bloom ---------------------------------------------------------------
+    # In the engine, "glowing" is a post-process: an emissive surface with no
+    # bloom pass renders at exactly its emissive value and stops there, which
+    # reads as coloured-but-flat. Bloom is authored per LEVEL, so a model
+    # package carries none and the game's most common preset stands in. A
+    # package that DOES ship `effects.json` uses its own values.
+    bloom = {"built": False, "reason": "not requested"}
+    if opts.get("bloom", True):
+        doc = evr_effects.load(pkg_path)
+        own = bool(doc and (doc.get("bloom") or {}).get("active"))
+        if not own:
+            doc = evr_effects.default_bloom_doc()
+        result = (evr_effects.apply_bloom(
+            doc, context.scene,
+            strength=opts.get("bloom_strength", 1.0)) or {}).get("bloom")
+        # A dict is the built graph; a string is the reason it was not built.
+        if isinstance(result, dict):
+            bloom = {"built": True, "own_effects_json": own,
+                     "is_default_preset": not own,
+                     "magnitude": result.get("magnitude"),
+                     "exposure_offset": result.get("exposure_offset"),
+                     "gain": result.get("gain"),
+                     "authored_gain": result.get("authored_gain"),
+                     "strength": result.get("strength"),
+                     "is_authored": result.get("is_authored", True)}
+        else:
+            bloom = {"built": False,
+                     "reason": str(result or "bloom inactive in effects.json")}
+
     return {"collection": coll_name, "objects": n_obj, "vertices": n_vert,
             "triangles": n_tri, "materials": len(materials), "bones": n_bones,
-            "placement": placement, "lightmap": lightmap}
+            "placement": placement, "lightmap": lightmap, "bloom": bloom}
 
 
 class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
@@ -491,6 +521,32 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
             ("-1", "All levels (stacked)", "Emit every draw — levels overlap"),
         ],
         default="0")   # type: ignore
+    bloom: BoolProperty(
+        name="Bloom (glow)", default=True,
+        description="Add the engine's bloom pass to the compositor. Emissive "
+                    "surfaces render at exactly their emissive value without "
+                    "it -- coloured but flat -- because in the engine the glow "
+                    "IS this pass. Bloom is authored per LEVEL, so a model "
+                    "package has none of its own and the game's most common "
+                    "preset is used")   # type: ignore
+    emission_strength: FloatProperty(
+        name="Emission Strength",
+        description="Multiplier on each material's AUTHORED emissive "
+                    "intensity. 1.0 is what the material specifies. This "
+                    "scales rather than replaces, so a material authored "
+                    "at 2.0 stays twice as bright as its 1.0 neighbour at "
+                    "every setting. Raise it to make glowing surfaces read "
+                    "stronger; 0 turns emission off. Bloom Strength widens "
+                    "the halo, this brightens the source",
+        default=1.0, min=0.0, soft_max=16.0, precision=2)   # type: ignore
+    bloom_strength: FloatProperty(
+        name="Bloom Strength",
+        description="Multiplier on the authored bloom gain. 1.0 is what the "
+                    "engine grades -- subtle by design. Raise it for a "
+                    "stronger glow than the game's; 0 disables bloom. Only the "
+                    "AMOUNT scales: magnitude, exposure offset, octaves and "
+                    "blur radii keep their authored shape",
+        default=1.0, min=0.0, soft_max=8.0, precision=2)   # type: ignore
     skip_unresolved: BoolProperty(
         name="Skip Unresolved Placements", default=False,
         description="Skip eAuto/eJoint/eRefPoint placements whose world could not be "
@@ -612,6 +668,9 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
                                   if self.lightmap_slice_dir else "",
             "lightmap_intensity": float(self.lightmap_intensity),
             "lightmap_use_ao": self.lightmap_use_ao,
+            "bloom": self.bloom,
+            "bloom_strength": float(self.bloom_strength),
+            "emission_strength": float(self.emission_strength),
         }
         try:
             summary = import_lemesh(self.filepath, context, opts)
@@ -634,6 +693,16 @@ class IMPORT_OT_lemesh(bpy.types.Operator, ImportHelper):
         elif lm.get("mode") != "none" and lm.get("reason"):
             # Never silent: an unwired lightmap is a result, not an absence.
             self.report({"WARNING"}, f"lightmap not wired: {lm['reason']}")
+        bl = summary.get("bloom") or {}
+        if bl.get("built"):
+            msg += (f"; bloom x{bl['magnitude']:g} @ -{bl['exposure_offset']:g} EV"
+                    + ("" if bl.get("is_authored", True)
+                       else f" x{bl['strength']:g} strength")
+                    + (" (game default preset)" if bl.get("is_default_preset") else ""))
+        elif bl.get("reason"):
+            # An unbuilt bloom is a result, not an absence -- without it
+            # emissive surfaces render flat, which reads as a material bug.
+            self.report({"WARNING"}, f"bloom not built: {bl['reason']}")
         self.report({"INFO"}, msg)
         return {"FINISHED"}
 

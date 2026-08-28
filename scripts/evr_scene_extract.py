@@ -105,6 +105,7 @@ from evr_resource_types import (
     MESH_DIRS,
     normalise_hash,
     resolve_type_dir,
+    resource_path,
 )
 
 # Same four directories, same order, as the original list -- only the COMMENTS
@@ -329,9 +330,13 @@ def sublevels_of(level_hash: str) -> list:
                 break
 
     root = Path(_LAST_ROOT[0] or ".")
-    actor_dir = resolve_type_dir(root, DIR_ACTOR_DATA)
     ordered = [canonical] + sorted(g for g in group if g != canonical)
-    present = [g for g in ordered if (actor_dir / g).exists()]
+    # `resource_path`, not `actor_dir / g`: extracts differ on whether leading
+    # zeroes were stripped when the file was written, and a raw join sees only
+    # the padded spelling. `mpl_combat_war_room` ships as `8a1af9e108def0b`
+    # (15 chars) in H:/pcvr-extracted, so the join missed it and `--full`
+    # silently dropped every sublevel whose id starts with a zero.
+    present = [g for g in ordered if resource_path(root, DIR_ACTOR_DATA, g)]
     return present or [canonical]
 
 
@@ -598,6 +603,11 @@ _MATERIAL_HASHES = [set()]
 #: together -- so they must never be LOD-grouped against each other. They share a
 #: bounding box (they are parts of one object), which is exactly what the bbox
 #: clustering would mistake for a LOD chain, hiding all but one at LOD 0.
+#: `--no-broken-assets` disables the CGSI `brokenassets` recovery.
+_NO_BROKEN_ASSETS = [False]
+#: How many instances that recovery added, for the run summary.
+_BROKEN_RECOVERED = [0]
+
 _SPLIT_PIECES: dict = {}
 #: Parallel to `_SPLIT_PIECES`: each piece's (lo, hi) VERTEX range inside the
 #: submesh it was split out of. Needed to slice anything the engine stores per
@@ -653,6 +663,68 @@ VB_STRIDE = 336
 VB_BASE_OFFSET = 0x128
 VB_STREAM0_SIZE = 0x130
 VB_VERTEX_COUNT = 0x13C
+
+
+#: `CGMeshData` baked-lightmap ids inside a WIN10 (Echo VR) mesh-list record.
+#:
+#: ⭐ Lone Echo puts the triple at 0x6C / 0x70 / 0x74 of an 0x80 record. Echo
+#: VR's array0 record is 0x98, and the triple does NOT move with the front of
+#: the struct -- it sits at the same distance from the END, 0x14, so the
+#: offsets shift by exactly the 0x18 the record grew by.
+#:
+#: Located by scanning every u32 column of 90 array0 records across the war
+#: room's mesh-list models, and confirmed three ways:
+#:   * `+0x8C` reads 4 on 90 of 90 records, and Lone Echo ships numlobes == 4
+#:     on 1221 of 1221 shipped meshes;
+#:   * `+0x84` carries the 0xFFFFFFFF "unlit" sentinel on 57 records and a real
+#:     row index on 33 -- exactly the 33 submeshes `evr_apply_lighting` binds
+#:     for that level by a completely independent route;
+#:   * the three sit contiguous, as they do in Lone Echo.
+#:
+#: ⚠ Reading these does NOT add baked coverage. Its value is that the manifest
+#: stops claiming every mesh is unlit: a consumer can now tell "this mesh has
+#: no bake authored" from "the extractor did not look", which is precisely the
+#: confusion that made a room full of legitimately unbaked props look like an
+#: extraction bug.
+M_LIGHTMAPINDEX_W10 = 0x84
+M_LMSLICEINDEX_W10 = 0x88
+M_NUMLOBES_W10 = 0x8C
+#: array0 stride for a Win10 mesh list. Win7/Lone Echo is 0x80.
+MESHLIST_REC_W10 = 0x98
+
+_LIGHTMAP_ID_CACHE: dict = {}
+
+
+def model_lightmap_ids(pcvr_dir, model_hash: str) -> list:
+    """`[(lightmap_index, lm_slice_index, numlobes), ...]`, one per array0 record.
+
+    `[]` when the model is not a Win10 mesh list -- the static-instanced models
+    are a different resource whose charts come from CGSI instead.
+    """
+    key = (str(pcvr_dir), str(model_hash))
+    hit = _LIGHTMAP_ID_CACHE.get(key)
+    if hit is not None:
+        return hit
+    out: list = []
+    try:
+        _gpu, primary_path = find_mesh_and_primary(pcvr_dir, model_hash)
+        if primary_path is not None:
+            blob = primary_path.read_bytes()
+            arrays, _end = decode._meshlist_arrays(blob)
+            if arrays and arrays[0][2] == MESHLIST_REC_W10:
+                base, count, stride = arrays[0]
+                for i in range(count):
+                    rec = base + i * stride
+                    if rec + M_NUMLOBES_W10 + 4 > len(blob):
+                        break
+                    out.append((
+                        struct.unpack_from("<I", blob, rec + M_LIGHTMAPINDEX_W10)[0],
+                        struct.unpack_from("<I", blob, rec + M_LMSLICEINDEX_W10)[0],
+                        struct.unpack_from("<I", blob, rec + M_NUMLOBES_W10)[0]))
+    except (OSError, struct.error, AttributeError, IndexError):
+        out = []
+    _LIGHTMAP_ID_CACHE[key] = out
+    return out
 
 
 def _vertex_buffer_records(primary: bytes, vertex_counts: list) -> list:
@@ -763,6 +835,46 @@ def _repair_uvs(pcvr_dir: Path, model_hash: str, results: list) -> int:
         results[index] = (result[0], result[1], replacement) + tuple(result[3:])
         repaired += 1
     return repaired
+
+
+def broken_asset_map(cgsi: bytes) -> dict:
+    """`{partner model -> [model it stands in for, ...]}` from CGSI `brokenassets`.
+
+    ⭐ A level's `assetdata` names models that NOTHING places: no CSIMCR pair,
+    no actor. `mpl_combat_dyson` has 9 of them, and every one is listed in the
+    CGSI's own `brokenassets` table -- which is why they were dropped. They are
+    not corrupt: all 9 decode cleanly off disk (36-418 verts, planar props of
+    1-6 m).
+
+    The table is a PAIR of asset hashes, and the first column is a model that
+    IS placed. Three things say the second belongs at the first's transforms:
+
+      * every one of dyson's 9 partners is placed, none is an entity;
+      * those partners hold **32** instances between them, exactly matching the
+        **32** rows of the sibling `brokennodes` table;
+      * the resulting placements are mirrored pairs (+/-11.31, +/-12.00,
+        +/-11.22, +/-23.92 m), which is how the level is built everywhere else.
+
+    Found by a user standing at a visible hole in `mpl_combat_dyson`: the
+    nearest recovered slot is 4.27 m from that cursor, and six lie within 4.5 m.
+
+    ⚠ `inferred`. The pairing is not named in any struct this toolchain has
+    decoded, so it rests on the three agreements above rather than on a field
+    that says "transform". `--no-broken-assets` turns the recovery off.
+    """
+    try:
+        import evr_lightmap as _lm
+        tables = _lm.read_cgsi(cgsi)
+    except Exception:
+        return {}
+    if not tables:
+        return {}
+    out: dict = {}
+    for row in tables.get("brokenassets") or ():
+        if len(row) < 2:
+            continue
+        out.setdefault(f"{row[0]:016x}", []).append(f"{row[1]:016x}")
+    return out
 
 
 def _split_submesh_draws(result, run):
@@ -1451,13 +1563,12 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     nodeid_set = set()
     found_any = False
     for member in scene_group:
-        actor_path = None
-        actor_dir = resolve_type_dir(pcvr_dir, DIR_ACTOR_DATA)
-        for ext in ["", ".bin"]:
-            cand = actor_dir / (member + ext)
-            if cand.exists():
-                actor_path = cand
-                break
+        # Tolerates BOTH on-disk spellings (zero-padded and stripped) and the
+        # optional `.bin` suffix -- see `resource_path`. The old manual join
+        # only tried the padded name, so a level like `mpl_combat_war_room`
+        # (`08a1af9e108def0b`, stored as `8a1af9e108def0b`) reported "no actor
+        # data" even though the file was right there.
+        actor_path = resource_path(pcvr_dir, DIR_ACTOR_DATA, member)
         if not actor_path:
             print(f"  ⚠ no actor data for {level_label(member)} -- skipped")
             continue
@@ -1502,11 +1613,13 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     for member, h in ((m, t) for m in scene_group
                       for t in (DIR_MODEL_CR, DIR_INSTANCE_MODEL_CR,
                                 DIR_STATIC_MODEL_CR)):
-        type_dir = resolve_type_dir(pcvr_dir, h)
-        p = type_dir / member
-        if not p.exists():
-            p = p.with_suffix(".bin")
-        if not p.exists():
+        # `resource_path`, not a raw join: these per-level CR files are keyed by
+        # the LEVEL hash, and an extract may store it with leading zeroes
+        # stripped. `mpl_combat_war_room` (`08a1af9e108def0b`) ships as
+        # `8a1af9e108def0b`, so all three lookups missed and its 656 actors
+        # resolved to zero models -- only the base map geometry survived.
+        p = resource_path(pcvr_dir, h, member)
+        if p is None:
             continue
         blob = p.read_bytes()
         if h == DIR_MODEL_CR:
@@ -1572,13 +1685,12 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
 
     for member in scene_group:
         def _res(kind):
-            type_dir = resolve_type_dir(pcvr_dir, kind)
-            q = type_dir / member
-            return q if q.exists() else q.with_suffix(".bin")
+            # tolerates the stripped-leading-zero spelling (see above)
+            return resource_path(pcvr_dir, kind, member)
 
         p_smodel, p_transform = (_res(DIR_STATIC_MODEL_CR),
                                  _res(DIR_TRANSFORM_CR))
-        if not (p_smodel.exists() and p_transform.exists()):
+        if not (p_smodel and p_transform):
             continue
 
         # CSIMCR gives (entity, model) per instance; CTransformCR turns each
@@ -1595,6 +1707,30 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             inst.model_index += base
             inst.level = member
             static_instances.append(inst)
+        # ── BROKEN ASSETS ────────────────────────────────────────────
+        # Models the level lists but nothing places, recovered at the
+        # transforms of the partner CGSI pairs them with. See
+        # `broken_asset_map` for why that pairing is believed.
+        if not _NO_BROKEN_ASSETS[0]:
+            _cgsi_p = _res(DIR_STATIC_RESOURCE)   # None when absent
+            _bmap = broken_asset_map(_cgsi_p.read_bytes()) if _cgsi_p else {}
+            if _bmap:
+                import copy as _copy
+                _rec = 0
+                for _inst in list(raw_sinst):
+                    for _bh in _bmap.get(_inst.model_hash, ()):
+                        _clone = _copy.deepcopy(_inst)
+                        _clone.model_hash = _bh
+                        static_models.append(_bh)
+                        _clone.model_index = len(static_models) - 1
+                        static_instances.append(_clone)
+                        _rec += 1
+                if _rec:
+                    _BROKEN_RECOVERED[0] += _rec
+                    print(f"  broken assets [{level_label(member)}]: recovered "
+                          f"{_rec} instance(s) of "
+                          f"{len({b for v in _bmap.values() for b in v})} model(s)")
+
         missing = len(pairs) - len(raw_sinst)
         print(f"Static [{level_label(member)}]: {len(pairs)} instances, "
               f"{len(raw_sinst)} placed"
@@ -1617,6 +1753,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         scene_out_dir = out_dir / "scenes" / label
     scene_out_dir.mkdir(exist_ok=True, parents=True)
     _placeholder_twins: dict = {}
+    _placeholder_unresolved: set = set()
     tex_out_dir = scene_out_dir / "textures"
     tex_out_dir.mkdir(exist_ok=True)
     
@@ -1798,6 +1935,10 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             if _twin:
                 _mat_source = _twin
                 _placeholder_twins[normalise_hash(mhash)] = _twin
+            elif evr_materials.is_untextured_placeholder(pcvr_dir, mhash):
+                # Geometry but no art, and no dressed duplicate to borrow from.
+                # This imports as a blank shape; say so rather than swallow it.
+                _placeholder_unresolved.add(normalise_hash(mhash))
 
             draw_materials = evr_materials.materials_for_model(
                 pcvr_dir, _mat_source, mat_ctx.material_hashes,
@@ -2239,6 +2380,8 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
 
             base_idx = len(all_meshes)
             scene_meshes = []
+            # Baked-lightmap ids off this model's own CGMeshData records.
+            lm_ids = model_lightmap_ids(pcvr_dir, mhash)
             
             # results is a list of submeshes. Each result is usually [(verts, faces, uvs, bone_data)]
             for i, res_group in enumerate(results):
@@ -2270,6 +2413,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 # guess for everything else -- so it is logged once per model.
                 submesh_mat_idx = raw_mat_idx[i] if i < len(raw_mat_idx) else 0
 
+                lm_id = lm_ids[i] if i < len(lm_ids) else None
                 sm = SceneMesh(
                     index=base_idx + i,
                     name_hash=int(mhash, 16),
@@ -2291,6 +2435,10 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                         "idx_count": len(flat_idx)
                     }]
                 )
+                # Read, not defaulted. `LIGHTMAP_NONE` here now means the mesh
+                # is authored UNLIT, not that nobody looked.
+                if lm_id is not None:
+                    sm.lightmap_index, sm.lm_slice_index, sm.numlobes = lm_id
                 scene_meshes.append(sm)
                 all_meshes.append(sm)
                 
@@ -2436,6 +2584,48 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             print(f"⛔ {guessed} model(s) fell through every described path -- "
                   f"the vertex format was guessed and the geometry is probably "
                   f"wrong. These are the models to chase.")
+        if _placeholder_twins:
+            print(f"  placeholder props: {len(_placeholder_twins)} resolved to a "
+                  f"dressed twin")
+        # ⭐ Report what is actually true of the OUTPUT rather than guessing at
+        # causes. A model none of whose materials provides a colour source
+        # imports untextured, whatever the reason -- an unresolved placeholder,
+        # a genuinely colourless decal shell, or a broken material link.
+        #
+        # ⛔ Do NOT report `_placeholder_unresolved` (models with <= 1 real
+        # texture and no twin) instead. Measured on `mpl_lobby_b2`, that fires
+        # on 41 models where only 5 are really blank props -- simple models with
+        # one texture are ordinary. Narrowing it to "binds a single material"
+        # still leaves 39, and to "shares a mask with >= 8 models" 22. The
+        # colour-source test lands on 17 and captures all 5.
+        _colour_roles = ("albedo", "emissive")
+        _colour_channels = {"base_color", "albedo", "emission", "emissive"}
+
+        def _provides_colour(spec) -> bool:
+            channels = spec.get("channels") or {}
+            keys = set(channels) if isinstance(channels, (dict, list, set)) else set()
+            if keys & _colour_channels:
+                return True
+            return any(any(r in role for r in _colour_roles)
+                       for role in (spec.get("role_textures") or {}))
+
+        _spec_by_matidx = {}
+        for _row in (global_materials or ()):
+            try:
+                _spec_by_matidx[int(_row.get("matidx"))] = _row.get("spec") or {}
+            except (AttributeError, TypeError, ValueError):
+                continue
+        _colour_by_model: dict = {}
+        for _mesh in all_meshes:
+            _spec = _spec_by_matidx.get(getattr(_mesh, "matidx", None))
+            _key = f"{getattr(_mesh, 'name_hash', 0):016x}"
+            _colour_by_model[_key] = (_colour_by_model.get(_key, False)
+                                      or bool(_spec and _provides_colour(_spec)))
+        _blank = sorted(h for h, ok in _colour_by_model.items() if not ok)
+        if _blank:
+            print(f"⛔ {len(_blank)} model(s) have NO colour source on any of their "
+                  f"materials and import UNTEXTURED: {_blank[:8]}"
+                  + (" ..." if len(_blank) > 8 else ""))
         if _INTERLEAVED_SPLIT[0]:
             print(f"  LOD split: {_INTERLEAVED_SPLIT[0]} cluster(s) held a "
                   f"second part interleaved with a LOD chain and were "
@@ -2459,7 +2649,23 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         except Exception as _exc:                            # noqa: BLE001
             _mv = {}
             print(f"  movers: not read ({_exc})")
-        if _mv:
+        # SKELETAL movers are a separate section, not more of the same. They do
+        # not translate, so they carry no `travel` and a consumer that keyframes
+        # `travel` must not see them in `instances`. See `evr_movers`.
+        try:
+            import evr_movers as _mv_skel_mod
+            _mv_skel = _mv_skel_mod.skeletal_movers(pcvr_dir, scene_group)
+        except Exception as _exc:                            # noqa: BLE001
+            _mv_skel = {}
+            print(f"  skeletal movers: not read ({_exc})")
+        _skel_rows = {}
+        for _i, _actor in enumerate(actor_of_instance):
+            if _actor is None:
+                continue
+            _rec = _mv_skel.get(str(_actor))
+            if _rec is not None:
+                _skel_rows[str(_i)] = _rec
+        if _mv or _skel_rows:
             _rows = {}
             for _i, _actor in enumerate(actor_of_instance):
                 if _actor is None:
@@ -2467,7 +2673,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 _rec = _mv.get(str(_actor))
                 if _rec is not None:
                     _rows[str(_i)] = _rec
-            if _rows:
+            if _rows or _skel_rows:
                 (out_pkg / "movers.json").write_text(json.dumps({
                     "format": "evr_movers",
                     "version": 1,
@@ -2481,11 +2687,23 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                              "\u26a0 TIMING AND TRIGGER ARE NOT DECODED: when a "
                              "mover fires and whether it returns live in "
                              "CScriptCR, so a consumer's keyframe timing is a "
-                             "placeholder, not authored data."),
+                             "placeholder, not authored data. `skeletal` is a "
+                             "DIFFERENT kind of mover: an actor CAnimationCR "
+                             "marks as animated whose model owns a skeleton and "
+                             "an animation set. Those deform a rig instead of "
+                             "sliding, carry no `travel`, and their pose curves "
+                             "are NOT decoded -- only the rig and the animation "
+                             "list are authored data here."),
                     "instances": _rows,
+                    "skeletal": _skel_rows,
                 }, indent=1), encoding="utf-8")
-                print(f"  movers: {len(set((r['level'], tuple(r['travel'])) for r in _rows.values()))} "
-                      f"distinct motion(s) over {len(_rows)} instance(s) -> movers.json")
+                if _rows:
+                    print(f"  movers: {len(set((r['level'], tuple(r['travel'])) for r in _rows.values()))} "
+                          f"distinct motion(s) over {len(_rows)} instance(s) -> movers.json")
+                if _skel_rows:
+                    _skel_models = {r["model"] for r in _skel_rows.values()}
+                    print(f"  skeletal movers: {len(_skel_rows)} instance(s) "
+                          f"over {len(_skel_models)} rigged model(s) -> movers.json")
 
         # ── fog / tonemap / exposure / particle emitters ────────────────
         # `CGFSEffectsResource` is per level and 24 of 32 levels author fog;
@@ -2510,6 +2728,74 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
 
         # ── texture-array slices ────────────────────────────────────────
         # Which ARRAY SLICE each poster/board uses. The material never names the
+        # ── vertex tints ────────────────────────────────────────────────
+        # The flat colour a submesh is multiplied by, carried in stream 0 and
+        # skipped by the geometry decoder on its way to the UVs. This is the
+        # ONLY place `mpl_combat_combustion`'s blue water gets its blue -- see
+        # `evr_vertex_color`.
+        try:
+            import evr_vertex_color as _vcol
+            _tint_rows = []
+            _tint_cache: dict = {}
+            for _mi, _mesh in enumerate(all_meshes):
+                _mh = f"{getattr(_mesh, 'name_hash', 0):016x}"
+                if _mh not in _tint_cache:
+                    _tint_cache[_mh] = _vcol.tints_for_model(pcvr_dir, _mh)
+                _per_model = _tint_cache[_mh]
+                if not _per_model:
+                    continue
+                # submeshes of one model appear in order, so its index within
+                # that model is its submesh index
+                _sub = sum(1 for _e in all_meshes[:_mi]
+                           if f"{getattr(_e, 'name_hash', 0):016x}" == _mh)
+                _tint = _per_model.get(_sub)
+                if _tint is None:
+                    continue
+                _tint_rows.append({"mesh": _mi, "model": _mh, "submesh": _sub,
+                                   "rgba": [round(c, 6) for c in _tint]})
+        except Exception as _exc:                            # noqa: BLE001
+            _tint_rows = []
+            print(f"  vertex tints: not read ({_exc})")
+        if _tint_rows:
+            (out_pkg / "vertex_tints.json").write_text(json.dumps({
+                "format": "evr_vertex_tints",
+                "version": 1,
+                "note": ("Per-submesh flat colour from stream 0 (+0, BGRA). "
+                         "Only submeshes whose every vertex agrees are listed; "
+                         "a consumer should apply it where the material has no "
+                         "albedo of its own."),
+                "tints": _tint_rows,
+            }, indent=1), encoding="utf-8")
+            _nonwhite = sum(1 for r in _tint_rows
+                            if any(abs(c - 1.0) > 1e-6 for c in r["rgba"][:3]))
+            print(f"  vertex tints: {len(_tint_rows)} submesh(es) carry a flat "
+                  f"colour, {_nonwhite} of them non-white -> vertex_tints.json")
+
+        # ── scripts ─────────────────────────────────────────────────────
+        # Which named script each actor runs (`evr_script`). Behaviour only:
+        # the component references no model, material or shader set, so this
+        # neither textures nor animates anything -- it is what a consumer needs
+        # to know WHY an actor exists (`mp_arena_goal`, `tut_boost`, ...).
+        try:
+            import evr_script as _scr
+            _script_rows = _scr.read_scripts(pcvr_dir, scene_group, nodeid_set)
+        except Exception as _exc:                            # noqa: BLE001
+            _script_rows = []
+            print(f"  scripts: not read ({_exc})")
+        if _script_rows:
+            _named = sum(1 for r in _script_rows if r.get("name"))
+            (out_pkg / "scripts.json").write_text(json.dumps({
+                "format": "evr_scripts",
+                "version": 1,
+                "note": ("CScriptCR: actor -> CScriptResource. The resource "
+                         "files are 4-byte stubs, so `name` is the CSymbol64 "
+                         "preimage where one is known and null otherwise."),
+                "bindings": _script_rows,
+            }, indent=1), encoding="utf-8")
+            print(f"  scripts: {len(_script_rows)} actor binding(s) over "
+                  f"{len({r['script'] for r in _script_rows})} distinct script(s), "
+                  f"{_named} named -> scripts.json")
+
         # array, so this is the only thing that says a board shows slice 12
         # rather than slice 0 -- see `evr_texture_array_binding`.
         try:
@@ -2715,6 +3001,11 @@ if __name__ == "__main__":
                         help="do NOT substitute table neighbours for models "
                              "whose mesh resource is an empty stub (see "
                              "`_stub_substitutes` -- it is a heuristic)")
+    parser.add_argument("--no-broken-assets", action="store_true",
+                        help="do NOT recover models the CGSI flags as "
+                             "`brokenassets` at their partner's transforms "
+                             "(see `broken_asset_map` -- the pairing is "
+                             "inferred, not named in any decoded struct)")
     parser.add_argument("--where", action="store_true",
                         help="census: which resource types hold each model and "
                              "what each model's file references. Use this when "
@@ -2726,6 +3017,7 @@ if __name__ == "__main__":
     args.out = evr_paths.out_dir(args.out, "out")
 
     _STRUCTURAL_FALLBACK[0] = bool(args.structural)
+    _NO_BROKEN_ASSETS[0] = bool(args.no_broken_assets)
     _MAX_TEXTURE[0] = int(args.max_texture or 0)
     _TEXTURE_DIVISOR[0] = max(1, int(args.texture_divisor or 1))
     _LAST_ROOT[0] = str(args.dir)
