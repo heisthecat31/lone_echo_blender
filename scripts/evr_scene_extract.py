@@ -29,6 +29,8 @@ the new one resolved without writing a package.
 from __future__ import annotations
 
 import argparse
+import array
+import hashlib
 import json
 import struct
 import sys
@@ -422,11 +424,15 @@ def reconstruct_dds(tex_hash: str, pcvr_dir: Path, out_path: Path) -> bool:
     orig_mips = struct.unpack_from('<I', dds_header, 28)[0]
     
     # Read high quality payloads (stored smallest to largest, prepend largest first)
-    raw_dir = resolve_type_dir(pcvr_dir, DIR_RAW_TEX_PACK)
+    # ⛔ `raw_dir / h` misses the zero-STRIPPED on-disk spelling, and `h` here is
+    # built with `f"{h:016x}"` so it is always zero-PADDED. A high-res payload
+    # whose hash begins with 0 -- roughly one in sixteen -- was therefore never
+    # found, and because a missing payload is simply skipped the texture kept
+    # its low-resolution mip with no warning at all.
     high_payloads = []
     for h in reversed(high_hashes):
-        hp = raw_dir / h
-        if hp.exists():
+        hp = resource_path(pcvr_dir, DIR_RAW_TEX_PACK, h)
+        if hp is not None:
             high_payloads.append(hp.read_bytes())
     
     # Calculate new dimensions
@@ -635,10 +641,41 @@ def _submesh_bbox(verts):
             (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)))
 
 
+#: An axis this thin, relative to the part's LARGEST extent, carries no shape.
+#:
+#: ⭐ THE LOD BUG THIS FIXES. A per-axis relative tolerance divides by the axis's
+#: OWN extent, so a flat axis compares against nearly zero and no tolerance can
+#: ever pass. Simplification is exactly what collapses those axes:
+#: `b4cf3547e4e2efad` (mpl_arena_a) is a 5-level chain of 384/128/64/16/6 faces
+#: whose thickness runs 0.03 / 0.03 / 0.03 / 0.01 / 0.00 across a part 0.71
+#: units wide -- the last two levels are FLAT CARDS. The old rule clustered the
+#: first three and left the cards as their own LOD 0s, so both drew on top of
+#: the full-detail level at every one of its placements. That model and its twin
+#: `c1ca337b6e7c19c5` alone accounted for 288 of the 467 stacked pairs measured
+#: on `mpl_arena_a`.
+#:
+#: ⚠ Do NOT simply switch the whole test to the part's overall size. That was
+#: tried and it over-merges: `ead3c4d5e88b1ac9` (mpl_combat_dyson) is 7 parts x 3
+#: copies whose z extents (0.194 vs 0.263 on a 1.70-wide part) differ by more
+#: than a real LOD step ever does, and a global scale pulled a 3520-face part
+#: into a 3600-face part's chain and hid it. The relaxation has to be confined
+#: to the axes that actually collapsed, which is what this fraction decides:
+#: 0.194 / 1.70 = 11% is a real dimension, 0.03 / 0.71 = 4% is not.
+THIN_AXIS_FRACTION = 0.05
+
+
 def _bbox_close(a, b, *, rel_tol=0.05, abs_tol=0.01):
+    """Do two submeshes occupy the same box, i.e. are they the same part?
+
+    Each axis is judged against its own extent, EXCEPT where that extent has
+    collapsed (see `THIN_AXIS_FRACTION`) -- there the part's overall size is the
+    yardstick, because a vanishing axis has no scale of its own to measure by.
+    """
     (amin, asize), (bmin, bsize) = a, b
+    part = max(max(map(abs, asize)), max(map(abs, bsize)), abs_tol)
     for k in range(3):
-        scale = max(abs(asize[k]), abs(bsize[k]), abs_tol)
+        flat = min(abs(asize[k]), abs(bsize[k])) <= THIN_AXIS_FRACTION * part
+        scale = part if flat else max(abs(asize[k]), abs(bsize[k]), abs_tol)
         if abs(amin[k] - bmin[k]) > rel_tol * scale + abs_tol:
             return False
         if abs(asize[k] - bsize[k]) > rel_tol * scale + abs_tol:
@@ -725,6 +762,174 @@ def model_lightmap_ids(pcvr_dir, model_hash: str) -> list:
         out = []
     _LIGHTMAP_ID_CACHE[key] = out
     return out
+
+
+def _stamp_flipbooks(pkg) -> None:
+    """Record how many frames a flipbook texture stacks, and whether to slice.
+
+    ⭐ `mpl_arena_a`'s sky shows ONE band at a time and steps through the rows;
+    the texture holds all eight at once, so a mesh that maps V across the whole
+    image renders them stacked. `evr_flipbook` counts the bands off the alpha
+    channel (8 for both sky textures, 1 for everything else in the level).
+
+    ⚠ Whether to SLICE V is per-mesh, not per-texture. `mpl_arena_a` maps the
+    same 8-band texture two ways: meshes 2 and 3 span V 0.445..0.555, already
+    exactly one band, while meshes 4 and 5 span the whole 1.207. Scaling the
+    first pair would show an eighth of one band. So the span is measured off
+    the meshes that actually use the material.
+    """
+    try:
+        import evr_flipbook as _fb                        # noqa: PLC0415
+        import numpy as _np                               # noqa: PLC0415
+    except ImportError as exc:
+        print(f"  flipbooks: not read ({exc})")
+        return
+    mat_path, man_path = pkg / "materials.json", pkg / "manifest.json"
+    if not mat_path.is_file() or not man_path.is_file():
+        return
+    try:
+        mats = json.loads(mat_path.read_text(encoding="utf-8"))
+        man = json.loads(man_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    spans: dict = {}
+    for mesh in man.get("meshes") or ():
+        rel = mesh.get("uv0")
+        if not rel:
+            continue
+        try:
+            uv = _np.frombuffer((pkg / rel).read_bytes(),
+                                dtype=_np.float32).reshape(-1, 2)
+        except (OSError, ValueError):
+            continue
+        if len(uv):
+            spans.setdefault(mesh.get("matidx"), []).append(
+                float(uv[:, 1].max() - uv[:, 1].min()))
+    found = 0
+    for entry in mats.get("materials") or ():
+        spec = entry.get("spec") or {}
+        rows = _fb.rows_for_material(spec, pkg)
+        if rows <= 1:
+            continue
+        seen = spans.get(entry.get("matidx")) or []
+        span = sorted(seen)[len(seen) // 2] if seen else 1.0
+        # More than about one and a half bands means the mesh is showing the
+        # whole sheet and the frame has to be sliced out of it.
+        spec["flipbook_rows"] = rows
+        spec["flipbook_v_scale"] = (1.0 / rows) if span * rows > 1.5 else 1.0
+        spec["flipbook_v_span"] = round(span, 4)
+        found += 1
+    if found:
+        mat_path.write_text(json.dumps(mats, indent=1), encoding="utf-8")
+        print("  flipbooks: %d material(s) stack frames along V" % found)
+
+
+def _write_goal_explosion(pkg, level_hash) -> None:
+    """Resolve the level's goal-explosion props into a sidecar, if it has any.
+
+    Membership is user-supplied (`data/evr_goal_explosion.json`); the goal
+    mouths, each end's team colour and the per-end assignment are read back off
+    the package here. See `evr_goal_explosion` for what is authored and what is
+    not -- the TIMING is not.
+    """
+    try:
+        import evr_goal_explosion as _ge                  # noqa: PLC0415
+        doc = _ge.resolve(pkg, level_hash)
+    except Exception as exc:                              # noqa: BLE001
+        print(f"  goal explosion: not resolved ({exc})")
+        return
+    if not doc:
+        return
+    (pkg / "goal_explosion.json").write_text(json.dumps(doc, indent=1),
+                                             encoding="utf-8")
+    ends = doc.get("ends") or []
+    print("  goal explosion: %d end(s) -> %s"
+          % (len(ends),
+             ", ".join("%d burst + %d shockwave"
+                       % (len(e.get("burst") or ()), len(e.get("shockwave") or ()))
+                       for e in ends)))
+
+
+def _resolve_vertex_gates(pkg, root) -> None:
+    """Read the gate each upper emissive layer NAMES and stamp it on the layer.
+
+    ⭐ A layer records `vertex_blend_attribute: "color1"` with
+    `vertex_blend_applied: False`; nothing ever read that colour, so the layer
+    composited at full strength and REPLACED the one beneath it. See
+    `evr_vertex_gate` for the decode and for why the layer descriptor alone
+    cannot decide -- the same shape covers dyson's lock art, which must show,
+    and the arena tunnel's hand decal, which must not.
+
+    Writes `vertex_blend_value` (the constant RGBA) and flips
+    `vertex_blend_applied` only where every mesh using the material AGREES. A
+    material whose meshes disagree is left untouched and reported, because one
+    material-level value cannot describe a gate that differs per mesh.
+    """
+    import numpy as _np                                    # noqa: PLC0415
+    try:
+        import evr_vertex_gate as _gate                     # noqa: PLC0415
+    except ImportError as exc:
+        print(f"  vertex gates: not read ({exc})")
+        return
+    mat_path, man_path = pkg / "materials.json", pkg / "manifest.json"
+    if not mat_path.is_file() or not man_path.is_file():
+        return
+    try:
+        mats = json.loads(mat_path.read_text(encoding="utf-8"))
+        man = json.loads(man_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+
+    by_matidx: dict = {}
+    for mesh in man.get("meshes") or ():
+        by_matidx.setdefault(mesh.get("matidx"), []).append(mesh)
+
+    tally: dict = {}
+    changed = 0
+    for entry in mats.get("materials") or ():
+        spec = entry.get("spec") or {}
+        emissive = [L for L in (spec.get("layers") or [])
+                    if (L.get("channels") or {}).get("emission")]
+        for layer in emissive[1:]:
+            blend = layer.get("blend") or {}
+            attr = blend.get("vertex_blend_attribute")
+            if not attr or blend.get("vertex_blend_applied") is not False:
+                continue
+            verdicts = set()
+            value = None
+            for mesh in by_matidx.get(entry.get("matidx")) or ():
+                try:
+                    pos = _np.frombuffer(
+                        (pkg / mesh["positions"]).read_bytes(),
+                        dtype=_np.float32)
+                    uv = (_np.frombuffer((pkg / mesh["uv0"]).read_bytes(),
+                                         dtype=_np.float32)
+                          if mesh.get("uv0") else None)
+                except (OSError, KeyError, ValueError):
+                    continue
+                verdict, extra = _gate.read_gate(
+                    root, mesh.get("name_hash"), mesh.get("nverts", 0),
+                    pos, uv, attr)
+                if verdict is None:
+                    continue
+                verdicts.add(verdict)
+                if isinstance(extra, list):
+                    value = extra
+            if len(verdicts) != 1:
+                tally["disagreed" if verdicts else "unread"] =                     tally.get("disagreed" if verdicts else "unread", 0) + 1
+                continue
+            verdict = verdicts.pop()
+            tally[verdict] = tally.get(verdict, 0) + 1
+            if verdict not in ("open", "closed"):
+                continue                       # varies/absent: no constant
+            blend["vertex_blend_value"] = value
+            blend["vertex_blend_applied"] = True
+            layer["blend"] = blend
+            changed += 1
+    if changed or tally:
+        mat_path.write_text(json.dumps(mats, indent=1), encoding="utf-8")
+        print("  vertex gates: %d layer(s) resolved -> %s"
+              % (changed, ", ".join("%s=%d" % kv for kv in sorted(tally.items()))))
 
 
 def _vertex_buffer_records(primary: bytes, vertex_counts: list) -> list:
@@ -1075,6 +1280,63 @@ def _split_single_rise_cluster(members, entries):
     return [head, tail]
 
 
+def _level_zero_collides(members, entries, sigs) -> bool:
+    """Is the cluster's LEVEL 0 face count shared by two DIFFERENT geometries?
+
+    ⭐ The narrow question the last-resort split answers. A member carrying the
+    cluster's own maximum face count is a level 0 -- nothing simplified it --
+    so a second one with different vertices is a second PART, and demoting it
+    hides a full-detail piece of the model.
+
+    ⛔ Deeper collisions are NOT this. `ff5afb4e96897159` reads
+    `176, 48, 14, 14` for one small part whose last two levels the simplifier
+    could not separate further; splitting there would draw a spare card for no
+    reason, and that model is documented as already grouped correctly.
+    """
+    top = max((entries[i][1] for i in members if entries[i]), default=None)
+    if top is None:
+        return False
+    return len({sigs[i] for i in members
+                if entries[i] and entries[i][1] == top}) > 1
+
+
+def _split_by_face_collision(members, entries, sigs):
+    """Last resort: separate the members that COLLIDE, and nothing else.
+
+    ⭐ The violation `_cluster_holds_distinct_parts` reports is exact -- two
+    members share a face count but differ in geometry, so they are two parts,
+    not two levels. When neither the tight bbox nor the LOD-major period can
+    separate them the cluster used to be left as it was, which leaves the
+    second part demoted and NEVER PLACED. `9121a83d0eb5061d` (mpl_combat_-
+    combustion) is the minimal case: two submeshes, both 2208 faces, different
+    vertices, one box. There is no period to find (a 2-member cluster splits
+    into two singletons, which the period guard rejects) and no rise to cut, so
+    half the model silently vanished at LOD 0.
+
+    Each member joins the first group that does not already hold its face count
+    under a DIFFERENT signature. That resolves the collision by construction
+    and touches nothing else: a genuine chain never collides, so it stays one
+    group, and `[38, 38, 26, 26]` (2 parts x 2 levels) falls out as
+    `[38, 26] / [38, 26]` -- the pairing the bbox could not see.
+
+    ⚠ Deliberately biased toward OVER-DRAW. A wrong split shows a coarse level
+    on top of a fine one, which is visible and reversible; a wrong merge hides
+    a part, which is silent. See `select_lod_objects` for the same reasoning.
+    """
+    groups: list = []
+    for i in members:
+        faces = entries[i][1] if entries[i] else None
+        for g in groups:
+            if any(entries[j] and entries[j][1] == faces and sigs[j] != sigs[i]
+                   for j in g):
+                continue
+            g.append(i)
+            break
+        else:
+            groups.append([i])
+    return groups
+
+
 def _split_interleaved_cluster(members, entries, sigs, tol=INTERLEAVED_SPLIT_TOL):
     """Split a bbox cluster that swallowed a second part. `[members]` if not.
 
@@ -1136,6 +1398,8 @@ def _split_interleaved_cluster(members, entries, sigs, tol=INTERLEAVED_SPLIT_TOL
         # that merely share a bounding box, so it is only tried for a rise.
         if len(parts) < 2 and rises:
             parts = _split_single_rise_cluster(members, entries)
+        if len(parts) < 2 and _level_zero_collides(members, entries, sigs):
+            parts = _split_by_face_collision(members, entries, sigs)
         if len(parts) < 2:
             return [members]
     _INTERLEAVED_SPLIT[0] += len(parts) - 1
@@ -1146,7 +1410,7 @@ def _split_interleaved_cluster(members, entries, sigs, tol=INTERLEAVED_SPLIT_TOL
 _INTERLEAVED_SPLIT = [0]
 
 
-def _model_lod_period(entries, origins=None, materials=None):
+def _model_lod_period(entries, origins=None, materials=None, sigs=None):
     """`P` for a model stored as P parts x L levels, level-major. Else None.
 
     ⭐ THE LAYOUT: a multi-part model stores ALL P parts of level 0, then all P
@@ -1191,6 +1455,17 @@ def _model_lod_period(entries, origins=None, materials=None):
                         for i in range(k, n, period)}) > 1
                    for k in range(period)):
                 continue
+        # ⭐ A class that holds two members with the SAME face count and
+        # DIFFERENT vertices holds two PARTS, so this period has not separated
+        # them -- see `_cluster_holds_distinct_parts`. `9121a83d0eb5061d`
+        # (mpl_combat_combustion) is two 2208-face parts in one box: P=1 says
+        # "one part, two levels", demotes the second, and it never draws.
+        # `_split_periodic_cluster` has always applied this test; the period
+        # path returns BEFORE that runs, so it has to apply it too.
+        if sigs is not None and any(
+                _level_zero_collides(list(range(k, n, period)), entries, sigs)
+                for k in range(period)):
+            continue
         return period
     return None
 
@@ -1270,7 +1545,8 @@ def _group_submeshes_by_lod(results, origins=None, materials=None):
     # This is the layout the engine actually uses (see `_model_lod_period`);
     # the bbox clustering below is the fallback for models where no period
     # validates.
-    _period = _model_lod_period(entries, origins, materials)
+    sigs = [_geometry_signature(r) if r else "" for r in results]
+    _period = _model_lod_period(entries, origins, materials, sigs)
     if _period is not None:
         _classes = [list(range(k, len(results), _period)) for k in range(_period)]
         out = [None] * len(results)
@@ -1309,7 +1585,6 @@ def _group_submeshes_by_lod(results, origins=None, materials=None):
     # A cluster whose face counts RISE in submesh order holds more than one
     # part (see `_split_interleaved_cluster`); split those before levels are
     # assigned, or the second part's LOD 0 is demoted and never placed.
-    sigs = [_geometry_signature(r) if r else "" for r in results]
     resolved: list = []
     for members in clusters:
         resolved.extend(_split_interleaved_cluster(members, entries, sigs))
@@ -1382,7 +1657,80 @@ def _warn_ordered_materials(model_hash: str) -> None:
 #: needs a real decode too (LOD grouping, see below), and the geometry phase
 #: decodes the same models again later -- this is what stops that from being
 #: two full decodes per model. `None` caches a failed decode.
+#: `CGRenderParams` field offsets used here. The record is 112 bytes in Echo VR
+#: and opens with the 0x28-byte `SSceneSetMask` -- 32 bytes of set bits, then
+#: `mincount` at +0x20 -- exactly as Lone Echo's 0x68 record does, which is what
+#: puts `materialidx` at +0x28 in both.
+#: One byte per instance, parallel to `instances.bin`.
+DUPLICATE_BLOB_NAME = "instance_duplicate.bin"
+
+RP_SCENEMASK_WORDS = 8
+RP_VERTEXCOUNT = 72
+RP_INDEXCOUNT = 80
+
 _DECODE_CACHE: dict = {}
+
+
+#: `(vcount, icount) -> {scene-set mask, ...}` per model, and the geometry
+#: signature per emitted mesh. Both are pure lookups; both are per-scene.
+_SCENE_SET_CACHE: dict = {}
+_MESH_SIG_CACHE: dict = {}
+
+
+def _scene_set_alternate_shapes(pcvr_dir: Path, mhash: str, vcounts=None) -> set:
+    """Shapes this model draws under TWO OR MORE different scene sets.
+
+    ⭐ `CGRenderParams` opens with an `SSceneSetMask` -- 32 bytes of set bits
+    then `mincount`, the number of those sets that must be active for the draw
+    to run. `34918b2b464d6b58` (mpl_arena_a) draws its 820-vertex piece four
+    times: masks `0x28`/`0x30` at mincount 2 and `0x8`/`0x10` at mincount 1,
+    carrying matidx 3 and matidx 1. Bits 3 and 4 are the two TEAM sets and only
+    one is ever active, so those are alternates -- the blue copy and the orange
+    copy of one surface -- and drawing both stacks them.
+    `a74423df90ff92f2` has three (bits 4/5/6, matidx 5/2/4).
+    `CComponentLODCR` names the same vocabulary from the other side: its
+    entries carry `symbol64("lod0".."lod3")` at +0x20 with near/far distances at
+    +0x30, over the component types already in
+    `evr_component_cr.CMODEL_COMPONENT_TYPES` (`38ee951a26fb816a` = ncaModel).
+    ⛔ It does NOT decide this: on `mpl_arena_a` only 4 actors carry a ladder,
+    and both of theirs run the same 0..9.5..14.25..22 bands on BOTH components,
+    i.e. both components are live at every distance. The mask is the selector.
+
+    ⚠ A shape drawn twice under the SAME mask (or under none) is NOT an
+    alternate -- that is a deliberate two-pass surface, and both draws run.
+    """
+    key = (str(pcvr_dir), mhash)
+    if key in _SCENE_SET_CACHE:
+        return _SCENE_SET_CACHE[key]
+    shapes: dict = {}
+    try:
+        recs = (evr_model_materials._renderparams_from_meshlist(pcvr_dir, mhash)
+                or evr_model_materials._renderparams_from_instanced(
+                    pcvr_dir, mhash, list(vcounts or ())))
+        for rec in recs or ():
+            mask = 0
+            for word in range(RP_SCENEMASK_WORDS):
+                mask |= struct.unpack_from("<I", rec, word * 4)[0] << (32 * word)
+            if not mask:
+                continue
+            shape = (struct.unpack_from("<I", rec, RP_VERTEXCOUNT)[0],
+                     struct.unpack_from("<I", rec, RP_INDEXCOUNT)[0])
+            shapes.setdefault(shape, set()).add(mask)
+    except (OSError, struct.error, AttributeError, ValueError):
+        shapes = {}
+    out = {shape for shape, masks in shapes.items() if len(masks) > 1}
+    _SCENE_SET_CACHE[key] = out
+    return out
+
+
+def _mesh_signature(sm) -> str:
+    """A hash of one emitted mesh's vertex positions."""
+    got = _MESH_SIG_CACHE.get(sm.index)
+    if got is None:
+        got = hashlib.sha1(
+            array.array("f", sm.positions).tobytes()).hexdigest()[:16]
+        _MESH_SIG_CACHE[sm.index] = got
+    return got
 
 
 def _decode_model_cached(pcvr_dir: Path, mhash: str):
@@ -1546,6 +1894,8 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     _DRAWS_SPLIT[0] = 0
     _SPLIT_PIECES.clear()
     _SPLIT_RANGES.clear()
+    _SCENE_SET_CACHE.clear()
+    _MESH_SIG_CACHE.clear()
     _STRUCTURAL_USED[0] = 0
 
     # A scene may be SEVERAL levels merged (`--full`): a main level plus its
@@ -1944,9 +2294,36 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 pcvr_dir, _mat_source, mat_ctx.material_hashes,
                 mat_ctx.mesh_material_offset,
                 vertex_counts=model_vertex_counts)
-            draw_shadersets = evr_materials.materials_for_model(
-                pcvr_dir, _mat_source, mat_ctx.shaderset_hashes,
-                mat_ctx.mesh_shaderset_offset)
+            # ★ The per-draw shader set, READ from the model's own
+            # `SGMeshShaderSet` table rather than inferred. The shader set is
+            # what supplies a material's textures, and ~69% of a combat level's
+            # materials bind none of their own -- so for those it IS the answer.
+            #
+            # The old route below asks `shaderset_by_material`, an index of
+            # "which shader sets MENTION this material". That is a different
+            # question: a material named by twelve decal shader sets yields
+            # twelve candidates and the lowest hash wins. Measured against the
+            # model's own table across five levels, it disagreed on 476 of 655
+            # draws (72.7%).
+            #
+            # ⚠ The table does not cover every draw -- it holds fewer sections
+            # than the palette has entries (the dyson level mesh: 94 palette,
+            # 32 sections, 30 distinct matidx), so 75.3% of draws get a read
+            # answer and the rest fall through to the old inference. An entry
+            # is "" where the table is silent, which `build_spec` already
+            # treats as "no shader set given".
+            draw_shadersets = evr_model_materials.draw_shadersets(
+                pcvr_dir, _mat_source, mat_ctx.material_hashes,
+                vertex_counts=model_vertex_counts)
+            #: True when the list above is a genuine PER-DRAW read, which
+            #: disables the "reuse entry 0" clamp further down -- that clamp
+            #: exists for the old route's single-shader-set case and would
+            #: silently hand draw N the first draw's shader set here.
+            shadersets_are_per_draw = bool(any(draw_shadersets))
+            if not shadersets_are_per_draw:
+                draw_shadersets = evr_materials.materials_for_model(
+                    pcvr_dir, _mat_source, mat_ctx.shaderset_hashes,
+                    mat_ctx.mesh_shaderset_offset)
 
             if _twin:
                 model_textures = evr_materials.model_texture_list(pcvr_dir, _twin) \
@@ -2043,7 +2420,7 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 # single-shaderset case and never worse than binding nothing.
                 if i < len(draw_shadersets):
                     shaderset = draw_shadersets[i]
-                elif draw_shadersets:
+                elif draw_shadersets and not shadersets_are_per_draw:
                     shaderset = draw_shadersets[0]
                 else:
                     shaderset = None
@@ -2295,6 +2672,11 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
     static_entity_map: list = []
     #: Parallel to `all_instances`: the placing actor's nodeid, or None.
     actor_of_instance: list = []
+    #: `(transform, geometry signature, level) -> the matidx that won that spot`.
+    _emitted_geometry: dict = {}
+    #: Parallel to `all_instances`: this emission repeats one already placed.
+    duplicate_flags: list = []
+    _dup_geometry, _dup_variants = [0], [0]
 
     for inst_data in instances_to_process:
         mhash = inst_data['mhash']
@@ -2468,8 +2850,53 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
         # Add instances for all submeshes. lod_group/-level/-group_levels come
         # from the bbox clustering above -- without them every LOD level of
         # every part draws simultaneously, stacked, at this placement.
+        _place = tuple(round(v, 4) for v in
+                       (tx, ty, tz, rx, ry, rz, rw, sx, sy, sz))
+        _alt_shapes = _scene_set_alternate_shapes(
+            pcvr_dir, mhash, [len(m.positions) // 3 for m in scene_meshes])
         for submesh_i, (sm, (lod_group, lod_level, lod_group_levels)) in enumerate(
                 zip(scene_meshes, submesh_lod)):
+            # ⭐ NOTHING IS DRAWN TWICE IN THE SAME PLACE. Byte-identical
+            # geometry at one transform can only z-fight, and it happens two
+            # ways here: an actor binding the same model twice (or two actors
+            # sharing a transform), and two DIFFERENT models that share a
+            # submesh -- `e988f213c7363e88` and `34918b2b464d6b58` sit on one
+            # actor and carry the same 722-vertex piece byte for byte. Measured
+            # on `mpl_arena_a`: 260 such emissions, 1098 on `mpl_tutorial_arena`.
+            #
+            # Same material -> a pure duplicate, always dropped. Different
+            # material -> only dropped when the model's own `SSceneSetMask`
+            # says the shape is authored per scene set (see
+            # `_scene_set_alternate_shapes`), which is the team-colour case; a
+            # deliberate two-pass surface repeats one mask and is kept.
+            # ⚠ Keyed by LOD LEVEL too. Two emissions only collide if they
+            # are drawn at the same time, and an instance at level 2 is not:
+            # `filter_by_lod` places one level per group. Without the level in
+            # the key this dropped 589 emissions on `mpl_arena_a` instead of
+            # 314 -- the extra 275 were coarser levels of the same part, and
+            # removing them empties those groups at LOD 2 and above.
+            # ⚠ MARKED, NOT DROPPED. `instance_lightmap`'s offsets/counts/page
+            # blobs are parallel to `instances.bin` by contract (see
+            # `le_scene_extract._instance_lightmap_section`), so removing an
+            # emission shifts every later instance's baked UV run. Dropping
+            # them outright cost 682 of the arena's 836 lightmapped materials
+            # -- "645 instance(s) skipped on vertex-count mismatch" -- and the
+            # level rendered black. The flag rides alongside instead, and the
+            # importer honours it.
+            _sig = _mesh_signature(sm)
+            _slot = (_place, _sig, lod_level)
+            _seen_mat = _emitted_geometry.get(_slot)
+            _dup = False
+            if _seen_mat is not None:
+                if _seen_mat == sm.matidx:
+                    _dup = True
+                    _dup_geometry[0] += 1
+                elif (len(sm.positions) // 3, len(sm.indices)) in _alt_shapes:
+                    _dup = True
+                    _dup_variants[0] += 1
+            else:
+                _emitted_geometry[_slot] = sm.matidx
+            duplicate_flags.append(_dup)
             inst = SceneInstance(
                 mesh_index=sm.index,
                 translation=(tx, ty, tz),
@@ -2501,6 +2928,13 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
             all_instances.append(inst)
             sm.instance_count += 1
             
+    if _dup_geometry[0] or _dup_variants[0]:
+        print("  duplicate geometry: %d emission(s) flagged as exact repeats "
+              "at the same transform%s"
+              % (_dup_geometry[0],
+                 (", %d as scene-set alternates (one variant kept)"
+                  % _dup_variants[0]) if _dup_variants[0] else ""))
+
     if all_meshes:
         out_pkg = scene_out_dir
 
@@ -2515,6 +2949,12 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                 # tell a glow mask from an ambient-occlusion map. Only the
                 # materials that bind no `composite_components` are measured.
                 evr_materials.annotate_emissive_masks(
+                    materials_json.get("materials"), out_pkg)
+                # Measure each BLEND material's alpha map too: a transparent
+                # draw whose alpha is 1.0 everywhere cannot be honoured as-is.
+                evr_materials.annotate_alpha_planes(
+                    materials_json.get("materials"), out_pkg)
+                evr_materials.annotate_data_maps(
                     materials_json.get("materials"), out_pkg)
             else:
                 materials_json = {"master": scene_hash,
@@ -2636,6 +3076,31 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
 
         print(f"\nWriting {len(all_instances)} instances across {len(all_meshes)} meshes to {out_pkg}...")
         write_package(out_pkg, scene_hash, all_meshes, all_instances)
+        # ⭐ The duplicate mask, written AFTER the package so nothing about the
+        # instance order moves. One byte per instance, parallel to
+        # `instances.bin`: 1 means this emission repeats geometry already
+        # placed at the same transform and must not be drawn. A reader that
+        # does not know the key ignores it and behaves exactly as before.
+        if any(duplicate_flags):
+            (out_pkg / "blobs" / DUPLICATE_BLOB_NAME).write_bytes(
+                bytes(1 if d else 0 for d in duplicate_flags))
+            try:
+                _man_path = out_pkg / "manifest.json"
+                _man = json.loads(_man_path.read_text(encoding="utf-8"))
+                _man["duplicate"] = {
+                    "blob": "blobs/" + DUPLICATE_BLOB_NAME,
+                    "record": "u8 (1 = repeats an earlier emission)",
+                    "count": len(duplicate_flags),
+                    "exact_repeats": _dup_geometry[0],
+                    "scene_set_alternates": _dup_variants[0],
+                    "note": ("parallel to instances_blob; see "
+                             "`_scene_set_alternate_shapes` in "
+                             "evr_scene_extract"),
+                }
+                _man_path.write_text(json.dumps(_man, indent=1),
+                                     encoding="utf-8")
+            except (OSError, ValueError) as _exc:            # noqa: BLE001
+                print(f"  duplicate mask: manifest not updated ({_exc})")
         # Sidecar, not manifest: this is an EVR-only join key and the manifest
         # contract is shared with the Lone Echo path.
         # ── movers ──────────────────────────────────────────────────────
@@ -2947,6 +3412,9 @@ def extract_evr_scene(scene_hash, pcvr_dir: Path, out_dir: Path,
                          "lightmap page and its own atlas UVs."),
                 "instances": static_entity_map,
             }, indent=1), encoding="utf-8")
+        _resolve_vertex_gates(out_pkg, pcvr_dir)
+        _stamp_flipbooks(out_pkg)
+        _write_goal_explosion(out_pkg, scene_hash)
         print("Done!")
         return True
 

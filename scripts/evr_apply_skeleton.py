@@ -11,8 +11,18 @@ importer finds it without the user selecting anything.
 ## What is decoded
 
 **Bind pose** -- one 32-byte record per bone: quaternion (16) + translation
-(12) + uniform scale (4). Located by the longest run of unit-length
-quaternions at stride 32, which nothing else in the file produces.
+(12) + uniform scale (4). Located by anchoring on the hierarchy table
+(`locate_tables`), or, on a Lone Echo 2 skeleton, as the first clean window of
+the header's DECLARED bone count. The longest-run-of-unit-quaternions scan is
+the last resort only -- it is what returned 191 bones for a 189-bone rig and
+cost that skeleton its entire hierarchy.
+
+**Two container layouts.** Echo VR skeletons carry `CTable` headers (six of them
+on the reference chassis) and `locate_tables` reads the counts and sizes from
+those. Lone Echo 2 skeletons carry NONE -- the model hash sits at +0x00 followed
+by plain u32 counts, with the bone count at +0x20 and mirrored at +0x3c. See
+`declared_bone_count`; getting the count right is what makes `find_hierarchy`
+succeed, since it validates a table of exactly `count` records.
 
 **Hierarchy** -- a parallel 24-byte table:
 
@@ -47,6 +57,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import struct
 import sys
 from collections import defaultdict
@@ -80,9 +91,10 @@ _BONE_NAMES = None
 def bone_name_table() -> dict:
     """`{hash: name}` for every bone name recovered so far.
 
-    A hash IS `symbol64(name)`, so each entry is a verified preimage. Coverage
-    is partial -- the anatomical joints resolve, most helper/attachment joints
-    do not -- so a caller must handle `None`.
+    A hash IS `symbol64(name)`, so each entry is a verified preimage. Every
+    bone hash on every skeleton extracted so far now resolves, but a caller
+    must still handle `None`: a rig this table has never seen may carry
+    cosmetic-specific joints that are not in it.
     """
     global _BONE_NAMES
     if _BONE_NAMES is None:
@@ -217,6 +229,57 @@ def _snap_bind(blob: bytes, bind_off: int, count: int) -> int:
     return bind_off
 
 
+#: Where a Lone Echo 2 skeleton declares its bone count -- twice, which is what
+#: makes it safe to trust: a stray integer is not mirrored 0x1c bytes later.
+LE2_COUNT_OFFSETS = (0x20, 0x3C)
+
+
+def declared_bone_count(blob: bytes):
+    """The bone count a Lone Echo 2 skeleton states in its header, or None.
+
+    That layout has no `CTable` headers at all -- `_tables` finds SIX in an Echo
+    VR skeleton and ZERO here -- so `locate_tables` returns None and everything
+    downstream falls back to guessing. The count is stated plainly instead: the
+    model hash at +0x00, then plain u32 counts, with the bone count at +0x20 and
+    mirrored at +0x3c.
+
+    Getting it from a scan instead is what broke the Delta unit: the
+    longest-run-of-unit-quaternions fallback returned 191 where the header says
+    189, and `find_hierarchy` -- which validates a table of exactly `count`
+    records -- then rejected the real hierarchy. Every bone became a root, world
+    collapsed to local, and 98 of the bones landed on the origin.
+    """
+    if len(blob) < max(LE2_COUNT_OFFSETS) + 4:
+        return None
+    values = {struct.unpack_from("<I", blob, off)[0] for off in LE2_COUNT_OFFSETS}
+    if len(values) != 1:
+        return None
+    count = values.pop()
+    if not 1 <= count <= 100000:
+        return None
+    return count
+
+
+def first_clean_bind(blob: bytes, count: int):
+    """The EARLIEST offset holding a clean `count`-record bind pose, or None.
+
+    Clean windows come in runs 32 apart -- a real table is still "clean" when
+    read starting one bone late -- so the earliest of a run is the table's true
+    start. A file also holds a SECOND 32-byte pose table (a shared non-bind
+    pose); the bind pose is the first, which is the same ordering
+    `locate_tables` documents.
+
+    On the Delta unit the candidates score 0.027, 0.616, 1.225 and 5.074 as the
+    median distance from each bone to its own skinned-vertex centroid, so the
+    earliest is right by a wide margin and the rule is checkable, not a guess.
+    """
+    limit = len(blob) - count * BONE_STRIDE
+    for off in range(0, limit + 1, 4):
+        if _bind_window_is_clean(blob, off, count):
+            return off
+    return None
+
+
 def read_bind_pose(root: Path, model_hash: str) -> list:
     """`[(quat xyzw, translation, scale), ...]`, or `[]`."""
     path = resource_path(root, SKELETON_RESOURCE, model_hash)
@@ -225,9 +288,17 @@ def read_bind_pose(root: Path, model_hash: str) -> list:
     blob = path.read_bytes()
 
     located = locate_tables(blob)
+    declared = declared_bone_count(blob)
+    declared_off = first_clean_bind(blob, declared) if declared else None
     if located is not None:
         count, best_off, _hier = located
         best_n = count
+    elif declared is not None and declared_off is not None:
+        # Lone Echo 2: no CTable headers, but the count is stated in the header
+        # and the bind pose is the first clean window of that many records.
+        # Believing the scan instead cost this rig its whole hierarchy -- see
+        # `declared_bone_count`.
+        best_n, best_off = declared, declared_off
     else:
         # Fallback for a file whose header block does not parse: the longest
         # run of unit quaternions. Less reliable -- see `locate_tables`.
@@ -303,6 +374,97 @@ def find_hierarchy(blob: bytes, count: int):
     return None
 
 
+# ⛔ Two things in the recovered hierarchy LOOK like bugs and are not. Now that
+# every bone hash resolves (data/bone_names.json), the parent column can be
+# audited against the NAMES, and 288 name-implied links check out. The
+# exceptions are conventions, not damage:
+#
+#   * A piston's two ends are SIBLINGS, not a chain. EXP_?1_ThumbPiston2 hangs
+#     off Hand1 alongside ThumbPiston1, because both ends of a piston anchor to
+#     the same parent -- that is what lets them slide against each other. So the
+#     usual "Foo2 is a child of Foo1" rule (correct for Index2, Arm2, Spine2)
+#     does NOT hold for Piston pairs. It reads identically on all 11 skeletons.
+#   * The rig is not symmetric. The Lone Echo 2 body has EXP_L1_Arm3 and no
+#     EXP_R1_Arm3, sitting at exactly the left shoulder with Clav1 as parent --
+#     an unused socket, like EXP_C1_SynchHelmet1 coinciding with the head joint.
+#
+# Do not "repair" either one. The numeric test still governs: composed bone
+# midpoints sit a median 0.025 m from their own skin centroids (0.035 m on the
+# head package), against 1.15 m for no hierarchy at all.
+#
+# ⛔ A parent-column-only fallback was tried here and REMOVED. On a skeleton
+# whose sibling column does not validate it is tempting to accept the parent
+# column alone, since that is all `world_transforms` needs -- but on the Lone
+# Echo 2 Delta unit (`25bcc4282bf0807f`, 191 bones) no column in the blob
+# composes correctly, and the best one scores a median 0.90 against the bones'
+# own SKIN CENTROIDS where having no hierarchy at all scores 1.15. It would have
+# shipped a wrong rig that merely looks plausible.
+#
+# The real gap is upstream: `locate_tables` returns None for these skeletons, so
+# `read_bind_pose` falls back to the longest-run-of-unit-quaternions scan and the
+# BIND POSE itself is not trustworthy either. Fix the table location for this
+# layout before revisiting the hierarchy.
+#
+# The skin centroid is the test to use: `build` already computes a weighted
+# centroid per bone, and a correct rig must compose to within a few centimetres
+# of it.
+
+
+#: A piston is TWO bones parented to DIFFERENT segments, each aiming at the
+#: other, plus a marker bone ~1 cm away sharing its end's parent. The marker is
+#: named `<end>Up` on the leg/spine/forearm pistons and `<end>Aim` on the bicep
+#: pistons, but it is the same thing either way: on this rig every marker offset
+#: is PERPENDICULAR to the piston axis (measured, dot product < 1e-3), so it is
+#: an up-vector, not a target.
+#:
+#: None of this is guessable from the geometry alone -- the ends are unweighted
+#: leaves, so nothing in the mesh says which two belong together. It only became
+#: readable once the CSymbol64 names were cracked.
+PISTON_MARKERS = ("Up", "Aim")
+
+
+def _piston_key(name: str):
+    """The key two ends of the SAME piston share.
+
+    Upper/Lower pairs key on the shared stem. The rest pair across a trailing
+    index (ForearmPiston1/2, ThumbPiston1/2) or across the limb segment they
+    hang off (Arm1BicepPiston1 with Arm2BicepPiston1), so those get the trailing
+    digits stripped and the segment index normalised.
+    """
+    for half in ("Upper1", "Lower1"):
+        if name.endswith(half):
+            return name[: -len(half)]
+    key = re.sub(r"\d+$", "", name)
+    return re.sub(r"(EXP_[CLR]\d_)(Arm|Leg)\d", "\\g<1>\\g<2>#", key)
+
+
+def piston_pairs(names) -> list:
+    """`[{a, b, a_up, b_up}]` of bone INDICES, from the authored names.
+
+    A pair is only emitted when exactly two ends share a key -- a group of one
+    or of three is reported by the caller rather than guessed at.
+    """
+    ends, marker = {}, {}
+    for i, n in enumerate(names):
+        if not n or "Piston" not in n:
+            continue
+        for suffix in PISTON_MARKERS:
+            if n.endswith(suffix) and n[: -len(suffix)] in names:
+                marker[n[: -len(suffix)]] = i
+                break
+        else:
+            ends.setdefault(_piston_key(n), []).append((n, i))
+    pairs, odd = [], []
+    for key, members in sorted(ends.items()):
+        if len(members) != 2:
+            odd.append((key, [m[0] for m in members]))
+            continue
+        (na, ia), (nb, ib) = sorted(members)
+        pairs.append({"a": ia, "b": ib,
+                      "a_up": marker.get(na), "b_up": marker.get(nb)})
+    return pairs, odd
+
+
 def bone_names(blob: bytes, count: int, base_hint=None) -> list:
     """The per-bone CSymbol64 name hashes, in bone order."""
     base = base_hint if base_hint is not None else _hierarchy_offset(blob, count)
@@ -376,6 +538,18 @@ def build(package: Path, root: Path, model_hash: str) -> dict | None:
                     idxs, wts = item
                 except (TypeError, ValueError):
                     idxs, wts = (0, 0, 0, 0), (0, 0, 0, 0)
+                # The record holds FOUR influences. Every eSkinWeights vertex
+                # format seen so far is 4-wide and already sums to 255, so this
+                # is lossless -- but a wider source must not be truncated in
+                # silence: dropping an influence without renormalising leaves
+                # the weights summing under 255, and Blender reads the shortfall
+                # as partial weighting and drags the vertex toward the origin.
+                if len(wts) > 4 and any(wts[4:]):
+                    raise ValueError(
+                        "vertex %d of submesh %d carries %d skin influences; "
+                        "the sidecar record holds 4. Widen the record (and "
+                        "renormalise) rather than dropping the extras."
+                        % (vi, source, sum(1 for w in wts if w)))
                 blob += struct.pack("<4H4B", *(list(idxs)[:4] + [0] * 4)[:4],
                                     *(list(wts)[:4] + [0] * 4)[:4])
                 v = verts[vi]
@@ -426,6 +600,15 @@ def build(package: Path, root: Path, model_hash: str) -> dict | None:
         })
 
     (package / WEIGHT_BLOB).write_bytes(bytes(blob))
+    # Piston pairs, read off the authored names. Their ends are unweighted
+    # leaves, so nothing in the mesh says which two belong together -- without
+    # the names this block could not be built at all.
+    pairs, unpaired = piston_pairs([r["name"] for r in records])
+    piston_records = [
+        {"a": records[p["a"]]["name"], "b": records[p["b"]]["name"],
+         "a_up": records[p["a_up"]]["name"] if p["a_up"] is not None else None,
+         "b_up": records[p["b_up"]]["name"] if p["b_up"] is not None else None}
+        for p in pairs]
     doc = {
         "format": SIDECAR_FORMAT,
         "model": model_hash,
@@ -436,19 +619,26 @@ def build(package: Path, root: Path, model_hash: str) -> dict | None:
         "weights_blob": WEIGHT_BLOB,
         "weight_record": "4x u16 bone index + 4x u8 weight (0-255), per vertex",
         "meshes": meshes,
+        "pistons": piston_records,
         "_note": ("`position` is MODEL space, composed as world[parent] @ local "
                   "-- the stored translation is parent-relative and is kept as "
                   "`local_translation`. `parent` is null for a root; these rigs "
                   "have several. Bone names are CSymbol64 hashes whose "
                   "preimages are recovered for most anatomical joints (see "
-                  "data/bone_names.json); `name` is null where it is not."),
+                  "data/bone_names.json); `name` is null where it is not. "
+                  "`pistons` pairs the two ends of each piston with their "
+                  "up-vector markers, so an importer can aim them at each "
+                  "other -- the ends carry no skin weights, so the pairing is "
+                  "readable only from the names."),
     }
     (package / SIDECAR_NAME).write_text(json.dumps(doc, indent=1),
                                         encoding="utf-8")
     return {"bones": len(records), "of": len(bones), "meshes": len(meshes),
             "weight_bytes": len(blob), "hierarchy": hierarchy is not None,
             "roots": len(doc["roots"]),
-            "named": sum(1 for r in records if r["name"])}
+            "named": sum(1 for r in records if r["name"]),
+            "pistons": len(piston_records),
+            "pistons_unpaired": len(unpaired)}
 
 
 def main(argv=None) -> int:

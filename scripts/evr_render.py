@@ -131,9 +131,32 @@ def parse_args(argv) -> argparse.Namespace:
     # opt-in rather than flipped on: occlusion REPLACES the radiance multiply
     # (see the if/elif in `evr_lighting`), so it is a different look, not a
     # strictly better one.
+    # The sky texture is a FLIPBOOK of 8 bands, not a tiling image: measured
+    # (autocorrelation period exactly 1/8 on both sky textures at both shipped
+    # resolutions) and corroborated by the dome geometry, whose UVs span only
+    # 0.110 of V. See `material_builder.UV_FLIPBOOK_FRAMES`.
+    ap.add_argument("--sky-flipbook", type=int, default=0, metavar="FRAMES",
+                    help="step animated UVs through FRAMES bands along V "
+                         "instead of sliding U (8 = the measured sky count)")
     ap.add_argument("--lightmap-occlusion", action="store_true",
                     help="sample the bake's occlusion masks instead of the "
                          "collapsed radiance page")
+    # `lead[1]` of the scene resource is `CTable<SGVolumetricLightParams>`
+    # (stride 296) -- named by ORG's disassembly-confirmed `CGSceneData::
+    # Serialize` walk. VOLUMETRIC: participating media, not surface emitters.
+    # The war room holds 763 of them (752 PINK), dyson 180, against 17 and 4
+    # placed lights. See `evr_lights.parse_scene_volume_lights`.
+    ap.add_argument("--volume-lights", action="store_true",
+                    help="build a volume-emission box per volumetric light")
+    ap.add_argument("--volume-light-strength", type=float, default=1.0,
+                    help="multiply each volume's authored magnitude")
+    ap.add_argument("--volume-light-density", type=float, default=0.05,
+                    help="scattering density of the medium")
+    # DIAGNOSTIC. The extent semantics are unresolved (see `_build_volume_lights`),
+    # so this sweeps the size to find whether a constant divisor reproduces the
+    # in-game look. Not a setting anyone should need once the layout is decoded.
+    ap.add_argument("--volume-light-scale", type=float, default=1.0,
+                    help="multiply every volume's extent (extent probe)")
     # `evr_lighting` maps a SUN's authored intensity straight to W/m2 and other
     # types to DEFAULT_WATTS(25) * intensity. The record's "intensity" is a
     # relative multiplier with no unit -- the module says so itself -- and the
@@ -246,6 +269,109 @@ def keep_only(substring: str) -> int:
     return len(kept)
 
 
+def _build_volume_lights(doc: dict, strength: float = 1.0,
+                         density: float = 0.05, scale: float = 1.0) -> int:
+    """One HEXAHEDRON per `volume_lights` record, built from its own corners.
+
+    ⭐ The shape is READ, not inferred. `CGVolumeHexahedronLight::Initialize`
+    memcpy's the whole 296-byte record to `this+0x1500`, and its `Update`
+    transforms exactly EIGHT points at `this+0x1550..+0x15a4` -- so the eight
+    corners live at params `+0x50`, stride 12, already in WORLD space.
+
+    They are FRUSTUMS. On `mpl_combat_war_room` record 0 one quad face measures
+    0.313 across and the opposite one 5.632: a light shaft, narrow at the
+    emitter and flared at the far end. That is why every box -- at every scale,
+    axis-aligned or oriented -- was wrong: a box cannot express it.
+
+    `scale` still exists as a diagnostic but now scales corners about their own
+    centroid; at 1.0 the geometry is exactly what the engine holds.
+    """
+    records = doc.get("volume_lights") or []
+    if not records:
+        return 0
+    faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 1, 5, 4),
+             (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    collection = bpy.data.collections.new("evr_volumetric_lights")
+    bpy.context.scene.collection.children.link(collection)
+    built = 0
+    materials: dict = {}
+    for rec in records:
+        corners = rec.get("corners")
+        if not corners or len(corners) != 8:
+            continue
+        try:
+            colour = tuple(float(c) for c in rec["color"][:3])
+            magnitude = float(rec.get("magnitude") or 1.0)
+            pts = [[float(v) for v in c] for c in corners]
+        except (KeyError, TypeError, ValueError):
+            continue
+        if scale != 1.0:
+            cx = sum(p[0] for p in pts) / 8.0
+            cy = sum(p[1] for p in pts) / 8.0
+            cz = sum(p[2] for p in pts) / 8.0
+            pts = [[cx + (p[0] - cx) * scale, cy + (p[1] - cy) * scale,
+                    cz + (p[2] - cz) * scale] for p in pts]
+        # game Y-up (x, y, z) -> blender (x, -z, y)
+        world = [(p[0], -p[2], p[1]) for p in pts]
+        # ⛔ Keep the vertices LOCAL and put the centroid in the object's
+        # location. Baking world coordinates into the verts leaves the object
+        # origin at (0,0,0), and `--near` culls by ORIGIN -- so every volume was
+        # silently deleted before the render and no density or strength made any
+        # difference.
+        ox = sum(v[0] for v in world) / 8.0
+        oy = sum(v[1] for v in world) / 8.0
+        oz = sum(v[2] for v in world) / 8.0
+        verts = [(v[0] - ox, v[1] - oy, v[2] - oz) for v in world]
+        mesh = bpy.data.meshes.new("evr_volume_light")
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        # ⛔ A volume needs a CLOSED, consistently-wound shell. `from_pydata`
+        # takes the winding as given, and the corner order is not guaranteed to
+        # produce outward normals -- with it inconsistent EEVEE renders the
+        # medium as empty, silently and identically at every density.
+        import bmesh
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+        obj = bpy.data.objects.new("evr_volume_light", mesh)
+        # `matrix_world`, not `.location`: in background mode the depsgraph is
+        # not evaluated between creation and the `--near` filter, so a location
+        # set on its own leaves `matrix_world` at identity and every volume
+        # reads as sitting at the world origin.
+        obj.matrix_world = mathutils.Matrix.Translation((ox, oy, oz))
+        collection.objects.link(obj)
+
+        key = (colour, round(magnitude, 4))
+        mat = materials.get(key)
+        if mat is None:
+            mat = bpy.data.materials.new(name="evr_volumetric_light")
+            mat.use_nodes = True
+            tree = mat.node_tree
+            for node in list(tree.nodes):
+                if node.type != "OUTPUT_MATERIAL":
+                    tree.nodes.remove(node)
+            out = next(n for n in tree.nodes if n.type == "OUTPUT_MATERIAL")
+            vol = tree.nodes.new("ShaderNodeVolumePrincipled")
+            for socket, value in (("Color", colour + (1.0,)),
+                                  ("Emission Color", colour + (1.0,))):
+                if socket in vol.inputs:
+                    vol.inputs[socket].default_value = value
+            for socket, value in (("Density", density),
+                                  ("Emission Strength", magnitude * strength)):
+                if socket in vol.inputs:
+                    vol.inputs[socket].default_value = value
+            tree.links.new(vol.outputs[0], out.inputs["Volume"])
+            mat["le_volumetric_light"] = (
+                [round(c, 6) for c in colour] + [magnitude])
+            materials[key] = mat
+        mesh.materials.append(mat)
+        built += 1
+    return built
+
+
 def main() -> int:
     args = parse_args(sys.argv)
 
@@ -263,7 +389,8 @@ def main() -> int:
         import lone_echo_import  # noqa: E402  (needs the empty scene first)
         result = lone_echo_import.import_lescatter(
             args.manifest, bpy.context,
-            {"lod_level": args.lod, "max_instances": args.max_instances})
+            {"lod_level": args.lod, "max_instances": args.max_instances,
+             "uv_flipbook_frames": args.sky_flipbook})
         print(f"[render] imported: meshes={result.get('meshes_built')} "
               f"instances={result.get('instances_placed')} "
               f"materials={result.get('materials')}")
@@ -289,6 +416,11 @@ def main() -> int:
                       f"(atlases={counts.get('atlases')} "
                       f"bound_meshes={counts.get('bound_meshes')} "
                       f"bound_instances={counts.get('bound_instances')})")
+                if args.volume_lights:
+                    n = _build_volume_lights(doc, args.volume_light_strength,
+                                             args.volume_light_density,
+                                             args.volume_light_scale)
+                    print(f"[render] volumetric lights: {n} volume(s)")
                 by_mesh, by_inst = {}, {}
                 for obj in bpy.data.objects:
                     i = obj.get("le_mesh_index")
@@ -332,14 +464,21 @@ def main() -> int:
             if doc is None:
                 print("[render] no vertex_tints.json beside the manifest")
             else:
+                # MESH index -> materials.json ENTRY, matching what
+                # `apply_tints` joins against. Keyed by matidx (and holding the
+                # inner `spec`) it could never be joined to mesh-keyed rows.
                 specs = {}
                 try:
                     root = Path(args.manifest)
                     root = root.parent if root.is_file() else root
                     raw = json.loads((root / "materials.json").read_text(encoding="utf-8"))
-                    for entry in raw.get("materials") or ():
-                        specs[entry.get("matidx")] = entry.get("spec") or {}
-                except (OSError, ValueError, AttributeError):
+                    by_matidx = {e.get("matidx"): e for e in (raw.get("materials") or ())}
+                    man = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+                    for mesh in man.get("meshes") or ():
+                        entry = by_matidx.get(mesh.get("matidx"))
+                        if entry is not None:
+                            specs[int(mesh.get("index"))] = entry
+                except (OSError, ValueError, AttributeError, TypeError):
                     specs = {}
                 by_mesh = {}
                 for obj in bpy.data.objects:
@@ -349,7 +488,8 @@ def main() -> int:
                 r = evr_vertex_tints.apply_tints(doc, args.manifest, by_mesh, specs)
                 print(f"[render] vertex tints: {r.get('applied')} object(s) tinted, "
                       f"{r.get('variants', 0)} variant(s), "
-                      f"{r.get('skipped_has_albedo', 0)} left alone (own albedo)")
+                      f"{r.get('skipped_material_owns_colour', 0)} left alone "
+                      f"(the material already has its own colour)")
 
     if args.near:
         x, y, z, r = (float(v) for v in args.near.split(","))

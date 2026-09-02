@@ -15,11 +15,21 @@ its parent's tail is CONNECTED, so posing a shoulder carries the arm.
 
 ## Honest limits
 
-* **Bone names are partial.** Bones carry their authored name where its
-  CSymbol64 preimage is recovered (`EXP_R1_Hand1`, `EXP_C1_Spine2`) and fall
-  back to `bone_042` where it is not -- roughly half the slots, with the
-  anatomical joints resolving and most helper/attachment joints not. The raw
-  hash is always kept as `evr_name_hash`.
+* **Bone names.** Bones carry their authored name (`EXP_R1_Hand1`,
+  `EXP_C1_Spine2`) and fall back to `bone_042` where the CSymbol64 preimage is
+  not in `data/bone_names.json`. Every hash on every skeleton extracted so far
+  resolves, but a rig the table has never seen may carry cosmetic-specific
+  joints that do not. The raw hash is always kept as `evr_name_hash`.
+* **Pistons aim at each other.** A piston is two bones on different segments
+  plus an up-marker; the pairing comes from `pistons` in the sidecar, and each
+  end gets a Damped Track (aim) and a Locked Track (roll). Both are exactly
+  satisfied by the bind pose, so importing moves nothing -- measured at 1.5e-7 m
+  across the whole mesh -- and only a POSE swings them. Note the ends are mostly
+  UNWEIGHTED: constraining them fixes the rig, not the silhouette. On the Lone
+  Echo 2 body only the 238 vertices weighted to `SpinePiston2` actually follow;
+  the rest of the piston geometry is bound rigidly to the parent limb in the
+  source, so it rides the limb rather than telescoping. That is how it was
+  authored, not a gap in the import.
 * Helper/IK bones with no skinned vertices are KEPT -- they are load-bearing
   parents for the bones below them.
 * **Attachment sockets sit at the origin, and that is correct.** A few bones
@@ -62,6 +72,23 @@ BONE_LENGTH = 0.05
 ORIGIN_EPSILON = 1e-6
 #: Blender removes bones shorter than this, which would break the parent chain.
 MIN_BONE_LENGTH = 1e-4
+#: A piston end is a LEAF, so the generic leaf rule would point it in the
+#: direction its parent happened to be heading -- meaningless for a rod that
+#: physically spans a gap. Instead its tail is aimed at the OTHER end and its
+#: roll set from the up-marker, which makes the two aim constraints below exact
+#: at rest: the bind pose is reproduced, not approximated, and only a POSE moves
+#: them. Pairing comes from `pistons` in the sidecar (read off the authored
+#: names -- the ends carry no weights, so the mesh cannot say which two match).
+PISTON_MIN_SPAN = 1e-4
+#: Prefix for the aim proxies. Two ends tracking EACH OTHER is a dependency
+#: cycle at Blender's bone granularity -- the constraint reads the target's
+#: FINAL pose, so A waits on B and B waits on A, and Blender breaks the tie by
+#: leaving one end stale (measured: 13 of 40 ends off-aim by up to 138 deg,
+#: worse than no constraint at all). A piston end's HEAD, though, depends only
+#: on its parent, so an unconstrained bone parented alongside it carries that
+#: position with no cycle. Each end aims at its partner's PROXY instead, which
+#: makes the whole rig order-independent.
+PISTON_PROXY_PREFIX = "EVR_Aim_"
 #: Head-to-parent-tail distance under which a bone is CONNECTED. Connecting
 #: snaps the head onto the parent tail, so this must stay tight enough that the
 #: bind pose is never moved.
@@ -94,7 +121,8 @@ def _to_blender(vec, y_up_to_z_up):
 
 
 def build_armature(doc, context, y_up_to_z_up=True, collection=None,
-                   name=None, hide_origin_sockets=True):
+                   name=None, hide_origin_sockets=True,
+                   hide_unweighted=True):
     """Create the armature. Returns `(object, {bone_index: name})`.
 
     Bones are parented from the decoded hierarchy, and each bone's TAIL points
@@ -102,13 +130,19 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
     disconnected stubs. A bone with one child is CONNECTED to it, which is what
     makes the chain drag properly when posed.
 
-    With `hide_origin_sockets`, attachment sockets parked on the model origin
-    (`zeroJoint`, `synchJoint`, `EXP_R1_HandPistol1`) are created but hidden,
-    so they stop crowding the viewport around the origin. They are HIDDEN, not
-    dropped: they stay in the armature, keep their index and hash, and unhide
-    from the Armature tab. A bone only qualifies if it is unweighted AND
-    childless AND on the origin, so no deforming bone and no load-bearing
-    parent can ever be caught by it.
+    With `hide_unweighted`, every bone that moves no vertex is created but
+    HIDDEN -- on the Lone Echo 2 body that is 121 of 189: attachment sockets
+    (`EXP_R1_HandPistol1`), IK targets (`EXP_L1_ArmGameIk1`), the piston ends,
+    and `Root`/`synchJoint`/`zeroJoint`. Only the 68 bones that actually carry
+    skin weights stay visible, so the viewport shows the deforming rig instead
+    of a thicket.
+
+    Hidden is not dropped. They keep their index, hash, parent and constraints,
+    they still deform and still drive the pistons, and they unhide from the
+    Armature tab -- hiding a load-bearing parent costs nothing because Blender
+    evaluates hidden bones exactly the same. `hide_origin_sockets` is the older,
+    narrower rule (unweighted AND childless AND on the origin) and is subsumed
+    by this one; it is kept so a caller can ask for just that.
     """
     records = doc.get("bones") or []
     if not records:
@@ -157,7 +191,16 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
     if leaf_cap < MIN_LEAF_LENGTH:
         leaf_cap = BONE_LENGTH
 
-    names, edit, sockets = {}, {}, []
+    # sidecar bone name -> (partner name, up-marker name or None)
+    piston_of = {}
+    for pair in (doc.get("pistons") or ()):
+        a, b = pair.get("a"), pair.get("b")
+        if a and b:
+            piston_of[a] = (b, pair.get("a_up"))
+            piston_of[b] = (a, pair.get("b_up"))
+    head_by_name = {r.get("name"): head_of(r) for r in records if r.get("name")}
+
+    names, edit, sockets, bone_by_sidecar = {}, {}, [], {}
     for r in records:
         index = int(r["index"])
         # Prefer the authored name; fall back to the index where its CSymbol64
@@ -179,9 +222,15 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
         # keeps every chain -- spine, arm, each finger -- visually joined, and
         # only genuine branch points stay separate, which is how a hand-built
         # rig looks.
+        partner_name, up_name = piston_of.get(r.get("name"), (None, None))
+        partner_head = head_by_name.get(partner_name)
         if kids:
             primary = max(kids, key=lambda k: (subtree_depth(k), -k))
             tail = head_of(by_index[primary])
+        elif (partner_head is not None
+              and (partner_head - head).length > PISTON_MIN_SPAN):
+            # Piston end: span the gap to the other end.
+            tail = partner_head
         else:
             # Leaf: carry on in the direction the parent segment was heading,
             # at a length proportional to that segment. Capped at the model's
@@ -204,14 +253,25 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
             # hole in the parent chain, so nudge it along the parent direction.
             tail = head + mathutils.Vector((0.0, 0.0, MIN_BONE_LENGTH))
         eb.head, eb.tail = head, tail
+        if partner_head is not None and up_name:
+            up_head = head_by_name.get(up_name)
+            if up_head is not None and (up_head - head).length > PISTON_MIN_SPAN:
+                # align_roll aims the bone's Z at the vector, which is the axis
+                # the Locked Track below holds -- so the rest roll is preserved.
+                eb.align_roll(up_head - head)
         eb["evr_bone_index"] = index
         eb["evr_name_hash"] = r.get("name_hash", "")
         eb["evr_weighted"] = bool(r.get("weighted", True))
         names[index] = bone_name
+        if r.get("name"):
+            bone_by_sidecar[r["name"]] = bone_name
         edit[index] = eb
         # Deliberately conservative: `weighted` defaults to True when the
         # sidecar predates the field, so an unknown bone is kept visible.
-        if (hide_origin_sockets and not r.get("weighted", True)
+        unweighted = not r.get("weighted", True)
+        if hide_unweighted and unweighted:
+            sockets.append(bone_name)
+        elif (hide_origin_sockets and unweighted
                 and not kids and head.length < ORIGIN_EPSILON):
             sockets.append(bone_name)
 
@@ -228,7 +288,59 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
         # would MOVE the head to the parent's tail and shift the bind pose.
         eb.use_connect = (eb.head - pb.tail).length < CONNECT_EPSILON
 
+    # Aim proxies: one per piston end, parented where the end is parented and
+    # sitting exactly on its head, carrying no constraints of its own.
+    proxy_of = {}
+    for pair in (doc.get("pistons") or ()):
+        for end in (pair.get("a"), pair.get("b")):
+            bone_name = bone_by_sidecar.get(end or "")
+            if not bone_name or end in proxy_of:
+                continue
+            src = arm.edit_bones.get(bone_name)
+            if src is None:
+                continue
+            pxy = arm.edit_bones.new(PISTON_PROXY_PREFIX + bone_name)
+            pxy.head = src.head.copy()
+            pxy.tail = src.head + mathutils.Vector((0.0, 0.0, MIN_BONE_LENGTH * 10))
+            pxy.parent, pxy.use_connect = src.parent, False
+            pxy["evr_piston_proxy"] = src.name
+            proxy_of[end] = pxy.name
+
     bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Pose constraints make the pistons behave: each end tracks the other, so
+    # bending a knee swings both halves of the rod to stay pointed at each
+    # other instead of rotating rigidly with the thigh. DAMPED_TRACK does the
+    # aim (bone +Y at the partner); LOCKED_TRACK holds the roll about that aim
+    # using the up-marker, matching the Z axis set by align_roll above. Both are
+    # already satisfied by the rest pose, so importing changes nothing until
+    # something is actually posed.
+    constrained = 0
+    for pair in (doc.get("pistons") or ()):
+        for end, up in ((pair.get("a"), pair.get("a_up")),
+                        (pair.get("b"), pair.get("b_up"))):
+            other = pair.get("b") if end == pair.get("a") else pair.get("a")
+            pb = obj.pose.bones.get(bone_by_sidecar.get(end, ""))
+            target = proxy_of.get(other) or bone_by_sidecar.get(other)
+            if pb is None or not target:
+                continue
+            aim = pb.constraints.new("DAMPED_TRACK")
+            aim.name = "EVR Piston Aim"
+            aim.target, aim.subtarget, aim.track_axis = obj, target, "TRACK_Y"
+            up_bone = bone_by_sidecar.get(up or "")
+            if up_bone:
+                roll = pb.constraints.new("LOCKED_TRACK")
+                roll.name = "EVR Piston Roll"
+                roll.target, roll.subtarget = obj, up_bone
+                roll.track_axis, roll.lock_axis = "TRACK_Z", "LOCK_Y"
+            constrained += 1
+    obj["evr_pistons"] = constrained
+    obj["evr_piston_proxies"] = len(proxy_of)
+    for pname in proxy_of.values():
+        bone = arm.bones.get(pname)
+        if bone is not None:
+            bone.hide = True
+
     # Hiding is applied on the Bone rather than the EditBone: the edit-mode
     # copy is discarded on leaving edit mode, so it has to be set on the bone
     # that survives.
@@ -243,6 +355,7 @@ def build_armature(doc, context, y_up_to_z_up=True, collection=None,
     obj["evr_bones_parented"] = bool(doc.get("hierarchy"))
     obj["evr_roots"] = list(doc.get("roots") or [])
     obj["evr_hidden_sockets"] = len(sockets)
+    obj["evr_visible_bones"] = len(records) - len(sockets)
     return obj, names
 
 

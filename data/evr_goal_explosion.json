@@ -1,0 +1,24 @@
+{
+ "format": "evr_goal_explosion",
+ "version": 1,
+ "note": "Which props are a level's GOAL EXPLOSION. This is game-code knowledge, not level data: the props are ordinary transparent models with no authored motion, no accent tint and no script binding of their own, and every structural rule tried to separate them from the permanent goal ring failed. Membership below is USER-SUPPLIED (see `source`); everything else about the effect -- which goal end each instance belongs to, and the colour it takes -- is derived from the package in `scripts/evr_goal_explosion.py`.",
+ "derivation": {
+  "ends": "the distinct transforms the `burst` models are placed at -- they occur nowhere else in the level",
+  "team_tint": "the accent tint carried by the most instances near each end (mpl_arena_a: +z reads 225 instances of (1.0, 0.264, 0.059), -z reads 225 of (0.0, 0.569, 1.0))",
+  "explosion_tint": "the OTHER end's team tint: a goal flashes the colour of the team that scored INTO it",
+  "timing": "NOT authored -- see the addon's evr_goal_explosion module"
+ },
+ "levels": {
+  "576ed3f8428ebc4b": {
+   "name": "mpl_arena_a",
+   "source": "user, 2026-08-31: 'i62 i61 i53 i54 are inside orange goal, blue side had 4 identical models doing the same, also i21 i15 are two extra models, in game when you score these models move to act as a goal explosion, they are coloured, orange side they will be blue for when blue scores, blue side theyre orange'",
+   "burst": [
+    "4e8f40c809bc2b31",
+    "91346845ed4f9429"
+   ],
+   "shockwave": [
+    "9bab1373812fe037"
+   ]
+  }
+ }
+}

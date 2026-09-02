@@ -158,6 +158,94 @@ def import_lights(doc: dict, context, y_up_to_z_up: bool = True,
     return out
 
 
+#: A surface this far past every authored light's range receives nothing.
+#: The margin only guards against a light sitting at the very edge of its own
+#: reach; it is not a tuning knob.
+UNLIT_MARGIN = 1.25
+
+
+def unlit_beyond_light_reach(doc: dict, objects, *, y_up_to_z_up: bool = True,
+                             scale: float = 1.0) -> dict:
+    """Black out OPAQUE surfaces no authored light can reach -- i.e. the sky.
+
+    ⭐ THE SKY BUG. `mpl_arena_a`'s 955-unit backdrop dome binds a PURE WHITE
+    512x512 albedo (`2639bbbafc7c74f4`, every texel 255) through
+    `eMTForwardOpaque`, so what colour it renders is entirely a question of how
+    much light reaches it. In game: none, and the sky is near-black. In Blender
+    it came out a bright blue-grey, and isolating the shells found why --
+
+        dome alone .............. 0.0003    (black)
+        one wisp shell alone .... 0.015
+        dome + any one shell .... 0.57      (bright)
+        every light except SUN .. 0.0003
+        the two SUNs alone ...... 0.57
+
+    -- the level's two DIRECTIONAL lights. Their records carry `range: 150`,
+    but a Blender SUN is infinite and has no `cutoff_distance`, so they lit a
+    dome 955 units out. Every other light is a POINT or SPOT whose authored
+    range (2 to 15 units) already becomes a real cutoff, which is why they stop
+    at the arena.
+
+    ⚠ OPAQUE only. The wisp shells in front of the dome are BLENDED and carry
+    the sky's actual content in their alpha; they measure 0.015 lit, so they
+    were never the problem, and blacking their base colour would delete the
+    bands this is meant to reveal.
+    """
+    reach = 0.0
+    centre = mathutils.Vector((0.0, 0.0, 0.0))
+    positions = []
+    for rec in (doc or {}).get("lights") or ():
+        span = (rec.get("range") or [0.0])[0]
+        try:
+            reach = max(reach, float(span or 0.0))
+        except (TypeError, ValueError):
+            continue
+        pos = rec.get("position")
+        if pos and len(pos) >= 3:
+            positions.append(_to_blender(pos, y_up_to_z_up) * scale)
+    if not reach or not positions:
+        return {"blacked": 0, "reason": "no authored light range"}
+    for p in positions:
+        centre += p
+    centre /= len(positions)
+    limit = reach * scale * UNLIT_MARGIN
+
+    blacked = 0
+    for obj in objects:
+        if obj.type != "MESH" or not obj.material_slots:
+            continue
+        near = min((obj.matrix_world @ mathutils.Vector(b) - centre).length
+                   for b in obj.bound_box)
+        if near <= limit:
+            continue
+        for slot in obj.material_slots:
+            mat = slot.material
+            if mat is None or mat.node_tree is None:
+                continue
+            if str(getattr(mat, "surface_render_method", "")) == "BLENDED":
+                continue
+            bsdf = next((n for n in mat.node_tree.nodes
+                         if n.type == "BSDF_PRINCIPLED"), None)
+            if bsdf is None:
+                continue
+            base = bsdf.inputs.get("Base Color")
+            if base is None:
+                continue
+            for link in list(base.links):
+                mat.node_tree.links.remove(link)
+            base.default_value = (0.0, 0.0, 0.0, 1.0)
+            spec = bsdf.inputs.get("Specular IOR Level")
+            if spec is not None and not spec.is_linked:
+                spec.default_value = 0.0
+            mat["le_unlit_beyond_light_reach"] = (
+                "no authored light reaches this surface (furthest range %.1f, "
+                "this is %.1f out), so in the engine it renders black; a "
+                "Blender SUN is infinite and lit it instead" % (reach, near))
+            blacked += 1
+    return {"blacked": blacked, "limit": round(limit, 1),
+            "reach": round(reach, 1)}
+
+
 def _load_image(directory: Path, name: str, colorspace: str = "sRGB"):
     path = directory / name
     if not path.is_file():
@@ -1092,12 +1180,32 @@ def _wire_sh4(material, slice_images, intensity: float = 1.0,
         mix.inputs[6].default_value = tuple(base.default_value)
     tree.links.new(mix.inputs[7], group_node.outputs[0])
 
-    _sh4_strength = float(intensity) / 3.14159265358979
+    # ⛔ NOT `intensity / Pi`. The shader's `EvalSH4IrradianceGeomerics` does
+    # end in `diffuse = irradiance * albedo / Pi`, and that line is transcribed
+    # faithfully above -- but the SHIPPED SLICES ARE ALREADY DIVIDED, so
+    # applying it again here cost a factor of Pi and every SH4 surface imported
+    # dark. Three independent checks agree:
+    #
+    #   * measured, the DC slice sits a factor of Pi below the collapsed page
+    #     that describes the same bake -- 0.354, 0.327, 0.342 against
+    #     1/Pi = 0.318 on `mpl_arena_a` p0/p1/p2, read as float from the BC6H
+    #     with HDR intact (max 2.98-6.26, so nothing is clipping);
+    #   * the SG5 path in this same module, and `_wire_radiance` for the 8-bit
+    #     pages, both use `intensity` UNDIVIDED. SH4 was the only one of the
+    #     three carrying the extra divide;
+    #   * rendered side by side at 1.0 and Pi, the user confirmed Pi as correct
+    #     against the game. Mean 51.7 -> 75.2 with clipping unmoved
+    #     (0.73% -> 0.83%), i.e. it lifts mid-tones rather than blowing
+    #     highlights -- the median moves 30 -> 57.
+    #
+    # 1032 of the arena's 1113 emissive-linked materials sat at 0.318 because
+    # of this.
+    _sh4_strength = float(intensity)
     tree.links.new(emission, _keep_existing_emission(
         tree, principled, mix.outputs[2], _sh4_strength))
     strength = principled.inputs.get("Emission Strength")
     if strength is not None:
-        # The shader's `k1_Pi`: EvalSH4IrradianceGeomerics returns irradiance,
-        # and diffuse reflectance divides it by Pi.
+        # Matches the SG5 path and `_wire_radiance`; the shader's `k1_Pi` is
+        # already folded into the shipped slices -- see above.
         strength.default_value = _sh4_strength
     return True

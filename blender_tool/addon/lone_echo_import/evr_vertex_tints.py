@@ -61,6 +61,8 @@ SIDECAR_FORMAT = "evr_vertex_tints"
 WHITE_EPSILON = 1e-6
 #: Within this of 0.0 on every channel, a multiply erases the surface.
 BLACK_EPSILON = 1e-6
+#: Channel spread above which a colour is a HUE rather than a brightness.
+CHROMATIC_SPREAD = 0.05
 
 _COLOUR_CHANNELS = frozenset({"base_color", "albedo", "emission", "emissive"})
 _ALBEDO_CHANNELS = frozenset({"base_color", "albedo"})
@@ -89,6 +91,46 @@ def material_has_albedo(spec) -> bool:
     if keys & _ALBEDO_CHANNELS:
         return True
     return any("albedo" in role for role in (spec.get("role_textures") or {}))
+
+
+def is_chromatic(rgb) -> bool:
+    """Does this colour claim a HUE, as opposed to a brightness?
+
+    Grey (0.58, 0.58, 0.58) and white are brightness factors and say nothing
+    about hue; pink (1.0, 0.21, 0.44) does. The spread between the strongest
+    and weakest channel separates them.
+    """
+    if not rgb or len(rgb) < 3:
+        return False
+    vals = [float(c) for c in rgb[:3]]
+    return (max(vals) - min(vals)) > CHROMATIC_SPREAD
+
+
+def material_owns_its_colour(entry) -> bool:
+    """Has the MATERIAL already declared a hue of its own?
+
+    ⛔ Two earlier gates were tried here and both were wrong -- see the module
+    docstring. This is not either of them. "Skips an albedo-sampling material"
+    failed because `mpl_combat_combustion`'s water and lava sample an albedo and
+    genuinely take their colour from the tint; that water's own `bakecolor` is
+    `[1, 1, 1, 1]`, i.e. NOT chromatic, so it still applies under this rule.
+    What this catches is the opposite case: a material that already carries a
+    hue, where multiplying a second hue over it destroys both. `mpl_arena_a`
+    mesh 148/149 are pink (1.0, 0.214, 0.444) under a blue (0.0, 0.447, 1.0)
+    tint, and the product is a dark blue that matches neither.
+    """
+    if not isinstance(entry, dict):
+        return False
+    # Either shape: the materials.json ENTRY carries `base_color`, its inner
+    # `spec` carries the same quantity as `base_color_factor`. Accepting both
+    # means a caller that hands over one or the other cannot silently disable
+    # the gate -- which is exactly how it came to be passed and never read.
+    colour = entry.get("base_color")
+    if colour is None:
+        colour = entry.get("base_color_factor")
+    if colour is None:
+        colour = (entry.get("spec") or {}).get("base_color_factor")
+    return is_chromatic(colour)
 
 
 def is_applicable(rgba) -> bool:
@@ -142,18 +184,28 @@ def _tint_material(material, rgba):
     return changed
 
 
-def apply_tints(doc: dict, package, objects_by_mesh: dict, specs_by_matidx: dict) -> dict:
-    """Tint the no-albedo surfaces named in the sidecar. Returns a summary."""
+def apply_tints(doc: dict, package, objects_by_mesh: dict,
+                materials_by_mesh: dict) -> dict:
+    """Tint the surfaces named in the sidecar. Returns a summary.
+
+    `materials_by_mesh` maps a MESH index to its materials.json entry. The
+    sidecar rows are keyed by mesh, so a matidx-keyed map cannot be joined to
+    them -- which is why the previous parameter was passed but never read.
+    """
     rows = doc.get("tints") or []
     if not rows:
         return {"applied": 0}
 
-    applied = skipped_albedo = skipped_identity = no_object = 0
+    applied = skipped_owns_colour = skipped_identity = no_object = 0
     variants: dict = {}
     for row in rows:
         rgba = row.get("rgba")
         if not is_applicable(rgba):
             skipped_identity += 1
+            continue
+        entry = (materials_by_mesh or {}).get(int(row.get("mesh", -1)))
+        if is_chromatic(rgba) and material_owns_its_colour(entry):
+            skipped_owns_colour += 1
             continue
         objects = objects_by_mesh.get(int(row.get("mesh", -1))) or ()
         if not objects:
@@ -186,7 +238,10 @@ def apply_tints(doc: dict, package, objects_by_mesh: dict, specs_by_matidx: dict
             obj["le_vertex_tint"] = [round(c, 6) for c in rgba[:3]]
             applied += 1
 
+    # ⚠ NOT `skipped_has_albedo`. That key named the gate that was REMOVED
+    # (skip when the material samples an albedo), and keeping it as an alias
+    # for this one would report a different rule under the old name.
     return {"applied": applied, "variants": len(variants),
-            "skipped_has_albedo": skipped_albedo,
+            "skipped_material_owns_colour": skipped_owns_colour,
             "skipped_identity_or_black": skipped_identity,
             "no_object": no_object}

@@ -40,11 +40,21 @@ Three independent checks, not one:
   3. **It explains the header.**  `+0x30` was previously an unexplained hash
      word; it is simply animation 0's name.
 
-Names recovered include `idle`, `ready`, `boost`, `kick`, `grip`, `show`,
-`look_pitch`, `look_yaw`, `look_roll`, `root_ik`, `ghost_ik`,
-`hand_left_gestures`, `hand_right_gestures`, `hand_right_grip_plane`.  Only 23
-of 669 resolve, because `hash_lookup.json` covers a small fraction of animation
-names -- the other 646 are real entries whose preimage is simply unknown.
+## Names
+
+The record's name is a CSymbol64, and those are crackable directly rather than
+looked up: symbol64 does not mix inside a 7-byte window, so a name of at most
+SEVEN characters is just its hash unpacked, with no enumeration and no
+vocabulary.  That alone returned 114; a brute-forced head in front of the same
+free tail took it to 356 (`data/anim_names.json`, every one verified).  Across
+the 1423 LE2 animsets that is **903 of 6537** animations named, against 81 from
+`hash_lookup.json` alone.
+
+Recovered names include `idle`, `ready`, `boost_up/dn/fd/bk/lt/rt`, `aim_90_up`,
+`blink_add`, `door_close`, `accelerate`, `decelerate`, `holster`, `reboot_idle`,
+`root_head`, `bring_data`, `anyone_here`.  ⚠ Longer names are where collisions
+begin -- a head space H explores H * 37^7 names, so survivors past ~4.5e5 heads
+must be sifted by word-segmentation, not trusted because they verify.
 
 ## The 136-byte record
 
@@ -272,19 +282,35 @@ def payload_region(root: Path, model_hash):
     return start, size - start
 
 
+#: Animation names recovered from the hashes themselves (see the file's note).
+ANIM_NAMES_FILE = _ROOT / "data" / "anim_names.json"
+
+
 def load_names(path: Path | None = None) -> dict:
-    """`{hash -> name}` for labelling. Absent file is not an error."""
-    import evr_paths
-    candidates = [path] if path else [evr_paths.hash_lookup()]
-    for candidate in candidates:
+    """`{hash -> name}` for labelling. Absent file is not an error.
+
+    Two sources, merged: the shared `hash_lookup.json`, and `anim_names.json`,
+    which holds names cracked out of the animation hashes directly. The second
+    is the bigger of the two by an order of magnitude -- `hash_lookup` covered
+    34 of 4370 distinct animation hashes.
+    """
+    def _read(candidate):
         if candidate and candidate.is_file():
             try:
                 raw = json.loads(candidate.read_text(encoding="utf-8"))
             except (OSError, ValueError):
-                continue
+                return {}
+            raw = raw.get("names", raw) if isinstance(raw, dict) else {}
             return {k.lower().replace("0x", "").rjust(16, "0"): v
                     for k, v in raw.items() if isinstance(v, str)}
-    return {}
+        return {}
+
+    if path is not None:
+        return _read(path)
+    import evr_paths
+    merged = _read(evr_paths.hash_lookup())
+    merged.update(_read(ANIM_NAMES_FILE))
+    return merged
 
 
 def read(root: Path, model_hash, names: dict | None = None) -> AnimSet | None:

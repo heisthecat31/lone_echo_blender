@@ -194,15 +194,18 @@ def _table(blob: bytes):
 def actor_positions(root: Path, members) -> dict:
     """`{nodeid: (x, y, z)}` over every member's actor table."""
     import evr_actor_data
-    from evr_resource_types import ACTOR_DATA, resolve_type_dir
+    # ⛔ NOT `resolve_type_dir(...) / member`: that spelling is zero-PADDED only,
+    # so a level whose hash carries a leading zero -- `mpl_combat_war_room` is
+    # `08a1af9e108def0b`, written to disk as `8a1af9e108def0b` -- missed on every
+    # member and this returned an EMPTY dict, which reads as "no actors" rather
+    # than as a failed lookup. Measured: 0 positions for the war room against
+    # 2692 for dyson, whose hash happens to start with `4`.
+    from evr_resource_types import ACTOR_DATA, resource_path
 
     out: dict = {}
-    directory = resolve_type_dir(root, ACTOR_DATA)
     for member in members:
-        path = directory / member
-        if not path.exists():
-            path = path.with_suffix(".bin")
-        if not path.exists():
+        path = resource_path(root, ACTOR_DATA, member)
+        if path is None:
             continue
         try:
             actors = evr_actor_data.parse(path.read_bytes()).get("actors") or []
@@ -283,7 +286,7 @@ def skeletal_movers(root: Path, members, positions: dict | None = None) -> dict:
 
         actor_ids = set(positions)
         if not actor_ids:
-            actor_ids = _actor_ids(resolve_type_dir(root, ACTOR_DATA), member)
+            actor_ids = _actor_ids(root, member)
         bindings = _model_bindings(model_blob, actor_ids)
 
         for actor in sorted(marked):
@@ -356,12 +359,14 @@ def _read(root: Path, type_hash: str, member: str) -> bytes:
         return b""
 
 
-def _actor_ids(directory: Path, member: str) -> set:
+def _actor_ids(root: Path, member: str) -> set:
+    # Takes the extract ROOT, not a resolved type dir: the join has to go through
+    # `resource_path` so the zero-stripped on-disk spelling is tried too (see
+    # `actor_positions`).
     import evr_actor_data
-    path = directory / member
-    if not path.exists():
-        path = path.with_suffix(".bin")
-    if not path.exists():
+    from evr_resource_types import ACTOR_DATA, resource_path
+    path = resource_path(root, ACTOR_DATA, member)
+    if path is None:
         return set()
     try:
         actors = evr_actor_data.parse(path.read_bytes()).get("actors") or []
@@ -450,17 +455,17 @@ def platform_movers(root: Path, members, positions: dict | None = None, *,
     The keyword arguments retarget it at `CR15PlatformCR`, which is the same
     record one word wider; `r15_platform_movers` is that call.
     """
-    from evr_resource_types import resolve_type_dir
+    # `resource_path`, never `resolve_type_dir(...) / member` -- see
+    # `actor_positions` for why the padded spelling alone loses every
+    # leading-zero level.
+    from evr_resource_types import resource_path
 
     if positions is None:
         positions = actor_positions(root, members)
-    directory = resolve_type_dir(root, component)
     out: dict = {}
     for member in members:
-        path = directory / member
-        if not path.exists():
-            path = path.with_suffix(".bin")
-        if not path.exists():
+        path = resource_path(root, component, member)
+        if path is None:
             continue
         try:
             blob = path.read_bytes()
@@ -530,17 +535,16 @@ def movers_for(root: Path, members, positions: dict | None = None) -> dict:
     `rest` is the anchor that coincides with the constrained actor when one
     does; otherwise anchor A, so the pair is always ordered rest -> far end.
     """
-    from evr_resource_types import resolve_type_dir
+    # `resource_path`, never `resolve_type_dir(...) / member` -- see
+    # `actor_positions`.
+    from evr_resource_types import resource_path
 
     if positions is None:
         positions = actor_positions(root, members)
-    directory = resolve_type_dir(root, LINEAR_POSITION_CONSTRAINT)
     out: dict = {}
     for member in members:
-        path = directory / member
-        if not path.exists():
-            path = path.with_suffix(".bin")
-        if not path.exists():
+        path = resource_path(root, LINEAR_POSITION_CONSTRAINT, member)
+        if path is None:
             continue
         try:
             blob = path.read_bytes()

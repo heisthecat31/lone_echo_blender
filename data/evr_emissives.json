@@ -1,0 +1,1316 @@
+{
+ "format": "evr_emissives",
+ "version": 1,
+ "source": "43934c379cf1e366 cosmetic list, ext-data heap",
+ "note": "Read from the cosmetic list's ext-data heap (one contiguous blob after the 664-byte descriptors, consumed in entry order, ImageListingEntrySize + OtherEntrySize per entry). Entries are selected by CosmeticTypeSymbol (+0x68), which -- like every symbol in this table -- is stored BYTE-REVERSED; selecting by internal-name prefix instead silently drops the `rwd_*` ones. \u26a0 The authored float32 are sRGB-ENCODED, not linear: `tint_neutral_m_default` (\"Black Hole\") authors 0.15/0.9, which as sRGB are #262626 and #e6e6e6 -- near-black and white, matching the game. Read as linear they become a washed-out mid-grey pair (#6c6c6c/#f3f3f3), which is how every tint ended up too weak. `*_linear` is the converted value a renderer wants; `*_hex` is the direct byte encoding. An emissive is ExtDataParamCount RGB float32 triples. The chassis emissive MAP is a zone MASK, not a colour image: its shipped red/green are DEFAULTS that the player's chosen emissive replaces, mask channel N taking colour N.",
+ "emissives": [
+  {
+   "name": "rwd_emissive_0001",
+   "display": "Amber",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     1.0,
+     0.582,
+     0.178
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.29794,
+     0.026659
+    ]
+   ],
+   "colors_hex": [
+    "#ff942d"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0002",
+   "display": "Morpho",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.255,
+     0.468,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.052901,
+     0.185609,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#4177ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0003",
+   "display": "Garnet",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.598,
+     0.0,
+     0.168
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.316217,
+     0.0,
+     0.023995
+    ]
+   ],
+   "colors_hex": [
+    "#98002b"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0004",
+   "display": "Lime",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.452,
+     0.682,
+     0.204
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.172271,
+     0.422782,
+     0.034365
+    ]
+   ],
+   "colors_hex": [
+    "#73ae34"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0005",
+   "display": "Ultramarine",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.272,
+     0.0,
+     0.961
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.060132,
+     0.0,
+     0.913564
+    ]
+   ],
+   "colors_hex": [
+    "#4500f5"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0006",
+   "display": "Mesa",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.692,
+     0.31,
+     0.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.43668,
+     0.078288,
+     0.0
+    ]
+   ],
+   "colors_hex": [
+    "#b04f00"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0007",
+   "display": "Violet",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.365,
+     0.0,
+     0.673
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.109646,
+     0.0,
+     0.410496
+    ]
+   ],
+   "colors_hex": [
+    "#5d00ac"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0008",
+   "display": "Forest",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.0,
+     0.449,
+     0.059
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.0,
+     0.169835,
+     0.004795
+    ]
+   ],
+   "colors_hex": [
+    "#00720f"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0009",
+   "display": "Lemon",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     1.0,
+     0.84,
+     0.243
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.67386,
+     0.048119
+    ]
+   ],
+   "colors_hex": [
+    "#ffd63e"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0010",
+   "display": "Seaglass",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.167,
+     0.617,
+     0.573
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.023738,
+     0.338751,
+     0.287937
+    ]
+   ],
+   "colors_hex": [
+    "#2b9d92"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0011",
+   "display": "Coral",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.869,
+     0.243,
+     0.243
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.727456,
+     0.048119,
+     0.048119
+    ]
+   ],
+   "colors_hex": [
+    "#de3e3e"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0012",
+   "display": "Wisteria",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.42,
+     0.252,
+     0.589
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.147319,
+     0.05168,
+     0.305858
+    ]
+   ],
+   "colors_hex": [
+    "#6b4096"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0013",
+   "display": "Hot and Cold",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 120.0,
+   "colors": [
+    [
+     0.0,
+     0.576,
+     0.907
+    ],
+    [
+     1.0,
+     0.582,
+     0.178
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.0,
+     0.291249,
+     0.801335
+    ],
+    [
+     1.0,
+     0.29794,
+     0.026659
+    ]
+   ],
+   "colors_hex": [
+    "#0093e7",
+    "#ff942d"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0014",
+   "display": "RGB",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 100.0,
+   "colors": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#ff0000",
+    "#00ff00",
+    "#0000ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0015",
+   "display": "?? Dawn",
+   "description": "This is a short spiel about the item",
+   "texture": "856c223c386c17ec",
+   "unk1": 0.0,
+   "unk2": 0.3,
+   "colors": [
+    [
+     1.0,
+     0.612,
+     0.876
+    ],
+    [
+     1.0,
+     0.703,
+     0.282
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.332733,
+     0.740753
+    ],
+    [
+     1.0,
+     0.452273,
+     0.064641
+    ]
+   ],
+   "colors_hex": [
+    "#ff9cdf",
+    "#ffb348"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0016",
+   "display": "Brimstone",
+   "description": "This is a short spiel about the item",
+   "texture": "0568ef7e4be93957",
+   "unk1": 0.0,
+   "unk2": 0.3,
+   "colors": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     1.0,
+     0.786,
+     0.005
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     1.0,
+     0.580369,
+     0.000387
+    ]
+   ],
+   "colors_hex": [
+    "#ff0000",
+    "#ffc801"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0017",
+   "display": "S7? Lancer",
+   "description": "This is a short spiel about the item",
+   "texture": "e339a6c48fe977a5",
+   "unk1": 0.0,
+   "unk2": 0.08,
+   "colors": [
+    [
+     1.0,
+     0.326,
+     0.12
+    ],
+    [
+     0.0,
+     0.745,
+     0.813
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.086779,
+     0.013412
+    ],
+    [
+     0.0,
+     0.514766,
+     0.626097
+    ]
+   ],
+   "colors_hex": [
+    "#ff531f",
+    "#00becf"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0018",
+   "display": "?? Kelp Forest",
+   "description": "This is a short spiel about the item",
+   "texture": "3b7dafacb54943bd",
+   "unk1": 0.0,
+   "unk2": 0.08,
+   "colors": [
+    [
+     0.0,
+     0.211153,
+     0.869
+    ],
+    [
+     0.405,
+     1.0,
+     0.445
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.0,
+     0.036687,
+     0.727456
+    ],
+    [
+     0.1364,
+     1.0,
+     0.166618
+    ]
+   ],
+   "colors_hex": [
+    "#0036de",
+    "#67ff71"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0019",
+   "display": "?? Shore",
+   "description": "This is a short spiel about the item",
+   "texture": "3b7dafacb54943bd",
+   "unk1": 0.0,
+   "unk2": 0.08,
+   "colors": [
+    [
+     0.0,
+     0.143,
+     0.589
+    ],
+    [
+     0.046,
+     0.885,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.0,
+     0.018038,
+     0.305858
+    ],
+    [
+     0.003586,
+     0.758055,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#002496",
+    "#0ce2ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0020",
+   "display": "S7? Ectoplasm",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 90.0,
+   "colors": [
+    [
+     0.745,
+     0.31,
+     1.0
+    ],
+    [
+     0.459,
+     1.0,
+     0.62
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.514766,
+     0.078288,
+     1.0
+    ],
+    [
+     0.178035,
+     1.0,
+     0.342392
+    ]
+   ],
+   "colors_hex": [
+    "#be4fff",
+    "#75ff9e"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0021",
+   "display": "Store 5? Borealis",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 100.0,
+   "colors": [
+    [
+     0.912,
+     1.0,
+     0.505
+    ],
+    [
+     0.0,
+     0.888,
+     0.79
+    ],
+    [
+     0.473,
+     0.202,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.811368,
+     1.0,
+     0.218698
+    ],
+    [
+     0.0,
+     0.763875,
+     0.587016
+    ],
+    [
+     0.189896,
+     0.033731,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#e9ff81",
+    "#00e2c9",
+    "#7934ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0022",
+   "display": "Sunset",
+   "description": "This is a short spiel about the item",
+   "texture": "115bff5ea9f900ea",
+   "unk1": 0.0,
+   "unk2": 0.3,
+   "colors": [
+    [
+     1.0,
+     0.1,
+     0.202
+    ],
+    [
+     0.733,
+     0.287,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.010023,
+     0.033731
+    ],
+    [
+     0.496429,
+     0.066966,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#ff1a34",
+    "#bb49ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0023",
+   "display": "Cotton Candy",
+   "description": "This is a short spiel about the item",
+   "texture": "115bff5ea9f900ea",
+   "unk1": 0.0,
+   "unk2": 0.2,
+   "colors": [
+    [
+     0.118,
+     0.701,
+     1.0
+    ],
+    [
+     1.0,
+     0.291,
+     0.868
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.013047,
+     0.449414,
+     1.0
+    ],
+    [
+     1.0,
+     0.068862,
+     0.725568
+    ]
+   ],
+   "colors_hex": [
+    "#1eb3ff",
+    "#ff4add"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0024",
+   "display": "Ghast",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.462,
+     1.0,
+     0.623
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.180539,
+     1.0,
+     0.346055
+    ]
+   ],
+   "colors_hex": [
+    "#76ff9f"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0025",
+   "display": "Black and White",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 100.0,
+   "colors": [
+    [
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_hex": [
+    "#ffffff",
+    "#000000"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0026",
+   "display": "Sanguine",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 260.0,
+   "colors": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.505,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.218698,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_hex": [
+    "#ff0000",
+    "#810000"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0027",
+   "display": "S7? Moonlight",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 200.0,
+   "colors": [
+    [
+     0.51,
+     0.76,
+     1.0
+    ],
+    [
+     1.0,
+     0.933,
+     0.992
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.223414,
+     0.538236,
+     1.0
+    ],
+    [
+     1.0,
+     0.854301,
+     0.981897
+    ]
+   ],
+   "colors_hex": [
+    "#82c2ff",
+    "#ffeefd"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0028",
+   "display": "Peach",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 150.0,
+   "colors": [
+    [
+     1.0,
+     0.552,
+     0.722
+    ],
+    [
+     1.0,
+     0.905,
+     0.547
+    ],
+    [
+     1.0,
+     0.982,
+     0.935
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.265367,
+     0.479959
+    ],
+    [
+     1.0,
+     0.797343,
+     0.260151
+    ],
+    [
+     1.0,
+     0.95954,
+     0.858457
+    ]
+   ],
+   "colors_hex": [
+    "#ff8db8",
+    "#ffe78b",
+    "#fffaee"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0029",
+   "display": "Nobility",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.746,
+     0.314,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.516312,
+     0.080363,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#be50ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0030",
+   "display": "Verdant",
+   "description": "This is a short spiel about the item",
+   "texture": "3b7dafacb54943bd",
+   "unk1": 0.0,
+   "unk2": 0.08,
+   "colors": [
+    [
+     0.034686,
+     0.738,
+     0.08727
+    ],
+    [
+     0.833,
+     1.0,
+     0.278
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.002685,
+     0.504022,
+     0.00816
+    ],
+    [
+     0.66128,
+     1.0,
+     0.062815
+    ]
+   ],
+   "colors_hex": [
+    "#09bc16",
+    "#d4ff47"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0031",
+   "display": "Store 4? Halloween",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 120.0,
+   "colors": [
+    [
+     0.601,
+     0.05,
+     1.0
+    ],
+    [
+     1.0,
+     0.547,
+     0.023
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.319715,
+     0.003936,
+     1.0
+    ],
+    [
+     1.0,
+     0.260151,
+     0.00178
+    ]
+   ],
+   "colors_hex": [
+    "#990dff",
+    "#ff8b06"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0032",
+   "display": "Hyperlight",
+   "description": "This is a short spiel about the item",
+   "texture": "0568ef7e4be93957",
+   "unk1": 0.0,
+   "unk2": 0.2,
+   "colors": [
+    [
+     0.499,
+     0.359,
+     1.0
+    ],
+    [
+     0.127,
+     0.898,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.213117,
+     0.105924,
+     1.0
+    ],
+    [
+     0.014736,
+     0.78346,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#7f5cff",
+    "#20e5ff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0033",
+   "display": "Store 5? Vroom",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 150.0,
+   "colors": [
+    [
+     0.114,
+     1.0,
+     0.768
+    ],
+    [
+     0.733,
+     0.987,
+     1.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.012335,
+     1.0,
+     0.551003
+    ],
+    [
+     0.496429,
+     0.970681,
+     1.0
+    ]
+   ],
+   "colors_hex": [
+    "#1dffc4",
+    "#bbfcff"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0034",
+   "display": "S7? Daydream",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     0.023,
+     1.0,
+     0.924
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.00178,
+     1.0,
+     0.835743
+    ]
+   ],
+   "colors_hex": [
+    "#06ffec"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0035",
+   "display": "Store 4? Paladin",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 120.0,
+   "colors": [
+    [
+     1.0,
+     0.626,
+     0.011
+    ],
+    [
+     1.0,
+     0.934,
+     0.664
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.349741,
+     0.000851
+    ],
+    [
+     1.0,
+     0.856377,
+     0.398422
+    ]
+   ],
+   "colors_hex": [
+    "#ffa003",
+    "#ffeea9"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0036",
+   "display": "S7? Fume",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "colors_hex": [
+    "#ff0000"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0037",
+   "display": "S7? Circadian",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 120.0,
+   "colors": [
+    [
+     0.151,
+     0.177,
+     0.505
+    ],
+    [
+     1.0,
+     0.902,
+     0.5
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.019837,
+     0.026385,
+     0.218698
+    ],
+    [
+     1.0,
+     0.791376,
+     0.214041
+    ]
+   ],
+   "colors_hex": [
+    "#272d81",
+    "#ffe680"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0038",
+   "display": "?? Springtime",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 150.0,
+   "colors": [
+    [
+     0.346,
+     0.975,
+     1.0
+    ],
+    [
+     0.657,
+     1.0,
+     0.212
+    ],
+    [
+     1.0,
+     0.909,
+     0.384
+    ]
+   ],
+   "colors_linear": [
+    [
+     0.098116,
+     0.944068,
+     1.0
+    ],
+    [
+     0.389176,
+     1.0,
+     0.036968
+    ],
+    [
+     1.0,
+     0.805339,
+     0.12193
+    ]
+   ],
+   "colors_hex": [
+    "#58f9ff",
+    "#a8ff36",
+    "#ffe862"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0039",
+   "display": "Blush",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 0.0,
+   "colors": [
+    [
+     1.0,
+     0.508,
+     0.841
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.221521,
+     0.675668
+    ]
+   ],
+   "colors_hex": [
+    "#ff82d6"
+   ]
+  },
+  {
+   "name": "rwd_emissive_0040",
+   "display": "?? Valor",
+   "description": "This is a short spiel about the item",
+   "texture": "ffffffffffffffff",
+   "unk1": 0.0,
+   "unk2": 100.0,
+   "colors": [
+    [
+     1.0,
+     0.111849,
+     0.226871
+    ],
+    [
+     0.710521,
+     0.191043,
+     1.0
+    ],
+    [
+     1.0,
+     0.642374,
+     0.111849
+    ]
+   ],
+   "colors_linear": [
+    [
+     1.0,
+     0.011961,
+     0.042103
+    ],
+    [
+     0.463117,
+     0.030382,
+     1.0
+    ],
+    [
+     1.0,
+     0.370264,
+     0.011961
+    ]
+   ],
+   "colors_hex": [
+    "#ff1d3a",
+    "#b531ff",
+    "#ffa41d"
+   ]
+  }
+ ]
+}

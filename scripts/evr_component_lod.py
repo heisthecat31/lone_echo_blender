@@ -14,9 +14,34 @@
         +0x58  u32   entry capacity           (== count on disk)
     entries:  immediately after the record table, 120 bytes each,
               laid out in record order
-        +0x10  u64   component TYPE hash
-        +0x18  u64   a second type hash (constant across entries)
-        +0x2c  u32   small count
+        +0x10  u64   component TYPE hash -- one of
+                     `evr_component_cr.CMODEL_COMPONENT_TYPES`
+                     (`38ee951a26fb816a` = ncaModel,
+                      `0fad20be1b6fd25a3` = its companion)
+        +0x18  u64   the BASE type the entry stands in for (constant per record)
+        +0x20  u64   ⭐ the LOD STEP NAME, and it is `CSymbol64` --
+                     `symbol64("lod0".."lod3")` == `c8c33e48367c1ae0..3`
+                     EXACTLY. `ffffffffffffffff` on a record that is not a
+                     ladder. The record's own nodeid can likewise read
+                     `symbol64("lods")` == `c8c33e48367c1aa3`.
+        +0x28  u32   set active on the NEAR side (0 at the first step)
+        +0x2c  u32   set active on the FAR side (0 at the last step)
+        +0x30  f32   ⭐ near distance
+        +0x34  f32   ⭐ far distance
+
+Two record kinds share the table. `mpl_arena_a` ships 205 records over 201
+actors: 197 carry no ranges (`+0x20` is -1) and list an actor's components
+with their base types, and 8 are real distance ladders -- 4 steps each,
+`0..9.5..14.25..22..1e8` on one pair of actors and `0..3..7..10` on the other.
+
+## What it does NOT decide
+
+⛔ **It does not pick between an actor's models.** Both ladder actors here bind
+TWO models each, and both of their components run the SAME distance bands, i.e.
+both are live at every distance. The four names it hands over are the same
+`lod0..lod3` the model's own `SSceneSetMask` selects between -- see
+`evr_scene_extract._scene_set_alternate_shapes`, which is where the selection
+actually happens. This file names the ladder; the mask runs it.
 
 The framing is self-checking three ways, which is what makes it trustworthy:
 `+0x30 == count*120` holds for **every** record in both levels; the record
@@ -116,13 +141,16 @@ def parse(blob: bytes) -> dict | None:
 
 
 def read(root: Path, level_hash) -> dict | None:
-    from evr_resource_types import normalise_hash, resolve_type_dir
+    # ⛔ `resolve_type_dir(...) / hash` only ever tries the ZERO-PADDED spelling.
+    # Extracts may store a resource with its leading zeroes stripped, so a level
+    # such as `mpl_combat_war_room` (`08a1af9e108def0b`, on disk as
+    # `8a1af9e108def0b`) missed every time and this returned None silently --
+    # indistinguishable from "this level has no component LODs".
+    # `resource_path` tries both spellings and the optional `.bin` suffix.
+    from evr_resource_types import resource_path
 
-    directory = resolve_type_dir(root, COMPONENT_LOD_CR)
-    path = directory / normalise_hash(level_hash)
-    if not path.exists():
-        path = path.with_suffix(".bin")
-    if not path.is_file():
+    path = resource_path(root, COMPONENT_LOD_CR, level_hash)
+    if path is None:
         return None
     return parse(path.read_bytes())
 
@@ -144,7 +172,16 @@ def main(argv=None) -> int:
     ap.add_argument("level")
     ap.add_argument("--dir", default=None)
     args = ap.parse_args(argv)
-    parsed = read(evr_paths.require_extract(args.dir), args.level)
+    # ⛔ `read` takes a level HASH. Passing the CLI's argument straight through
+    # meant `--level mpl_arena_a` looked up a file named `mpl_arena_a` and
+    # reported "no CComponentLODCR", which is indistinguishable from the level
+    # genuinely having none.
+    try:
+        from evr_scene_extract import resolve_level
+        level = resolve_level(args.level)
+    except (ImportError, ValueError, KeyError):
+        level = args.level
+    parsed = read(evr_paths.require_extract(args.dir), level)
     if parsed is None:
         print("no CComponentLODCR for that level, or the framing did not check out")
         return 1

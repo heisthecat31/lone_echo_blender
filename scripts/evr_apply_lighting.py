@@ -47,9 +47,17 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
     gains: dict = {}
     bindings: dict = {}
     lights: list = []
+    #: The scene resource's SECOND `lead` table -- coloured light VOLUMES that
+    #: nothing read until now. See `evr_lights.parse_scene_volume_lights`: the
+    #: war room holds 763 of these (752 of them pink, which is the wash the
+    #: in-game footage shows) against 17 placed lights, and dyson 180 against 4.
+    volume_lights: list = []
 
     for member in group:
         label = extractor.level_label(member).split(" (")[0]
+
+        for volume in evr_li.level_volume_lights(root, member):
+            volume_lights.append(dict(volume, level=label))
 
         for light in evr_li.level_lights(root, member):
             lights.append({
@@ -153,6 +161,10 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
         "sh_pages": sh_pages,
         "masks": masks,
         "lights": lights,
+        # Coloured light VOLUMES: position, colour, magnitude, box extent.
+        # Reported rather than lit with -- the record states a BOX, not a
+        # radius, so a point light at its centre would be a guess.
+        "volume_lights": volume_lights,
         # Per-instance lightmap: {package instance index: {"image", "uv_offset",
         # "uv_count"}} into `instance_uv_blob` (float32 u,v pairs).
         "instances": instance_pages,
@@ -163,7 +175,8 @@ def apply(pkg: Path, level: str, root: Path) -> dict:
     (pkg / "lightmaps.json").write_text(json.dumps(payload, indent=1),
                                         encoding="utf-8")
     print(f"\n{len(images)} atlas(es), {len(bindings)} meshes bound, "
-          f"{len(lights)} lights -> {pkg / 'lightmaps.json'}")
+          f"{len(lights)} lights, {len(volume_lights)} light volume(s)"
+          f" -> {pkg / 'lightmaps.json'}")
     return payload
 
 

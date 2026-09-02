@@ -27,6 +27,11 @@ from le_mesh.materials import (PLACEHOLDER_TEXTURES,          # noqa: E402
 
 GRID = "34dfbe67e4424f76"
 COPY = "5c4bbfab65b919dd"
+#: The NULL ALBEDO tile -- 64x64 with all 4096 texels exactly RGBA (0,0,0,0),
+#: read back through Blender's own BC1 decoder, and bound by 44 materials over
+#: 7 levels under three different albedo roles. Observed, not inferred from
+#: appearance, which is the bar the test below states.
+NULL_ALBEDO = "50988725d240e5fe"
 
 
 def test_the_uv_test_grid_is_dropped_with_a_reason():
@@ -82,5 +87,11 @@ def test_a_clean_material_reports_no_placeholders():
 def test_the_placeholder_table_is_emissive_only_evidence():
     """★ The justification is the corpus, so keep the table small and pinned.
     Adding a hash here claims it was observed as an engine stub -- not a guess
-    that a texture looks wrong."""
-    assert set(PLACEHOLDER_TEXTURES) == {GRID, COPY}
+    that a texture looks wrong.
+
+    `NULL_ALBEDO` clears that bar the same way the grid does: measured content
+    (4096/4096 texels RGBA 0,0,0,0) plus corpus reuse (44 materials, 7 levels,
+    3 roles). It is NOT here because the sky looked wrong -- it is here because
+    a fully transparent uniform tile bound that widely is a stub, and treating
+    it as an opaque backdrop is what let it replace the real sky art."""
+    assert set(PLACEHOLDER_TEXTURES) == {GRID, COPY, NULL_ALBEDO}

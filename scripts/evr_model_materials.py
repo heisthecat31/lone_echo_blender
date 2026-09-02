@@ -115,9 +115,17 @@ def _scene_tables(root: Path, model_hash) -> tuple | None:
     sections = []
     for i in range(sec_count):
         base = i * SECTION_STRIDE
+        # ★ `SGMeshShaderSet.shaderset` at +0. The module docstring has always
+        # named this field; nothing read it, so `evr_materials` had no source
+        # for "which shader set does THIS draw use" and fell back to the
+        # material->shaderset INDEX ("which shader sets mention this material"),
+        # which is a different question. Measured against this column over five
+        # levels, that fallback disagrees with the model's own table on 476 of
+        # 655 draws -- 72.7%.
+        shaderset = normalise_hash(struct.unpack_from("<Q", sec_raw, base)[0])
         material = normalise_hash(struct.unpack_from("<Q", sec_raw, base + 8)[0])
         x, matidx = struct.unpack_from("<II", sec_raw, base + 16)
-        sections.append((x, matidx, material))
+        sections.append((x, matidx, material, shaderset))
     return palette, sections
 
 
@@ -155,7 +163,8 @@ def _inline_tables(data: bytes, material_hashes: set) -> tuple | None:
             x, matidx = struct.unpack_from("<II", data, cursor + 16)
             if matidx < previous_matidx or matidx > 0xFFFF:
                 break
-            sections.append((x, matidx, mat))
+            shd = normalise_hash(struct.unpack_from("<Q", data, cursor)[0])
+            sections.append((x, matidx, mat, shd))
             previous_matidx = matidx
             cursor += SECTION_STRIDE
 
@@ -168,7 +177,7 @@ def _inline_tables(data: bytes, material_hashes: set) -> tuple | None:
                     for i in range(n_mat)
                 ]
                 # THE cross-check: the palette must actually explain every record.
-                if all(palette[matidx] == mat for _x, matidx, mat in sections):
+                if all(palette[matidx] == mat for _x, matidx, mat, _s in sections):
                     if best is None or len(sections) > len(best[1]):
                         best = (palette, sections)
         offset += 4
@@ -203,7 +212,7 @@ def section_materials(root: Path, model_hash, material_hashes: set) -> list:
     if not tables:
         return []
     _palette, sections = tables
-    return [material for _x, _matidx, material in sections]
+    return [material for _x, _matidx, material, _s in sections]
 
 
 def palette(root: Path, model_hash, material_hashes: set) -> list:
@@ -225,7 +234,7 @@ def section_levels(root: Path, model_hash, material_hashes: set) -> list:
     if not tables:
         return []
     _palette, sections = tables
-    return [x for x, _matidx, _material in sections]
+    return [x for x, _matidx, _material, _s in sections]
 
 
 #: Byte offset of the material index inside a 112-byte `CGRenderParams` record.
@@ -448,6 +457,47 @@ def _renderparams_from_instanced(root: Path, model_hash, vertex_counts):
                  best + (k + 1) * RENDERPARAM_STRIDE] for k in range(count)]
 
 
+def _records_in_submesh_order(records: list, vertex_counts) -> list:
+    """Put the draw records in SUBMESH order.
+
+    Match each submesh to the record with its vertex count, consuming records as
+    they are taken; submeshes with no matching record then take the remaining
+    records in order. There can be MORE records than submeshes --
+    `ca11721873128b56` ships 3 draws (vcount 148/232/144) for 2 decoded
+    submeshes (148/376), and the correct answer is submesh0 -> rec0 (its vcount
+    matches) and submesh1 -> rec1 (the next one left). Requiring a whole-sequence
+    match instead made this model fall back to positional assignment, which
+    swapped its two textures.
+
+    Shared by `draw_material_indices` and `draw_shadersets` so the two columns
+    can never drift out of step with each other.
+    """
+    if not vertex_counts:
+        return records
+    pools: dict = {}
+    for position, record in enumerate(records):
+        if len(record) >= RENDERPARAM_VERTEXCOUNT_OFFSET + 4:
+            value = struct.unpack_from(
+                "<I", record, RENDERPARAM_VERTEXCOUNT_OFFSET)[0]
+            pools.setdefault(value, []).append(position)
+
+    taken: set = set()
+    chosen: list = [None] * len(vertex_counts)
+    for position, wanted in enumerate(vertex_counts):
+        pool = pools.get(wanted)
+        while pool:
+            candidate = pool.pop(0)
+            if candidate not in taken:
+                chosen[position] = candidate
+                taken.add(candidate)
+                break
+    spare = [i for i in range(len(records)) if i not in taken]
+    for position in range(len(chosen)):
+        if chosen[position] is None and spare:
+            chosen[position] = spare.pop(0)
+    return [records[i] if i is not None else records[0] for i in chosen]
+
+
 def draw_material_indices(root: Path, model_hash, material_hashes: set,
                           vertex_counts=None) -> list:
     """`[material_hash, ...]` for each DRAW, in draw order — the engine's own.
@@ -469,40 +519,7 @@ def draw_material_indices(root: Path, model_hash, material_hashes: set,
     if not records:
         return []
 
-    # Put the draw records in SUBMESH order.
-    #
-    # Match each submesh to the record with its vertex count, consuming records
-    # as they are taken; submeshes with no matching record then take the
-    # remaining records in order. There can be MORE records than submeshes --
-    # `ca11721873128b56` ships 3 draws (vcount 148/232/144) for 2 decoded
-    # submeshes (148/376), and the correct answer is submesh0 -> rec0 (its
-    # vcount matches) and submesh1 -> rec1 (the next one left). Requiring a
-    # whole-sequence match instead made this model fall back to positional
-    # assignment, which swapped its two textures.
-    if vertex_counts:
-        pools: dict = {}
-        for position, record in enumerate(records):
-            if len(record) >= RENDERPARAM_VERTEXCOUNT_OFFSET + 4:
-                value = struct.unpack_from(
-                    "<I", record, RENDERPARAM_VERTEXCOUNT_OFFSET)[0]
-                pools.setdefault(value, []).append(position)
-
-        taken: set = set()
-        chosen: list = [None] * len(vertex_counts)
-        for position, wanted in enumerate(vertex_counts):
-            pool = pools.get(wanted)
-            while pool:
-                candidate = pool.pop(0)
-                if candidate not in taken:
-                    chosen[position] = candidate
-                    taken.add(candidate)
-                    break
-        spare = [i for i in range(len(records)) if i not in taken]
-        for position in range(len(chosen)):
-            if chosen[position] is None and spare:
-                chosen[position] = spare.pop(0)
-        records = [records[i] if i is not None else records[0]
-                   for i in chosen]
+    records = _records_in_submesh_order(records, vertex_counts)
 
     out = []
     for record in records:
@@ -511,6 +528,85 @@ def draw_material_indices(root: Path, model_hash, material_hashes: set,
             continue
         index = struct.unpack_from("<I", record, RENDERPARAM_MATIDX_OFFSET)[0]
         out.append(palette[min(index, len(palette) - 1)])
+    return out
+
+
+def draw_shadersets(root: Path, model_hash, material_hashes: set,
+                    vertex_counts=None) -> list:
+    """`[shaderset_hash, ...]` per DRAW, parallel to `draw_material_indices`.
+
+    The shader set is what supplies a material's TEXTURES, and 69% of a combat
+    level's materials bind none of their own -- so for those the shader set is
+    the whole answer, and getting it wrong means the wrong textures.
+
+    `SGMeshShaderSet` states it per draw section. `evr_materials` previously had
+    no reader for that column and fell back to `shaderset_by_material`, an index
+    of "which shader sets MENTION this material". That is a different question:
+    a material named by twelve decal shader sets yields twelve candidates, all
+    equally wrong, and the first by hash order won. Measured against this column
+    across five levels, the fallback disagreed on **476 of 655 draws (72.7%)**.
+
+    Keyed by `matidx` rather than by section position, because sections are
+    run-length structured (`0,1,1,1,2,2,2,3`) while draws are not -- pairing
+    them positionally is the same phase error the module docstring describes for
+    materials. Where one `matidx` carries several DIFFERENT shader sets across
+    its sections the first is taken and the rest ignored; that is a real
+    ambiguity in the data, not a decode failure, so it resolves quietly.
+
+    ## Two keys, because the section table is SHORTER than the palette
+
+    A model can hold more palette entries than sections -- the `mpl_combat_dyson`
+    level mesh has 94 materials but 32 sections covering 30 distinct `matidx`,
+    so a `matidx`-only lookup answered just 75.7% of its draws and the rest fell
+    back to inference.
+
+    The section table does not only say "section k uses shader set S", it says
+    "material M is drawn with shader set S **in this model**" -- and a material
+    recurs across many draws. So an unmatched draw is resolved by its MATERIAL,
+    which lifts coverage to **100.0%** of draws measured over 80 dyson models
+    (445 draws: 337 by `matidx`, 108 by material).
+
+    The material key is second, never first, because `matidx` names the exact
+    section while the material name is a property shared across sections. Only
+    10 materials in 8 of those models map to more than one shader set within the
+    same model; there the first section wins, deterministically.
+    """
+    tables = model_tables(root, model_hash, material_hashes)
+    if not tables:
+        return []
+    palette, sections = tables
+    if not palette or not sections:
+        return []
+
+    by_matidx: dict = {}
+    by_material: dict = {}
+    for _x, matidx, material, shaderset in sections:
+        if not shaderset:
+            continue
+        by_matidx.setdefault(matidx, shaderset)
+        by_material.setdefault(material, shaderset)
+    if not by_matidx and not by_material:
+        return []
+
+    records = _renderparams_from_meshlist(root, model_hash)
+    if records is None:
+        records = _renderparams_from_instanced(root, model_hash, vertex_counts)
+    if not records:
+        return []
+    records = _records_in_submesh_order(records, vertex_counts)
+
+    out = []
+    for record in records:
+        if len(record) < RENDERPARAM_MATIDX_OFFSET + 4:
+            out.append("")
+            continue
+        index = struct.unpack_from("<I", record, RENDERPARAM_MATIDX_OFFSET)[0]
+        shaderset = by_matidx.get(index)
+        if not shaderset and palette:
+            # Fall back to the material this draw actually names -- see the
+            # two-keys note above.
+            shaderset = by_material.get(palette[min(index, len(palette) - 1)])
+        out.append(shaderset or "")
     return out
 
 

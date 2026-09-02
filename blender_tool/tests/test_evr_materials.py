@@ -753,3 +753,112 @@ def test_annotate_survives_a_missing_texture(tmp_path):
     entries = [{"spec": {"channels": {"emission": {"file": "textures/gone.dds"}}}}]
     assert evr_materials.annotate_emissive_masks(entries, tmp_path) == 0
     assert "black_fraction" not in entries[0]["spec"]["channels"]["emission"]
+
+
+# --- alpha-plane opacity (degenerate transparent draws) ----------------------
+
+def _bc1_dds_idx(blocks, indices, *, width=64, height=64):
+    """BC1 DDS whose every block carries `blocks` endpoints and `indices`."""
+    header = bytearray(128)
+    header[0:4] = b"DDS "
+    struct.pack_into("<I", header, 4, 124)
+    struct.pack_into("<I", header, 12, height)
+    struct.pack_into("<I", header, 16, width)
+    header[84:88] = b"DXT1"
+    c0, c1 = blocks
+    body = struct.pack("<HHI", c0, c1, indices) * (
+        ((width + 3) // 4) * ((height + 3) // 4))
+    return bytes(header) + body
+
+
+def test_a_bc1_in_opaque_mode_measures_fully_opaque(tmp_path):
+    path = tmp_path / "a.dds"
+    path.write_bytes(_bc1_dds_idx((0xFFFF, 0x0000), 0xFFFFFFFF))  # c0 > c1
+    assert evr_materials._dds_opaque_fraction(path) == 1.0
+
+
+def test_punchthrough_mode_alone_does_not_mean_transparent(tmp_path):
+    """The shipped visor's regression: 62% of its blocks are `c0 <= c1` and NOT
+    one selects index 3, so counting blocks by MODE reports it see-through."""
+    path = tmp_path / "b.dds"
+    path.write_bytes(_bc1_dds_idx((0x0000, 0xFFFF), 0x00000000))  # c0 <= c1, idx 0
+    assert evr_materials._dds_opaque_fraction(path) == 1.0
+
+
+def test_a_bc1_selecting_index_three_measures_transparent(tmp_path):
+    path = tmp_path / "c.dds"
+    path.write_bytes(_bc1_dds_idx((0x0000, 0xFFFF), 0xFFFFFFFF))  # every texel idx 3
+    assert evr_materials._dds_opaque_fraction(path) == 0.0
+
+
+def test_half_the_texels_transparent_measures_one_half(tmp_path):
+    path = tmp_path / "d.dds"
+    # 16 texels a block, 2 bits each: every other texel selects index 3.
+    indices = sum(3 << (2 * i) for i in range(0, 16, 2))
+    path.write_bytes(_bc1_dds_idx((0x0000, 0xFFFF), indices))
+    assert evr_materials._dds_opaque_fraction(path) == 0.5
+
+
+def test_an_unreadable_alpha_map_measures_as_unknown(tmp_path):
+    assert evr_materials._dds_opaque_fraction(tmp_path / "missing.dds") is None
+
+
+def test_annotate_alpha_planes_tags_blend_materials_only(tmp_path):
+    (tmp_path / "textures").mkdir()
+    (tmp_path / "textures" / "a.dds").write_bytes(
+        _bc1_dds_idx((0xFFFF, 0x0000), 0xFFFFFFFF))
+    entries = [
+        {"spec": {"render_mode": "BLEND",
+                  "channels": {"alpha": {"file": "textures/a.dds"}}}},
+        {"spec": {"render_mode": "OPAQUE",
+                  "channels": {"alpha": {"file": "textures/a.dds"}}}},
+    ]
+    assert evr_materials.annotate_alpha_planes(entries, tmp_path) == 1
+    assert entries[0]["spec"]["channels"]["alpha"]["opaque_fraction"] == 1.0
+    assert "opaque_fraction" not in entries[1]["spec"]["channels"]["alpha"]
+
+
+# --- dead data channels (flat roughness) -------------------------------------
+
+def test_a_constant_bc1_red_channel_measures_flat(tmp_path):
+    """The shipped chassis case: the packer filled roughness with a constant, so
+    routing it gives one uniform roughness over the whole body."""
+    path = tmp_path / "flat.dds"
+    half = (15 << 11) | (31 << 5) | 15          # RGB565 with red ~0.48
+    path.write_bytes(_bc1_dds_idx((half, half), 0))
+    rng = evr_materials._dds_channel_range(path, "R")
+    assert rng is not None and rng[1] - rng[0] <= 0.05
+
+
+def test_a_varying_bc1_red_channel_measures_wide(tmp_path):
+    path = tmp_path / "vary.dds"
+    # endpoints at red 0 and red 1; alternate texels select each -> real spread.
+    # (0x55555555 would select endpoint 1 for EVERY texel, i.e. constant again.)
+    alternating = sum(1 << (2 * i) for i in range(1, 16, 2))
+    path.write_bytes(_bc1_dds_idx((0x0000, 0xF800), alternating))
+    rng = evr_materials._dds_channel_range(path, "R")
+    assert rng is not None and rng[1] - rng[0] > 0.05
+
+
+def test_an_unknown_channel_or_file_measures_as_unknown(tmp_path):
+    path = tmp_path / "flat2.dds"
+    path.write_bytes(_bc1_dds_idx((0, 0), 0))
+    assert evr_materials._dds_channel_range(path, "Z") is None
+    assert evr_materials._dds_channel_range(tmp_path / "gone.dds", "R") is None
+
+
+def test_annotate_data_maps_records_the_range_and_the_verdict(tmp_path):
+    (tmp_path / "textures").mkdir()
+    half = (15 << 11) | (31 << 5) | 15
+    (tmp_path / "textures" / "c.dds").write_bytes(_bc1_dds_idx((half, half), 0))
+    entries = [{"spec": {"channels": {"roughness": {
+        "file": "textures/c.dds", "roughness_channel": "R"}}}}]
+    assert evr_materials.annotate_data_maps(entries, tmp_path) == 1
+    rough = entries[0]["spec"]["channels"]["roughness"]
+    assert rough["channel_constant"] is True
+    assert len(rough["channel_range"]) == 2
+
+
+def test_annotate_data_maps_ignores_a_material_with_no_roughness(tmp_path):
+    entries = [{"spec": {"channels": {"base_color": {"file": "x.dds"}}}}]
+    assert evr_materials.annotate_data_maps(entries, tmp_path) == 0

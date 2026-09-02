@@ -352,6 +352,18 @@ class ScatterPackage:
         rel = mesh.get("uv1")
         return self._floats(rel) if rel else None
 
+    def zone_color(self, mesh):
+        """Flat float32 RGBA per vertex tagging the TINT ZONE, or None.
+
+        Echo VR chassis only. A tint authors TWO colours that must land on two
+        separate, hard-edged regions, and no material channel separates them --
+        the MODEL does, in the last RGBA8 of stream 0. On the samurai chassis
+        the body mesh splits 11274 vertices at (0,0,0) against 1772 at (1,0,0),
+        i.e. 86/14 body-to-accent. Written by `scripts/evr_vertex_zones.py`.
+        """
+        rel = mesh.get("colors")
+        return self._floats(rel) if rel else None
+
     def baked_color(self, mesh):
         """Flat float32 LINEAR `[r, g, b, ...]` per vertex, or None if absent.
 
@@ -397,6 +409,11 @@ class ScatterPackage:
     def instance_lightmap_page(self, i):
         """The atlas page for GLOBAL instance `i`, or None. ⛔ never 0 by default."""
         return self.instance_lightmap.page(i)
+
+    @property
+    def duplicate(self):
+        """The `duplicate` manifest block, or `{}` when the package has none."""
+        return self.manifest.get("duplicate") or {}
 
     @property
     def max_lod_level(self):
@@ -482,6 +499,44 @@ def read_instance_lod(pkg: ScatterPackage) -> list:
         g, lv, gl = struct.unpack_from(INSTANCE_LOD_STRUCT, data, i * INSTANCE_LOD_STRIDE)
         out.append(InstanceLod(-1 if g == LOD_NONE else g, lv, max(1, gl)))
     return out
+
+
+def read_instance_duplicates(pkg: ScatterPackage) -> list:
+    """One bool per instance: this emission REPEATS one already placed.
+
+    ⭐ Byte-identical geometry at the same transform can only z-fight. It
+    happens two ways in Echo VR levels: an actor binding the same model twice
+    (or two actors sharing a transform), and two DIFFERENT models that carry
+    the same submesh -- `e988f213c7363e88` and `34918b2b464d6b58` sit on one
+    `mpl_arena_a` actor and share a 722-vertex piece byte for byte. The
+    extractor flags the repeats; 262 of the arena's 1759 LOD-0 placements.
+
+    ⚠ FLAGGED, not removed: `instance_lightmap`'s blobs are parallel to
+    `instances.bin` by contract, so the instance list must keep its length.
+
+    A package without the block (every one written before this) yields all
+    False, so filtering is a no-op and it imports exactly as it did.
+    """
+    n = pkg.num_instances
+    rel = pkg.duplicate.get("blob")
+    if not rel or not (pkg.dir / rel).exists():
+        return [False] * n
+    data = (pkg.dir / rel).read_bytes()
+    if len(data) < n:
+        return [False] * n
+    return [bool(data[i]) for i in range(n)]
+
+
+def filter_duplicates(instances, duplicates):
+    """Drop the instances `read_instance_duplicates` flags.
+
+    `instances` are `InstanceRecord`s carrying their GLOBAL `index`, so this
+    composes with `filter_by_lod` in either order.
+    """
+    if not duplicates or not any(duplicates):
+        return list(instances)
+    return [inst for inst in instances
+            if not (inst.index < len(duplicates) and duplicates[inst.index])]
 
 
 def filter_by_lod(instances, lods, level):

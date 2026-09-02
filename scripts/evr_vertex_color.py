@@ -44,8 +44,28 @@ from pathlib import Path
 _DESC_MAGIC = 0xFFFFFF0C
 _DESC_SENTINEL = 0xFFFFFFFF
 
-#: The tint lane sits at the very start of a stream-0 vertex, ahead of the UVs.
+#: Fallback tint offset, used only when the model states no element table.
+#:
+#: ⛔ NOT the answer on its own. `+0` is where `mpl_combat_combustion`'s water
+#: keeps its colour, and taking it as a constant read the WRONG LANE almost
+#: everywhere else: stream 0 carries TWO colour attributes, and the model's own
+#: `SVertexElement` table says which is which. On 137 of `mpl_arena_a`'s 140
+#: models the layout is
+#:
+#:     usage COLOUR  usage_index 1  ->  +0     (the per-layer blend GATE)
+#:     usage COLOUR  usage_index 0  ->  +4     (the vertex COLOUR)
+#:
+#: so `+0` read the gate. That is the whole reason "188 of 244 constant tints
+#: are BLACK (77%)" -- the gate is 0 on most surfaces, and black was then
+#: refused as an unset value. It also tinted the sky's 239-unit emissive shell
+#: (mesh 7) BLUE from a gate of `[255,0,0]` when its authored colour lane reads
+#: `[255,101,127]`, PINK. Only 3 of the 140 put color0 at +0, which is why the
+#: combustion case worked and hid this.
 TINT_OFFSET = 0
+#: `SVertexElement.usage` for a colour attribute, and the usage_index that is
+#: the COLOUR rather than the blend gate.
+_USAGE_COLOUR = 1
+_COLOUR_INDEX = 0
 #: Below this stride there is no room for a tint and a UV pair.
 MIN_STRIDE = 12
 #: Cap on vertices sampled per submesh when checking for constancy.
@@ -89,6 +109,22 @@ def _bgra(word: int) -> tuple:
     return (red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0)
 
 
+def tint_offset(primary: bytes) -> int:
+    """Where THIS model keeps its vertex COLOUR, from its own element table.
+
+    Falls back to `TINT_OFFSET` when the table cannot be read, which keeps a
+    model the scanner cannot describe behaving exactly as it did.
+    """
+    try:
+        import evr_vertex_gate                            # noqa: PLC0415
+    except ImportError:
+        return TINT_OFFSET
+    for usage, off, _fmt, _comps, uidx, _size, stream in             evr_vertex_gate.elements(primary):
+        if usage == _USAGE_COLOUR and uidx == _COLOUR_INDEX and stream == 0:
+            return int(off)
+    return TINT_OFFSET
+
+
 def submesh_tints(gpu: bytes, primary: bytes) -> dict:
     """`{submesh index -> (r, g, b, a)}` for submeshes with a CONSTANT tint.
 
@@ -96,6 +132,7 @@ def submesh_tints(gpu: bytes, primary: bytes) -> dict:
     averaged; see the module docstring.
     """
     out: dict = {}
+    lane = tint_offset(primary)
     for index, (base, stream0_size, count) in enumerate(_descriptors(primary)):
         if not count:
             continue
@@ -108,7 +145,10 @@ def submesh_tints(gpu: bytes, primary: bytes) -> dict:
         first = None
         constant = True
         for i in range(0, count, step):
-            word = struct.unpack_from("<I", gpu, base + i * stride + TINT_OFFSET)[0]
+            if lane + 4 > stride:
+                constant = False
+                break
+            word = struct.unpack_from("<I", gpu, base + i * stride + lane)[0]
             if first is None:
                 first = word
             elif word != first:

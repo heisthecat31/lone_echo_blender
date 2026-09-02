@@ -545,8 +545,14 @@ def _position_twin(root: Path, model_hash: str):
     if mine is None or not mine[0]:
         return None
     directory = Path(root) / MODEL_GEOMETRY_TYPE
+    # The SCAN below normalises `path.stem`, so it copes with either spelling --
+    # but this one lookup did not, and a leading-zero model failed here and
+    # returned None before the scan ever ran.
+    own = resource_path(root, MODEL_GEOMETRY_TYPE, model_hash)
+    if own is None:
+        return None
     try:
-        own_size = (directory / model_hash).stat().st_size
+        own_size = own.stat().st_size
     except OSError:
         return None
     hits = []
@@ -2179,6 +2185,202 @@ def annotate_emissive_masks(entries, package_dir) -> int:
         fraction = _dds_black_fraction(package_dir / emission["file"])
         if fraction is not None:
             emission["black_fraction"] = round(fraction, 4)
+            tagged += 1
+    return tagged
+
+
+def _dds_opaque_fraction(path: Path) -> float | None:
+    """Fraction of a DDS's top mip whose ALPHA is fully opaque, or None.
+
+    The add-on uses this to spot a DEGENERATE transparent draw: a material the
+    engine puts in the forward-transparent pass whose only alpha source turns
+    out to be 1.0 at every texel. That pairing is contradictory -- blending a
+    surface against the framebuffer at alpha 1 costs a sorted draw and produces
+    exactly the opaque result -- so the opacity has to arrive from somewhere the
+    material does not carry, and a consumer needs to know the map cannot supply
+    it. See `material_builder.degenerate_blend_alpha`.
+
+    BC1 is measured EXACTLY rather than sampled at block level, because that is
+    the one format where the answer is subtle: BC1 has no alpha plane at all,
+    only the punch-through encoding, so a texel is transparent iff its block
+    stores `c0 <= c1` AND that texel selects index 3. Counting blocks in
+    punch-through MODE would be wrong -- 62% of the shipped visor's blocks are
+    in that mode purely because 3-colour interpolation compresses them better,
+    and not one of them selects index 3.
+    """
+    try:
+        blob = Path(path).read_bytes()
+    except OSError:
+        return None
+    if len(blob) < 128 or blob[:4] != b"DDS ":
+        return None
+    height, width = struct.unpack_from("<II", blob, 12)
+    if not width or not height:
+        return None
+    dxgi, offset = None, 128
+    if blob[84:88] == b"DX10":
+        if len(blob) < 148:
+            return None
+        dxgi = struct.unpack_from("<I", blob, 128)[0]
+        offset = 148
+
+    if dxgi in _BC1_FORMATS or blob[84:88] == b"DXT1":
+        blocks = ((width + 3) // 4) * ((height + 3) // 4)
+        available = (len(blob) - offset) // _BC1_BLOCK
+        blocks = min(blocks, available)
+        if blocks <= 0:
+            return None
+        stride = max(1, blocks // _BLACK_SAMPLES)
+        clear = total = 0
+        for i in range(0, blocks, stride):
+            c0, c1, idx = struct.unpack_from("<HHI", blob, offset + i * _BC1_BLOCK)
+            if c0 <= c1:
+                for texel in range(16):
+                    if (idx >> (2 * texel)) & 3 == 3:
+                        clear += 1
+            total += 16
+        return (1.0 - clear / total) if total else None
+
+    try:
+        import texture2ddecoder
+    except ImportError:
+        return None
+    decoders = {83: "decode_bc5", 82: "decode_bc5", 80: "decode_bc4",
+                79: "decode_bc4", 77: "decode_bc3", 78: "decode_bc3",
+                98: "decode_bc7", 99: "decode_bc7", 97: "decode_bc7"}
+    name = decoders.get(dxgi)
+    if name is None:
+        return None
+    try:
+        raw = bytes(getattr(texture2ddecoder, name)(blob[offset:], width, height))
+    except Exception:
+        return None
+    if len(raw) < width * height * 4:
+        return None
+    step = max(1, (width * height) // _BLACK_SAMPLES)
+    opaque = total = 0
+    for i in range(0, width * height, step):
+        if raw[i * 4 + 3] == 255:            # BGRA
+            opaque += 1
+        total += 1
+    return (opaque / total) if total else None
+
+
+_CHANNEL_INDEX = {"R": 0, "G": 1, "B": 2, "A": 3}
+
+
+def _dds_channel_range(path: Path, channel: str) -> tuple | None:
+    """(min, max) of one channel over a DDS's top mip, or None.
+
+    Used to catch a DEAD data channel -- one the packer filled with a constant
+    because the shader does not read it there. Echo VR's chassis composite map
+    is the case: its RED channel, which the Lone Echo schema calls
+    `roughness(sqrt)`, measures 0.482..0.518 across all 2048x2048, i.e. a flat
+    0.25 roughness over the entire body. Routing it produces a uniformly
+    semi-gloss surface with no material variation at all.
+    """
+    index = _CHANNEL_INDEX.get((channel or "").upper())
+    if index is None:
+        return None
+    try:
+        blob = Path(path).read_bytes()
+    except OSError:
+        return None
+    if len(blob) < 128 or blob[:4] != b"DDS ":
+        return None
+    height, width = struct.unpack_from("<II", blob, 12)
+    if not width or not height:
+        return None
+    dxgi, offset = None, 128
+    if blob[84:88] == b"DX10":
+        if len(blob) < 148:
+            return None
+        dxgi = struct.unpack_from("<I", blob, 128)[0]
+        offset = 148
+
+    # ⚠ Do NOT bound this from BC1 block ENDPOINTS. BC1 stores red in 5 bits, so
+    # a channel the packer filled with a flat 0.5 is encoded as endpoints 14/31
+    # and 17/31 -- a 0.097 spread that is pure quantisation, wide enough to read
+    # as real variation. Decode the texels.
+    try:
+        import texture2ddecoder
+    except ImportError:
+        return None
+    decoders = {83: "decode_bc5", 82: "decode_bc5", 80: "decode_bc4",
+                79: "decode_bc4", 77: "decode_bc3", 78: "decode_bc3",
+                98: "decode_bc7", 99: "decode_bc7", 97: "decode_bc7",
+                70: "decode_bc1", 71: "decode_bc1", 72: "decode_bc1"}
+    name = decoders.get(dxgi)
+    if name is None and blob[84:88] in (b"DXT1", b"DXT3", b"DXT5"):
+        # A pre-DX10 header carries no dxgi field at all.
+        name = {b"DXT1": "decode_bc1", b"DXT3": "decode_bc2",
+                b"DXT5": "decode_bc3"}[blob[84:88]]
+    if name is None:
+        return None
+    try:
+        raw = bytes(getattr(texture2ddecoder, name)(blob[offset:], width, height))
+    except Exception:
+        return None
+    if len(raw) < width * height * 4:
+        return None
+    order = (2, 1, 0, 3)[index]          # decoder returns BGRA
+    step = max(1, (width * height) // _BLACK_SAMPLES)
+    vals = sorted(raw[i * 4 + order] for i in range(0, width * height, step))
+    if not vals:
+        return None
+    # 2nd/98th percentile, so a handful of UV-gutter texels cannot widen a
+    # channel that is flat everywhere it is actually sampled.
+    lo = vals[len(vals) * 2 // 100]
+    hi = vals[min(len(vals) - 1, len(vals) * 98 // 100)]
+    return (round(lo / 255.0, 4), round(hi / 255.0, 4))
+
+
+def annotate_data_maps(entries, package_dir, *, flat: float = 0.05) -> int:
+    """Flag a roughness channel that is constant, i.e. carries no data.
+
+    The add-on needs this to tell "this surface really is uniformly rough" from
+    "the shader does not read roughness HERE" -- see
+    `material_builder.dead_roughness_channel`.
+    """
+    package_dir = Path(package_dir)
+    tagged = 0
+    for entry in entries or ():
+        spec = entry.get("spec") if isinstance(entry, dict) and "spec" in entry else entry
+        if not isinstance(spec, dict):
+            continue
+        rough = (spec.get("channels") or {}).get("roughness")
+        if not isinstance(rough, dict) or not rough.get("file"):
+            continue
+        channel = rough.get("roughness_channel") or rough.get("component")
+        rng = _dds_channel_range(package_dir / rough["file"], channel)
+        if rng is None:
+            continue
+        rough["channel_range"] = list(rng)
+        rough["channel_constant"] = bool(rng[1] - rng[0] <= flat)
+        tagged += 1
+    return tagged
+
+
+def annotate_alpha_planes(entries, package_dir) -> int:
+    """Tag each BLEND material's alpha map with how opaque it measures.
+
+    Only blended materials are measured: on an opaque or alpha-tested surface
+    the number carries no decision, and the scan is not free.
+    """
+    package_dir = Path(package_dir)
+    tagged = 0
+    for entry in entries or ():
+        spec = entry.get("spec") if isinstance(entry, dict) and "spec" in entry else entry
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("render_mode") != "BLEND":
+            continue
+        alpha = (spec.get("channels") or {}).get("alpha")
+        if not isinstance(alpha, dict) or not alpha.get("file"):
+            continue
+        fraction = _dds_opaque_fraction(package_dir / alpha["file"])
+        if fraction is not None:
+            alpha["opaque_fraction"] = round(fraction, 6)
             tagged += 1
     return tagged
 

@@ -1495,6 +1495,24 @@ def layer_blend_for(index: int, layer_channels: dict, scalars: dict | None = Non
 PLACEHOLDER_TEXTURES = {
     "34dfbe67e4424f76": "uv test grid",
     "5c4bbfab65b919dd": "uv test grid (byte-identical copy)",
+    # ★ The NULL ALBEDO tile. 64x64, and every one of its 4096 texels is
+    # exactly RGBA (0, 0, 0, 0) -- fully black AND fully transparent -- read
+    # back from Blender's own BC1 decoder. Bound by 44 materials across 7
+    # levels under THREE different albedo roles (`layer0_albedo_map` x30,
+    # `layer1_albedo_map` x13, `layer2_albedo_map` x1), which is the same
+    # shape as the uv grid above: one asset standing in for "no texture here".
+    #
+    # ⛔ It is NOT an opaque black backdrop, and treating it as one is what
+    # broke the sky. `material_builder.supersede_opaque_top_layer` calls it
+    # "PURE BLACK, fully OPAQUE" and lets it REPLACE the real sky art, so
+    # `mpl_combat_war_room`'s dome built with `images: ['50988725d240e5fe']`
+    # and nothing else -- the star flipbook never reached the node tree and the
+    # UV-scroll driver animated a blank square. That docstring already noted the
+    # contradiction ("an external decoder reports alpha 255 ... which is why
+    # this looked safe on paper"); Blender is the one that is right, because
+    # BC1 encodes a pure-black block in 3-colour+alpha mode where index 3 is
+    # TRANSPARENT black.
+    "50988725d240e5fe": "null albedo tile (64x64, all texels RGBA 0,0,0,0)",
 }
 
 

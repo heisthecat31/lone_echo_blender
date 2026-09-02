@@ -44,6 +44,7 @@ import json
 from pathlib import Path
 
 import bpy   # type: ignore
+import mathutils   # type: ignore
 from bpy.props import (   # type: ignore
     BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty,
 )
@@ -52,6 +53,25 @@ from bpy_extras.io_utils import ImportHelper                       # type: ignor
 #: Colour attribute holding a Quest package's BAKED LIGHTING, linear rgb per
 #: vertex. Named by the importer, like `EchoLightmap` for the lightmap UV.
 BAKED_LIGHT_ATTR = "EchoBake"
+#: Per-vertex tint ZONE id (Echo VR chassis). See `scatter_reader.zone_color`.
+TINT_ZONE_ATTR = "EchoTintZone"
+
+#: `mpl_arena_a`'s catapult-tunnel ring. Its emissive band is a circle between
+#: tunnel segments and the material authors NO colour for it -- `accent_tint`,
+#: `emissive_tint` and `emissive_color` are all absent or black -- so it imports
+#: white where the game shows it in the team colour of the tube it is in.
+#:
+#: ⭐ The shipped lights supply that colour unambiguously: of this mesh's 80
+#: ring segments, each has a non-SUN light 0.6-0.7 m away, and those split
+#: exactly 40 BLUE / 40 red-orange down the tube -- one light per ring, matching
+#: the team halves.
+#:
+#: ⚠ `inferred`. The association is measured, but the ENGINE mechanism that
+#: colours the band is not decoded, so the tint is recorded on the material as
+#: `le_emission_light_tint` and never presented as read data. Scoped to this ONE
+#: material deliberately; a general "untinted emissive takes a nearby light's
+#: colour" rule was not measured and is not applied.
+TUNNEL_RING_MATERIALS = ("492ec3cc59ce42ae",)
 
 
 from . import scatter_reader
@@ -66,6 +86,7 @@ try:
     from . import evr_vertex_tints
     from . import evr_flowmap
     from . import evr_skeleton
+    from . import evr_goal_explosion
 except ImportError:          # optional: a package without EVR lighting still imports
     evr_lighting = None
     evr_movers = None
@@ -73,6 +94,7 @@ except ImportError:          # optional: a package without EVR lighting still im
     evr_texture_arrays = None
     evr_vertex_tints = None
     evr_flowmap = None
+    evr_goal_explosion = None
     evr_skeleton = None
 
 #: UV layer the per-instance lightmap UVs are written to on the per-instance mesh
@@ -253,6 +275,18 @@ def build_scatter_mesh(pkg, mesh_entry, get_material, opts) -> "bpy.types.Mesh":
                 flat[vi * 4 + 2] = baked[vi * 3 + 2]
                 flat[vi * 4 + 3] = 1.0
             attr.data.foreach_set("color", flat)
+        except (RuntimeError, AttributeError):
+            pass
+
+    # --- tint zone (Echo VR chassis) -------------------------------------
+    # Already RGBA per vertex, and it is an ID rather than a colour, so it goes
+    # in verbatim -- no sRGB decode, no flip.
+    zone = pkg.zone_color(mesh_entry)
+    if zone is not None and len(zone) >= n_verts * 4:
+        try:
+            attr = mesh.color_attributes.new(
+                name=TINT_ZONE_ATTR, type="FLOAT_COLOR", domain="POINT")
+            attr.data.foreach_set("color", list(zone[:n_verts * 4]))
         except (RuntimeError, AttributeError):
             pass
 
@@ -807,6 +841,18 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
     # all-levels-stacked behaviour.
     lod_level = opts.get("lod_level", 0)
     selected = scatter_reader.filter_by_lod(records, lods, lod_level)
+    # ⭐ Then the duplicate mask: the same geometry at the same transform, which
+    # the LOD ladder cannot express because both copies are level 0 of
+    # different groups (or of no group at all). See
+    # `scatter_reader.read_instance_duplicates`. `keep_duplicates` reproduces
+    # the pre-fix picture for an A/B.
+    dups = scatter_reader.read_instance_duplicates(pkg)
+    if not opts.get("keep_duplicates"):
+        before = len(selected)
+        selected = scatter_reader.filter_duplicates(selected, dups)
+        _dropped_duplicates = before - len(selected)
+    else:
+        _dropped_duplicates = 0
     place = _place_instances(context, coll, pkg, mesh_datablocks, selected, opts,
                              lods=lods, inst_lm=inst_lm)
     if inst_lm is not None:
@@ -847,6 +893,7 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
         "accent_tint": opts.get("accent_tint", True),
         "rim_lighting": opts.get("rim_lighting", True),
         "lod_max_level": pkg.max_lod_level,
+        "duplicates_dropped": _dropped_duplicates,
         "lod_groups": int(pkg.lod.get("num_groups", 0)),
         "triangles_unique": n_tris,
         "materials": len(mat_cache),
@@ -902,6 +949,36 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         description="Apply the per-material accent colour. On mpl_arena_a this "
                     "is what makes the two goal ends blue and orange -- their "
                     "textures are greyscale and carry no colour at all")   # type: ignore
+    uv_flipbook_steps: FloatProperty(
+        name="Flipbook Steps/s", default=12.0, min=0.0, soft_max=60.0,
+        description="How fast a material that stacks frames along V flips "
+                    "through them. The frame COUNT is read off the texture; "
+                    "this SPEED is not authored anywhere")   # type: ignore
+    evr_goal_explosion: BoolProperty(
+        name="Goal Explosion", default=True,
+        description="Hide the goal-explosion props until their animation "
+                    "fires, keyframe the burst, and tint it with the scoring "
+                    "team's colour. The props and both colours are read from "
+                    "the level; the TIMING is a placeholder")   # type: ignore
+    evr_goal_explosion_start: IntProperty(
+        name="Goal Frame", default=1, min=1, soft_max=250,
+        description="Frame the burst fires on. NOT authored")   # type: ignore
+    evr_goal_explosion_fps: IntProperty(
+        name="Goal FPS", default=24, min=1, soft_max=120,
+        description="Frames per second the reference clip's 5 seconds are laid "
+                    "out at. The clip is the demo viewer's OrangeGoalAnim -- a "
+                    "reconstruction, not shipped data")   # type: ignore
+    evr_goal_explosion_beams: IntProperty(
+        name="Goal Beams", default=6, min=0, soft_max=6,
+        description="Beams per goal. Six is what the reference rig builds; the "
+                    "level ships ONE and the game instances the rest at "
+                    "runtime. 0 animates only the props the level contains")   # type: ignore
+    keep_duplicates: BoolProperty(
+        name="Keep Duplicate Placements", default=False,
+        description="Place emissions the extractor flagged as byte-identical "
+                    "geometry already placed at the same transform. They can "
+                    "only z-fight; this exists to reproduce the old picture "
+                    "for an A/B")   # type: ignore
     lod_level: EnumProperty(
         name="LOD Level",
         description="Which level of detail to place. Every LOD level of a prop is a "
@@ -1114,8 +1191,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
 
     def draw(self, context):
         layout = self.layout
-        for prop in ("lod_level", "flip_v", "y_up_to_z_up", "import_proxy",
-                     "max_instances"):
+        for prop in ("lod_level", "keep_duplicates", "flip_v", "y_up_to_z_up",
+                     "import_proxy", "max_instances"):
             layout.prop(self, prop)
         box = layout.box()
         box.label(text="Materials")
@@ -1128,6 +1205,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         box.label(text="Echo VR Lighting")
         box.prop(self, "evr_lighting")
         box.prop(self, "evr_movers")
+        box.prop(self, "evr_goal_explosion")
+        sub_gx = box.column(align=True)
+        sub_gx.enabled = self.evr_goal_explosion
+        sub_gx.prop(self, "evr_goal_explosion_start")
+        sub_gx.prop(self, "evr_goal_explosion_fps")
+        sub_gx.prop(self, "evr_goal_explosion_beams")
         box.prop(self, "uv_scroll_rate")
         box.prop(self, "world_ambient")
         box.prop(self, "evr_effects")
@@ -1164,7 +1247,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             "import_proxy": self.import_proxy,
             "max_instances": self.max_instances,
             "uv_scroll_rate": self.uv_scroll_rate,
+            "uv_flipbook_steps": float(self.uv_flipbook_steps),
             "lod_level": int(self.lod_level),
+            "keep_duplicates": self.keep_duplicates,
             "emission_strength": float(self.emission_strength),
             "accent_tint": self.evr_accent_tint,
             "rim_lighting": self.evr_rim_lighting,
@@ -1195,6 +1280,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         if self.evr_effects or self.evr_particles:
             self._import_evr_effects(context, summary)
         self._tag_texture_overrides(context, summary)
+        self._apply_tunnel_ring_tint(context, summary)
+        if self.evr_goal_explosion:
+            self._apply_goal_explosion(context, summary)
         self._apply_texture_arrays(context, summary)
         self._apply_vertex_tints(context, summary)
         self._apply_flowmaps(context, summary)
@@ -1203,7 +1291,10 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         self.report({"INFO"},
                     "Scatter: placed {instances_placed}/{instances_total} instances "
                     "over {meshes_built} meshes ({triangles_unique} unique tris), "
-                    "LOD {lod_level} of 0..{lod_max_level}".format(**summary))
+                    "LOD {lod_level} of 0..{lod_max_level}".format(**summary)
+                    + (", %d duplicate placement(s) skipped"
+                       % summary["duplicates_dropped"]
+                       if summary.get("duplicates_dropped") else ""))
         # Surface the material provenance. A silent fall-back to placeholder colours
         # is the single most confusing failure on this path -- it looks like broken
         # materials, not a missing sidecar -- so say which path was taken.
@@ -1323,12 +1414,13 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                            self.evr_flowmap_strength))
 
     def _apply_vertex_tints(self, context, summary):
-        """Tint no-albedo surfaces by the flat colour their geometry carries.
+        """Tint surfaces by the flat colour their geometry carries.
 
         `mpl_combat_combustion`'s water is greyscale emissive facets plus a
-        blue vertex tint; without this it imports white. Applied only where the
-        material samples no albedo of its own -- see `evr_vertex_tints` for why
-        that gate, and why black tints are skipped.
+        blue vertex tint; without this it imports white. Skipped where the
+        MATERIAL already declares a hue of its own, because multiplying a
+        second hue over it destroys both -- see `evr_vertex_tints` for that
+        gate, the two earlier ones that were wrong, and why black is refused.
         """
         if evr_vertex_tints is None:
             return
@@ -1336,14 +1428,21 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         if doc is None:
             return
 
+        # MESH index -> its materials.json entry. The sidecar rows are keyed by
+        # mesh, so a matidx-keyed map could never be joined to them -- which is
+        # why the old one was built, passed, and never read.
         specs = {}
         try:
             path = Path(self.filepath)
             root = path.parent if path.is_file() else path
             raw = json.loads((root / "materials.json").read_text(encoding="utf-8"))
-            for entry in raw.get("materials") or ():
-                specs[entry.get("matidx")] = entry.get("spec") or {}
-        except (OSError, ValueError, AttributeError):
+            by_matidx = {e.get("matidx"): e for e in (raw.get("materials") or ())}
+            man = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+            for mesh in man.get("meshes") or ():
+                entry = by_matidx.get(mesh.get("matidx"))
+                if entry is not None:
+                    specs[int(mesh.get("index"))] = entry
+        except (OSError, ValueError, AttributeError, TypeError):
             specs = {}
 
         coll = bpy.data.collections.get(summary.get("collection") or "")
@@ -1358,10 +1457,106 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         result = evr_vertex_tints.apply_tints(doc, self.filepath, by_mesh, specs)
         if result.get("applied"):
             self.report({'INFO'}, "Vertex tints: %d object(s) tinted over %d "
-                                  "material variant(s) (%d left alone: they "
-                                  "sample their own albedo)"
+                                  "material variant(s) (%d left alone: the "
+                                  "material already has its own colour)"
                         % (result["applied"], result.get("variants", 0),
-                           result.get("skipped_has_albedo", 0)))
+                           result.get("skipped_material_owns_colour", 0)))
+
+    #: A "nearest light" further away than this is not nearby at all.
+    #:
+    #: ⭐ THE BUG THIS CAUGHT. The catapult tunnels sit at |y| ~ 44.9, BEYOND
+    #: both goals, and no light is authored out there: the nearest one is 40 to
+    #: 57 units away, so which light won was effectively arbitrary. It came out
+    #: 16 orange / 24 blue at the blue end and 24 orange / 16 blue at the
+    #: orange end -- two tunnels wrong at each end, which is exactly what the
+    #: user reported seeing.
+    TUNNEL_LIGHT_MAX_DISTANCE = 20.0
+
+    def _apply_tunnel_ring_tint(self, context, summary):
+        """Colour the tunnel ring's emissive band by the goal end it belongs to.
+
+        ⭐ A tunnel takes ITS OWN END's team colour -- the orange goal's
+        tunnels are orange. Both colours are read from the level (see
+        `evr_goal_explosion`, which measures them as the accent tint the most
+        instances near each end carry) and arrive in `goal_explosion.json`.
+
+        ⛔ The nearest LIGHT is only a fallback now, and only when it is
+        genuinely near (`TUNNEL_LIGHT_MAX_DISTANCE`). See that constant for why:
+        out at the tunnels there is no light to be nearest to.
+
+        See `TUNNEL_RING_MATERIALS` for the material's evidence and scope.
+        """
+        path = Path(self.filepath)
+        if path.is_file():
+            path = path.parent
+        # Goal ends first: `position` is in GAME axes, and this importer stands
+        # the scene upright as game (x, y, z) -> (x, -z, y).
+        ends = []
+        if evr_goal_explosion is not None:
+            gx = evr_goal_explosion.load(self.filepath) or {}
+            for end in gx.get("ends") or ():
+                pos, tint = end.get("position"), end.get("team_tint")
+                if pos and tint and len(pos) >= 3 and len(tint) >= 3:
+                    ends.append((mathutils.Vector(
+                        (float(pos[0]), -float(pos[2]), float(pos[1]))), tint))
+        sidecar = path / "lightmaps.json"
+        if not sidecar.is_file():
+            return
+        try:
+            doc = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        lights = []
+        for rec in (doc.get("lights") or ()):
+            # SUN has no position -- it cannot be "nearest" to anything.
+            if str(rec.get("type", "")).upper() == "SUN":
+                continue
+            pos = rec.get("position")
+            col = rec.get("color")
+            if not pos or not col or len(pos) < 3 or len(col) < 3:
+                continue
+            lights.append((mathutils.Vector(
+                (float(pos[0]), float(pos[1]), float(pos[2]))), col))
+        if not lights and not ends:
+            return
+
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        tinted = 0
+        by_end = 0
+        for obj in (coll.all_objects if coll else ()):
+            if obj.type != "MESH" or not obj.material_slots:
+                continue
+            mat = obj.material_slots[0].material
+            if mat is None or not any(h in mat.name for h in TUNNEL_RING_MATERIALS):
+                continue
+            here = obj.matrix_world.translation
+            colour = None
+            if ends:
+                near = min(ends, key=lambda ep: (ep[0] - here).length_squared)
+                colour = near[1]
+                by_end += 1
+            if colour is None and lights:
+                pick = min(lights, key=lambda lp: (lp[0] - here).length_squared)
+                if (pick[0] - here).length <= self.TUNNEL_LIGHT_MAX_DISTANCE:
+                    colour = pick[1]
+            if colour is None:
+                continue
+            var = material_builder.emission_tinted_variant(
+                mat, colour, tag=obj.name)
+            if var is not None and var is not mat:
+                slot = obj.material_slots[0]
+                slot.link = "OBJECT"
+                slot.material = var
+                obj["le_emission_light_tint"] = [round(float(c), 6)
+                                                 for c in colour[:3]]
+                tinted += 1
+        if tinted:
+            self.report({"INFO"},
+                        "Tunnel rings: %d segment(s) coloured -- %d from their "
+                        "own goal end's team colour, %d from a light within "
+                        "%.0f m (inferred)"
+                        % (tinted, by_end, tinted - by_end,
+                           self.TUNNEL_LIGHT_MAX_DISTANCE))
 
     def _apply_texture_arrays(self, context, summary):
         """Give each object bound to a texture ARRAY its own slice.
@@ -1441,7 +1636,7 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                 by_index[int(mesh["index"])] = entry
 
         coll = bpy.data.collections.get(summary.get("collection") or "")
-        tagged = runtime = 0
+        tagged = runtime = fitted_n = 0
         for obj in (coll.all_objects if coll else ()):
             index = obj.get("le_mesh_index")
             if index is None:
@@ -1452,6 +1647,28 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
             obj["le_texture_override"] = entry.get("texture", "")
             obj["le_texture_override_action"] = entry.get("action", "")
             tagged += 1
+
+            # A named texture on a mesh whose UVs TILE is a single panel the
+            # engine redraws (score, clock), not a repeating detail map. Fit it
+            # across the mesh's own UV bounds -- see `fit_texture_to_uv_bounds`
+            # for why the transform is not in the material.
+            tex = str(entry.get("texture") or "")
+            mesh = getattr(obj, "data", None)
+            layer = (mesh.uv_layers.get("uv0")
+                     if mesh is not None and mesh.uv_layers else None)
+            if tex and layer is not None and obj.material_slots:
+                us = [d.uv[0] for d in layer.data]
+                vs = [d.uv[1] for d in layer.data]
+                if us and vs:
+                    bounds = ((min(us), max(us)), (min(vs), max(vs)))
+                    slot = obj.material_slots[0]
+                    base = slot.material
+                    fitted = material_builder.fit_texture_to_uv_bounds(
+                        base, tex, bounds, tag=obj.name)
+                    if fitted is not base and fitted is not None:
+                        slot.link = "OBJECT"
+                        slot.material = fitted
+                        fitted_n += 1
             if entry.get("action") == "runtime":
                 obj["le_runtime_texture"] = True
                 obj["le_runtime_texture_note"] = (
@@ -1461,10 +1678,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "contains -- not a failed import.")
                 runtime += 1
         if tagged:
+            extra = ("; %d panel(s) fitted to their mesh UV bounds instead of "
+                     "tiling" % fitted_n) if fitted_n else ""
             self.report({"INFO"},
                         "Texture overrides: %d object(s) tagged, %d of them "
-                        "runtime-drawn surfaces (placeholder is expected)"
-                        % (tagged, runtime))
+                        "runtime-drawn surfaces (placeholder is expected)%s"
+                        % (tagged, runtime, extra))
 
     def _apply_default_bloom(self, context):
         """Bloom from the game's modal preset, for a package with no effects.json."""
@@ -1579,6 +1798,55 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         if notes:
             self.report({"INFO"}, "Echo VR effects: " + "; ".join(notes))
 
+    def _apply_goal_explosion(self, context, summary):
+        """Hide, keyframe and tint the goal-explosion props.
+
+        The props sit inside the goal permanently in the extracted level; in
+        game they are not there until someone scores. See
+        `evr_goal_explosion` for what is authored and what is not.
+        """
+        if evr_goal_explosion is None:
+            return
+        doc = evr_goal_explosion.load(self.filepath)
+        if doc is None:
+            return
+        objects_by_instance: dict = {}
+        coll = bpy.data.collections.get(summary.get("collection") or "")
+        for obj in (coll.all_objects if coll else ()):
+            index = obj.get("le_instance_index")
+            if index is not None:
+                objects_by_instance.setdefault(int(index), []).append(obj)
+        result = evr_goal_explosion.apply(
+            doc, objects_by_instance,
+            start=int(self.evr_goal_explosion_start),
+            fps=int(self.evr_goal_explosion_fps),
+            beams=int(self.evr_goal_explosion_beams),
+            colour=bool(self.evr_accent_tint),
+            scene=context.scene)
+        summary["goal_explosion"] = result
+        counts = evr_goal_explosion.summarize(doc)
+        if result.get("animated"):
+            self.report(
+                {"INFO"},
+                "Echo VR goal explosion: %d prop(s) over %d goal(s) (%d beam "
+                "copies) hidden until frame %d and keyframed to %d, %d tinted "
+                "%s -- props, goal ends and both colours read from the level; "
+                "the MOTION is the demo viewer's OrangeGoalAnim, a "
+                "reconstruction, not shipped data%s"
+                % (result["animated"], result["ends"],
+                   result.get("beam_copies", 0), result["frames"][0],
+                   result["frames"][1], result.get("tinted", 0),
+                   " / ".join(str([round(c, 3) for c in (t or ())])
+                              for t in counts["tints"]),
+                   " -- %d prop(s) had no imported object"
+                   % result["no_object"] if result.get("no_object") else ""))
+        elif counts["props"]:
+            self.report({"WARNING"},
+                        "Echo VR goal explosion: %d prop(s) in the level but "
+                        "none matched an imported object%s"
+                        % (counts["props"],
+                           " (%s)" % result["reason"] if result.get("reason") else ""))
+
     def _import_evr_movers(self, context, summary):
         """Keyframe the level's moving geometry, when it has any."""
         if evr_movers is None:
@@ -1646,6 +1914,21 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                            " -- %d static-bake lights skipped, they are already "
                            "in the lightmap" % lights["skipped_static"]
                            if lights.get("skipped_static") else ""))
+
+        # ⭐ Then black out what no authored light can reach. A Blender SUN is
+        # infinite, so the level's two directional lights -- authored with a
+        # range of 150 -- were lighting a sky dome 955 units out to a bright
+        # blue-grey. See `evr_lighting.unlit_beyond_light_reach`.
+        _coll = bpy.data.collections.get(summary.get("collection") or "")
+        _far = evr_lighting.unlit_beyond_light_reach(
+            doc, list(_coll.all_objects) if _coll else [],
+            y_up_to_z_up=self.y_up_to_z_up)
+        if _far.get("blacked"):
+            self.report({"INFO"},
+                        "Echo VR sky: %d opaque surface(s) past every light's "
+                        "range (%.0f m) set to black -- in the engine nothing "
+                        "reaches them; a Blender SUN is infinite and lit them"
+                        % (_far["blacked"], _far["reach"]))
 
         if not counts["atlases"] or not self.evr_lightmaps:
             return

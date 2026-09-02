@@ -606,9 +606,35 @@ def dominant_uv_scale(root: Path, shaderset_hash) -> tuple:
     wins; `(1.0, 1.0)` means "nothing to apply" and lets the caller skip the
     Mapping node entirely.
     """
+    # ⛔ The scale is PER BIND, and the consumer applies whatever comes back to
+    # a single Mapping node feeding EVERY texture. So returning "the most
+    # common non-unit value" hands one layer's scale to all the others.
+    #
+    # `mpl_combat_war_room`'s star dome is the case that found it. Shaderset
+    # `462037305913d0a5` binds layer2 (the BLEND MASK) at 0.25 and layer0 (the
+    # star albedo) at 1.0; the 0.25 was applied to the albedo too, collapsing
+    # its authored V range 0.445..0.555 -- exactly one flipbook band -- to
+    # 0.111..0.139, a 0.028 sliver, i.e. 22% of one band stretched across the
+    # whole dome. It rendered as vertical smears instead of stars.
+    #
+    # LAYER 0 decides, because that is the layer the material's base colour
+    # comes from (`channels` keeps the lowest layer that provides it). Only when
+    # layer 0 binds nothing does the old most-common rule apply, which is what
+    # keeps the 55 of 71 non-unit shader sets that already agreed unchanged;
+    # 16 disagreed and every one of them had layer 0 at unit scale with the
+    # non-unit value on a higher layer.
+    layer_scale = {}
     scales: Counter = Counter()
     for bind in binds_for(root, shaderset_hash):
-        scales[(round(bind.uscale, 4), round(bind.vscale, 4))] += 1
+        pair = (round(bind.uscale, 4), round(bind.vscale, 4))
+        scales[pair] += 1
+        layer = getattr(bind, "layer", None)
+        if layer is not None:
+            layer_scale.setdefault(int(layer), pair)
+    base = layer_scale.get(0)
+    if base is not None:
+        u, v = base
+        return (u, v) if (u > 0 and v > 0) else (1.0, 1.0)
     for (u, v), _count in scales.most_common():
         if (u, v) != (1.0, 1.0) and u > 0 and v > 0:
             return (u, v)

@@ -195,6 +195,179 @@ def level_lights(root: Path, level_hash: str) -> list:
     return parse_scene_lights(path.read_bytes())
 
 
+#: Stride of the SECOND table in the scene resource's `lead` group.
+VOLUME_STRIDE = 296
+#: Offsets inside it. Position and colour land on the same offsets as the
+#: 360-byte `SGLightParams`, but the rest of the record does NOT match it --
+#: `L_TYPE` reads as a distinct 32-bit value per record and `L_RANGE` goes
+#: negative -- so this is a DIFFERENT struct that happens to share a prefix.
+V_POSITION = 0x10
+V_COLOR = 0x1C
+V_MAGNITUDE = 0x28
+#: A 3x3 rotation*scale, then a translation at `V_TRANSLATION`.
+#:
+#: ⭐ The three rows are ORTHOGONAL -- every pairwise dot product is 0 to within
+#: 1e-4 on every record checked -- so this is an oriented box, and each row's
+#: NORM is that axis's half-extent while the normalised row is its direction.
+#: Row norms on `mpl_combat_war_room` record 0 are `(1.482, 0.041, 0.472)`,
+#: identical across its first six records.
+#:
+#: ⛔ Do NOT read the extent off the DIAGONAL. That gives `(0.404, 0.029,
+#: 0.225)` here -- both the wrong size and axis-aligned, which renders every
+#: volume as a flat plate in the wrong orientation.
+V_TRANSFORM = 0x2C
+#: The 3x3's translation. Superseded for SHAPE purposes by `V_CORNERS` below --
+#: it is kept because it is a real field, not because anything should build
+#: geometry from it.
+V_TRANSLATION = 0x50
+#: ★ THE SHAPE. Eight `C3Vector` corners, stride 12, in WORLD space.
+#:
+#: Recovered from the engine, not guessed. `CGVolumeHexahedronLight::Initialize`
+#: (@0x18ec9fc) opens with `memcpy(this + 0x1500, params, 0x128)` -- the whole
+#: 296-byte record -- so a runtime offset minus 0x1500 IS the params offset.
+#: `CGVolumeHexahedronLight::Update(const C44Matrix&)` (@0x18ecfa4) then
+#: transforms exactly EIGHT points at `this+0x1550 .. +0x15a4` (stride 12)
+#: through a point-by-matrix helper, writing them to `this+0x1658..`. Eight
+#: corners is a hexahedron, and 0x1550 - 0x1500 = 0x50.
+#:
+#: They are a FRUSTUM, not a box: on `mpl_combat_war_room` record 0 the
+#: `c0..c3` face measures 0.313 across against 5.632 for `c4..c7` -- narrow at
+#: one end, flared at the other, i.e. a light shaft. `mpl_combat_dyson`'s are
+#: box-like (both faces parallel), so the same record serves both. No box built
+#: from `V_TRANSFORM`'s axes can express the flared case, which is why every
+#: extent reading failed at every scale.
+V_CORNERS = 0x50
+V_CORNER_COUNT = 8
+#: `c0..c3` are one quad face and `c4..c7` the opposite one, in matching winding
+#: order (verified on dyson, whose faces are axis-aligned at x=28.050/-9.180).
+HEXAHEDRON_FACES = ((0, 1, 2, 3), (7, 6, 5, 4), (0, 1, 5, 4),
+                    (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+
+
+def parse_scene_volume_lights(data: bytes) -> list:
+    """The scene resource's SECOND `lead` table -- coloured light VOLUMES.
+
+    ## Why this exists
+
+    `parse_scene_lights` reads `lead[0]` and nothing read `lead[1]`, so a level
+    reported only its placed-light count: `mpl_combat_dyson` 4, while this table
+    holds **180** more. Across levels: war room 763, arena 216, tutorial_lobby
+    218, combustion 62.
+
+    ## What is established
+
+    * **Colour is a colour.** All three components lie in 0..1 on 1439 of 1439
+      records across five levels.
+    * **They are the TEAM colours.** Dyson's 180 records use 14 distinct values,
+      ~63 blue (`0.35,0.892,1.0`) and ~113 warm (`1.0,0.567,0.35`) -- the same
+      families the placed lights already carry.
+    * **They are placed in mirrored pairs.** Dyson record 0 is
+      `(28.05,6.47,-2.81)` blue and record 1 `(-27.94,6.47,-2.81)` orange:
+      same height and depth, mirrored across x, opposite ends of a symmetric
+      map.
+    * Positions fall inside each level's own bounds, on every level checked.
+
+    ## What the ENGINE does with them (`libr15.so`, symbols intact)
+
+    `lead[1]` is `CTable<SGVolumetricLightParams>` -- ORG's disassembly-confirmed
+    `CGSceneData::Serialize` walk names member 2 `vlights`, and the symbol
+    `CTable<SGVolumetricLightParams>::Serialize` @0x190c778 confirms it.
+
+    ⭐ The geometry class is **`CGVolumeHexahedronLight`**
+    (`Initialize(const SGVolumetricLightParams&)` @0x18ec9fc). A HEXAHEDRON --
+    six faces, eight corners -- i.e. a FRUSTUM, not a box. That is why every
+    box-shaped attempt failed structurally rather than by scale: a frustum has a
+    different cross-section at each end and no scale factor turns a box into
+    one. An extent sweep (x0.1/0.25/0.5/1.0) left the shape wrong at every size,
+    which is the signature of a wrong primitive, not a wrong scale.
+
+    Its `Update` takes a **C44Matrix** (@0x18ecfa4, reads +0x00..+0x28 of it),
+    so the volume is placed by a full 4x4, not by a scale triple.
+
+    Other confirmed behaviour, all from the symbol table:
+      * `CGVolumetricLightInstance` is the runtime object; it FADES
+        (`StartFade(u32, float)`), is intensity-scaled at runtime
+        (`ApplyIntensityMultiplier(float)`) and can hang off a skeleton
+        (`SetParentJoint(u32)`).
+      * `CGScene::LevelVolumeLightVPMask` / `ActorVolumeLightVPMask` -- per
+        VIEWPORT masks, so which volumes draw is view-dependent.
+      * `CGRenderConfig::CanEnableVolumetrics()` / `EnableVolumetrics()` -- the
+        whole feature is gated and may simply be off on a given profile.
+      * `SGVolumetricLight::SetFromLight(const CGLightInstance*, const
+        C44Matrix&)` -- a volumetric can also be derived from a placed light.
+
+    ⚠ The FIELD LAYOUT is still not recovered. `Initialize` reads only +0x0c4
+    directly and delegates the rest through calls that were not followed, so the
+    offsets below are measured, not read out of the engine.
+
+    ## What is INFERRED, and why they are not imported as point lights
+
+    ⚠ The record carries a 3x4 TRANSFORM, not a radius -- a scale and a
+    position, i.e. a box. So these are volumes, and turning one into a point
+    light at its centre is a guess about falloff and extent that the data does
+    not state. There is no type field (the `L_TYPE` slot is not an enum here)
+    and no separate intensity beyond `V_MAGNITUDE` (2.5..12 on dyson).
+
+    They are therefore REPORTED, not lit with. A consumer that wants to
+    approximate them can take `position` + `color` + `magnitude`; one that wants
+    to be faithful needs the volume semantics decoded first.
+    """
+    try:
+        import cgsceneresource as scene_reader
+    except ImportError:
+        return []
+    try:
+        obj = scene_reader.read(data)
+    except Exception:                                       # noqa: BLE001
+        return []
+    lead = obj.get("lead") or []
+    if len(lead) < 2 or not isinstance(lead[1], tuple) or len(lead[1]) < 2:
+        return []
+    count, raw = lead[1][0], lead[1][1]
+    if not count or not raw or len(raw) // count != VOLUME_STRIDE:
+        return []
+
+    out = []
+    for i in range(count):
+        base = i * VOLUME_STRIDE
+        colour = list(struct.unpack_from("<3f", raw, base + V_COLOR))
+        if not all(0.0 <= c <= 1.0 for c in colour):
+            return []                    # the colour test is what identifies it
+        m = struct.unpack_from("<9f", raw, base + V_TRANSFORM)
+        rows = (m[0:3], m[3:6], m[6:9])
+        # Half-extent is the row NORM; direction is the normalised row.
+        extent = [math.sqrt(sum(c * c for c in r)) for r in rows]
+        basis = [[round(c / e, 6) for c in r] if e > 1e-9 else [0.0, 0.0, 0.0]
+                 for r, e in zip(rows, extent)]
+        out.append({
+            "index": i,
+            "position": [round(v, 5) for v in
+                         struct.unpack_from("<3f", raw, base + V_POSITION)],
+            "color": [round(c, 6) for c in colour],
+            "magnitude": round(struct.unpack_from(
+                "<f", raw, base + V_MAGNITUDE)[0], 5),
+            "extent": [round(e, 5) for e in extent],
+            "basis": basis,
+            # THE SHAPE -- eight world-space corners. See `V_CORNERS`.
+            "corners": [[round(v, 5) for v in
+                         struct.unpack_from("<3f", raw,
+                                            base + V_CORNERS + k * 12)]
+                        for k in range(V_CORNER_COUNT)],
+            "translation": [round(v, 5) for v in
+                            struct.unpack_from("<3f", raw,
+                                               base + V_TRANSLATION)],
+        })
+    return out
+
+
+def level_volume_lights(root: Path, level_hash: str) -> list:
+    """`parse_scene_volume_lights` for a level, or `[]`."""
+    path = resource_path(root, SCENE_RESOURCE, level_hash)
+    if path is None:
+        return []
+    return parse_scene_volume_lights(path.read_bytes())
+
+
 def main(argv) -> int:
     from collections import Counter
 

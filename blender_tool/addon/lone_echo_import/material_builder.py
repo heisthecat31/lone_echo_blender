@@ -34,6 +34,7 @@ Two things in here are load-bearing and easy to get wrong:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import bpy   # type: ignore
@@ -661,6 +662,10 @@ def ao_channel_of(spec: dict, chan: dict | None) -> str | None:
 #: Anything in 0.38-0.58 gives an identical answer, so this sits in an empty
 #: gap rather than on a boundary.
 EMISSIVE_BLACK_FRACTION = 0.50
+#: Top of the ALBEDO population. Between this and 0.587 (the bottom of the
+#: emissive population) no measured map lives, so a `black_fraction` landing in
+#: that band is not evidence of anything -- see `emissive_is_ao`.
+AMBIGUOUS_BLACK_LO = 0.373
 
 
 def _binds_composite_components(spec: dict, channels: dict) -> bool:
@@ -672,7 +677,50 @@ def _binds_composite_components(spec: dict, channels: dict) -> bool:
                for role in (spec.get("role_textures") or {}))
 
 
-def emissive_is_ao(spec: dict, channels: dict) -> bool:
+#: A map with more than this share of near-white texels has a blown-out core
+#: and is a GLOW, not an occlusion bake. Sits in the gap between the measured
+#: populations: AO atlases 2.5-8.4%, glow sprites 42%.
+EMISSIVE_BRIGHT_FRACTION = 0.20
+#: Above this a texel counts as saturated.
+_BRIGHT_LEVEL = 0.85
+
+_BRIGHT_CACHE: dict = {}
+
+
+def emissive_bright_fraction(channels: dict, pkg_dir=None):
+    """Share of near-white texels in the emissive map, or None.
+
+    Measured from the loaded image rather than the sidecar, so it needs no
+    re-extract. Cached by file, and only ever called for the handful of
+    materials that land in the ambiguous black-fraction band.
+    """
+    chan = channels.get("emission") or {}
+    rel = chan.get("file")
+    if not rel or pkg_dir is None:
+        return None
+    key = str(rel)
+    if key in _BRIGHT_CACHE:
+        return _BRIGHT_CACHE[key]
+    value = None
+    try:
+        img = _load_image(pkg_dir, rel, "Non-Color", "CHANNEL_PACKED")
+        if img is not None and img.size[0] and img.size[1]:
+            px = list(img.pixels)
+            n = len(px) // 4
+            if n:
+                bright = 0
+                for i in range(n):
+                    j = i * 4
+                    if (px[j] + px[j + 1] + px[j + 2]) / 3.0 > _BRIGHT_LEVEL:
+                        bright += 1
+                value = bright / float(n)
+    except Exception:                                     # noqa: BLE001
+        value = None
+    _BRIGHT_CACHE[key] = value
+    return value
+
+
+def emissive_is_ao(spec: dict, channels: dict, pkg_dir=None) -> bool:
     """Should this material's emissive map be read as ambient occlusion?
 
     ⛔ Read the note at the use site before touching this. Two earlier attempts
@@ -723,13 +771,90 @@ def emissive_is_ao(spec: dict, channels: dict) -> bool:
     if channels.get("flowmap"):
         return False
 
+    # ★ AO ALREADY HAS A HOME. `composite_components.y` IS the ambient
+    # occlusion (`shader-confirmed`, see le_mesh/materials.py's
+    # `ao_channel`). A material that binds that texture has its occlusion
+    # accounted for, so reading the emissive map as a SECOND AO double-counts
+    # it -- and inverting a glow mask into Base Colour punches the glowing
+    # texels to black, which is the visible bug this fixes. 1282 of the 1347
+    # emissive-binding materials in the reference extract are in this class.
+    #
+    # ⭐ The veto also settles the AMBIGUOUS BAND. `EMISSIVE_BLACK_FRACTION`
+    # sits in an empty gap between two measured populations -- AO maps at
+    # 0.000, albedo up to 0.373, emissive from 0.587 (see
+    # `test_the_threshold_sits_in_the_gap_between_the_two_populations`). A map
+    # landing INSIDE that gap belongs to neither population, so the measurement
+    # is not evidence either way and the threshold assigns it by accident.
+    #
+    # Ground truth settles those: an in-game frame of `mpl_combat_war_room`
+    # shows its floating octahedra DARK with thin bright strips, and the
+    # importer drew them WHITE with dark strips -- the exact inversion that
+    # reading a glow map as occlusion produces. `1e070bb9873c1e45` is the
+    # material: `eMTForwardOpaque`, full PBR (roughness FROM
+    # `composite_components`) plus an emissive at `black_fraction` 0.4142 --
+    # inside the gap, just under 0.50, so it was called AO.
+    #
+    # ⛔ Deliberately NOT a blanket veto. Outside the gap the measurement still
+    # outranks everything, so a genuine AO map at 0.02 keeps its occlusion
+    # reading even with `composite_components` bound -- that is the case the two
+    # earlier reverts were about, and it is untouched.
+    black = (channels.get("emission") or {}).get("black_fraction")
+    if (isinstance(black, (int, float))
+            and AMBIGUOUS_BLACK_LO <= black < EMISSIVE_BLACK_FRACTION
+            and _binds_composite_components(spec, channels)):
+        # ⭐ Inside the gap the measurement is not evidence, so ASK THE
+        # MATERIAL rather than assume. `is_emissive` is a decoded flag, and
+        # over the 7 materials this branch reaches it splits them perfectly:
+        #
+        #   is_emissive True   d635829707bdeb28  intensity 2.062  tint [1,1,1,1]
+        #                      ba04706dae066fbc  intensity 15.0   tint [.26,.74,.24]
+        #   is_emissive False  1e070bb9873c1e45  intensity 1.0    tint None
+        #                      589d768492b56e07, 5e8983dfd1a9c8be,
+        #                      c29c2cc171dd7ee7, 361526eeb8e7dd85
+        #
+        # The two that declare True are genuine emitters -- the war room's
+        # glowing edge strips (46 of this branch's 72 bindings) and a green
+        # panel at intensity 15. The five that declare False are occlusion
+        # maps, and returning "not AO" for them inverted a glow into Base
+        # Colour on `mpl_arena_a` i357 among others.
+        #
+        # ⛔ The comment below this branch USED to cite the war room's floating
+        # octahedra as its ground truth and name `1e070bb9873c1e45` as their
+        # material. That attribution is wrong: those octahedra are matidx 64,
+        # material `35c66a0d7b3e7faf`, which binds NO albedo and so returns at
+        # the `base_color` test far above -- this branch never sees them.
+        declared = spec.get("is_emissive")
+        if declared is True:
+            return False                  # declared an emitter -- believe it
+        if declared is False:
+            # ⚠ `is_emissive False` does NOT mean AO. It is False on BOTH
+            # `1e070bb9873c1e45` (an AO atlas) and `361526eeb8e7dd85` (a glow
+            # sprite), so the flag alone decides nothing here -- it was tried
+            # and it broke `mpl_arena_a` i1672 / i1777.
+            #
+            # What separates them is whether the map has a large SATURATED
+            # region. A baked occlusion atlas is gradients over charts and
+            # tops out below white; a glow sprite is a blown-out core:
+            #
+            #   c29a7d30d813444b  1024x1024  8.4% bright  p95 0.937   AO
+            #   d63b1542d63fc44b   256x256   4.0% bright  p95 0.782   AO
+            #   30fe1b45ab78b2c7   256x256   2.5% bright  p95 0.583   AO
+            #   252f8559b45ee7d1   256x256  42.0% bright  p95 1.000   GLOW
+            #
+            # Measured only for materials that reach this branch (7 textures
+            # corpus-wide), and cached, so it costs nothing on a normal import.
+            bright = emissive_bright_fraction(channels, pkg_dir)
+            if bright is None:
+                return False              # unmeasurable -- previous reading
+            return bright < EMISSIVE_BRIGHT_FRACTION
+        return False                      # not recorded -- previous reading
+
     # ★ WHAT THE MAP ACTUALLY CONTAINS, where the extractor could measure it.
     # This decides BOTH ways and outranks the structural test below, so a
     # material carrying a genuine occlusion map in its emissive slot still
     # gets occlusion -- which is the failure the two reverted attempts caused.
     # Absent on sidecars written before this existed, in which case it simply
     # does not fire and the structural test decides.
-    black = (channels.get("emission") or {}).get("black_fraction")
     if isinstance(black, (int, float)):
         return black < EMISSIVE_BLACK_FRACTION
 
@@ -1071,7 +1196,24 @@ def emission_tint(spec: dict) -> tuple[float, float, float]:
     `name-confirmed`). Multiplying an emissive map by a black tint annihilates the
     emission, so an all-zero tint is treated as "no tint" = white.
     """
-    tint = spec.get("emissive_tint_color")
+    # ⛔ The KEY NAME. `layerN_emissive_tint_color` is what the ENGINE calls the
+    # slot, and this line read it back under that name -- but the manifest does
+    # not use it. `evr_materials` stores the decoded value and
+    # `le_mesh.materials.build_material_spec` writes it out as plain
+    # `emissive_tint`, so `emissive_tint_color` was never once present.
+    #
+    # The consequence was total, not partial: the fallback below is
+    # `emissive_color`, which is the BAKE-TIME colour and is `(0,0,0)` on ALL
+    # 661 emissive materials in the extract, and the all-zero guard at the
+    # bottom then turns that black into white. So `emission_tint` returned
+    # (1,1,1) for every material in the corpus and every authored emissive
+    # colour was discarded.
+    #
+    # 49 materials carry a tint; 37 of them are COLOURED and were being lost --
+    # dyson 18, combustion 17, r14_glb_global_mp 2 -- including magenta
+    # (1.0, 0.431, 0.659), pale pink (1.0, 0.761, 0.98) and blue
+    # (0.059, 0.482, 1.0). The other 12 are authored white and never differed.
+    tint = spec.get("emissive_tint_color") or spec.get("emissive_tint")
     if not tint:
         tint = spec.get("emissive_color")
     if not tint:
@@ -1160,6 +1302,812 @@ def translucent_emissive_alpha_enabled(opts: dict | None) -> bool:
     if not opts:
         return True
     return bool(opts.get("translucent_emissive_alpha", True))
+
+
+# ---------------------------------------------------------------------------
+# Echo VR metal / roughness
+# ---------------------------------------------------------------------------
+#
+# Echo VR does NOT use Lone Echo's material parameter set -- 0 of the 15024
+# names `build_name_table` generates match any of the samurai chassis' 74
+# authored properties -- so Lone Echo's channel schema cannot be assumed to
+# describe an EVR data map, and on this chassis it demonstrably does not:
+#
+#   * the map the schema calls `composite_components` has its ROUGHNESS channel
+#     (red) measured flat -- 0.482..0.518 over 2048x2048 on the body,
+#     0.494..0.518 on the head. Squared, that is a uniform 0.25 roughness across
+#     the entire chassis: no material variation anywhere, which is exactly the
+#     "bland" look. `annotate_data_maps` records the range.
+#   * the 4-channel map bound to `layer0_specular_map` carries the real data,
+#     at the HIGHEST resolution of the set (4096, above the 2048 albedo). Its
+#     red is a hard-edged near-binary mask spanning 0..1 (metal vs not); its
+#     green is a continuous tonal map spanning 0..0.65 (roughness); its blue is
+#     a sparse mask and its alpha is near-uniform.
+#   * routing it through the Lone Echo `specular_map` rule instead multiplies it
+#     by `SPEC_MAP_FRESNEL_DEFAULT` = 0.01 -- an authored default recovered from
+#     LONE ECHO's corpus, for a parameter Echo VR does not have -- which drives
+#     F0 to ~0.008 and removes the specular response altogether.
+#
+# ⚠ `inferred`, not shader-confirmed: no Echo VR pixel shader in the corpus
+# names these channels. What IS measured is that the current route reads a flat
+# channel and scales the real one to nothing. `opts['evr_metal_rough'] = False`
+# restores it.
+
+#: Channel spread at or below which a roughness channel carries no data.
+#: 0.098 is the widest flat channel measured (a BC1 red quantised to 5 bits
+#: wobbles ~3 steps around its constant), so the gate sits just above it.
+EVR_FLAT_ROUGHNESS = 0.12
+
+
+def evr_metal_rough_enabled(opts: dict | None) -> bool:
+    if not opts:
+        return True
+    return bool(opts.get("evr_metal_rough", True))
+
+
+def dead_roughness_channel(channels: dict) -> bool:
+    """Does the bound roughness channel measure flat (or is none bound)?"""
+    rough = channels.get("roughness")
+    if not isinstance(rough, dict) or not rough.get("file"):
+        return True                       # nothing bound -> nothing to lose
+    rng = rough.get("channel_range")
+    if not rng or len(rng) != 2:
+        return False                      # unmeasured -> do not act
+    try:
+        return (float(rng[1]) - float(rng[0])) <= EVR_FLAT_ROUGHNESS
+    except (TypeError, ValueError):
+        return False
+
+
+def build_evr_metal_rough(nt, bsdf, spec, channels, pkg_dir, mat, opts) -> bool:
+    """Drive Metallic/Roughness from the Echo VR data map. True if applied."""
+    if not evr_metal_rough_enabled(opts):
+        return False
+    if not dead_roughness_channel(channels):
+        return False
+    tex = (spec.get("role_textures") or {}).get("layer0_specular_map")
+    if not tex:
+        return False
+    img = _load_image(pkg_dir, f"textures/{tex}.dds", "Non-Color", "CHANNEL_PACKED")
+    if img is None:
+        return False
+    node = _tex_node(nt, img, "Non-Color", bsdf.location.x - 1150,
+                     bsdf.location.y - 1250, "CHANNEL_PACKED",
+                     label="EVR data map (R=metal, G=rough)")
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    sep.location = (bsdf.location.x - 900, bsdf.location.y - 1250)
+    nt.links.new(node.outputs["Color"], sep.inputs[0])
+    wired = []
+    for name, out in (("Metallic", 0), ("Roughness", 1)):
+        socket = _principled_input(bsdf, name)
+        if socket is None:
+            continue
+        for link in list(socket.links):
+            nt.links.remove(link)
+        nt.links.new(sep.outputs[out], socket)
+        wired.append(name)
+    if not wired:
+        return False
+    rough = channels.get("roughness") or {}
+    mat["le_evr_metal_rough"] = (
+        f"{'/'.join(wired)} from layer0_specular_map R/G; the bound roughness "
+        f"channel measured flat (range {rough.get('channel_range')}) so it "
+        f"carried no data (inferred, opts['evr_metal_rough'])")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Cosmetic tints
+# ---------------------------------------------------------------------------
+#
+# An Echo VR chassis albedo is authored GREYSCALE -- the shipped samurai body
+# atlas measures saturation 0.012 mean / 0.125 max over 512x512 -- because the
+# colour is supplied at runtime by the player's chosen TINT. Every tint carries
+# exactly TWO authored colours, and `data/evr_tints.json` holds all 49 of them
+# (read from the cosmetic list's ext-data heap; see that file's `note`).
+#
+# ⚠ What the two colours DO is `inferred`. What is measured: the albedo is
+# greyscale with a bright-plate / dark-underpart split, each tint authors two
+# colours, and the menu swatch pictures both. Mapping the albedo's luminance
+# between them (a duotone) uses both authored values and reproduces each at the
+# ends of the range; a plain multiply would use one and crush the darks. No
+# shader confirms which, so this is opt-in and named.
+
+_TINT_CACHE = {}
+
+
+def tint_table() -> dict:
+    """`data/evr_tints.json` as {name: entry}, or {} when it is not shipped."""
+    if "t" in _TINT_CACHE:
+        return _TINT_CACHE["t"]
+    table = {}
+    here = Path(__file__).resolve()
+    for base in (here.parent, *here.parents):
+        cand = base / "data" / "evr_tints.json"
+        if cand.is_file():
+            try:
+                doc = json.loads(cand.read_text(encoding="utf-8"))
+                table = {t["name"]: t for t in doc.get("tints", [])}
+            except Exception:
+                table = {}
+            break
+    _TINT_CACHE["t"] = table
+    return table
+
+
+def resolve_tint(opts: dict | None):
+    """(primary, secondary) linear RGB for `opts['tint']`, or None.
+
+    `opts['tint_primary']` / `opts['tint_secondary']` override the table, so a
+    caller can tint without shipping the JSON. A tint whose primary is the
+    authored `No Tint` sentinel (-1,-1,-1) resolves to None.
+    """
+    if not opts:
+        return None
+    prim = opts.get("tint_primary")
+    sec = opts.get("tint_secondary")
+    if prim is None or sec is None:
+        name = opts.get("tint")
+        if not name:
+            return None
+        entry = tint_table().get(str(name))
+        if not entry:
+            return None
+        # ⚠ Test the RAW values for the "No Tint" sentinel FIRST. The sRGB->linear
+        # conversion clamps, so (-1,-1,-1) becomes (0,0,0) in `*_linear` and the
+        # sentinel would read as an authored BLACK -- painting the chassis black
+        # instead of leaving it untinted.
+        raw_prim, raw_sec = entry.get("primary"), entry.get("secondary")
+        try:
+            if min(list(raw_prim) + list(raw_sec)) < 0.0:
+                return None
+        except (TypeError, ValueError):
+            return None
+        # The authored floats are sRGB-ENCODED: "Black Hole" authors 0.15/0.9,
+        # i.e. #262626 and #e6e6e6 -- near-black and white. Handing those to
+        # Blender, which works in linear, renders them as a washed mid-grey
+        # pair; that is why every tint came out far too weak.
+        prim = entry.get("primary_linear") or raw_prim
+        sec = entry.get("secondary_linear") or raw_sec
+    try:
+        prim = [float(v) for v in prim][:3]
+        sec = [float(v) for v in sec][:3]
+    except (TypeError, ValueError):
+        return None
+    if len(prim) < 3 or len(sec) < 3 or min(prim) < 0.0 or min(sec) < 0.0:
+        return None                       # the (-1,-1,-1) "No Tint" sentinel
+    return prim, sec
+
+
+def emissive_table() -> dict:
+    """`data/evr_emissives.json` as {name: entry}, or {} when not shipped."""
+    if "e" in _TINT_CACHE:
+        return _TINT_CACHE["e"]
+    table = {}
+    here = Path(__file__).resolve()
+    for base in (here.parent, *here.parents):
+        cand = base / "data" / "evr_emissives.json"
+        if cand.is_file():
+            try:
+                doc = json.loads(cand.read_text(encoding="utf-8"))
+                table = {e["name"]: e for e in doc.get("emissives", [])}
+            except Exception:
+                table = {}
+            break
+    _TINT_CACHE["e"] = table
+    return table
+
+
+#: Zone colours when nothing else supplies them: the mask's own channels, which
+#: reproduces the shipped default sheet exactly while still SELECTING per zone
+#: rather than letting overlaps add (R+G would light yellow, not zone 1).
+IDENTITY_ZONES = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
+
+def resolve_emissive(opts: dict | None):
+    """Zone colours (linear RGB) for the emissive mask, or None.
+
+    Resolution order:
+      1. `opts['emissive_colors']` -- explicit, so a caller needs no JSON;
+      2. `opts['emissive']` -- a cosmetic's own 1..3 colours;
+      3. the tint -- because the shipped default emissive is `emissive_default`,
+         display name **"Match Tint"**, and it authors ZERO colours of its own;
+      4. the mask channels themselves.
+    """
+    if not opts:
+        return None
+    cols = opts.get("emissive_colors")
+    if cols is None:
+        name = str(opts.get("emissive") or "")
+        entry = emissive_table().get(name) if name else None
+        if entry is not None:
+            # `*_linear` for the same reason as the tint: authored sRGB.
+            cols = entry.get("colors_linear") or entry.get("colors")
+        elif name and name != "emissive_default":
+            return None                   # asked for one that does not exist
+        if not cols:
+            # "Match Tint": zone 0 takes the tint's main colour, zone 1 the other.
+            tint = resolve_tint(opts)
+            if tint is not None:
+                primary, secondary = tint
+                cols = [secondary, primary]
+    out = []
+    for c in (cols or [])[:3]:
+        try:
+            rgb = [max(0.0, float(v)) for v in c][:3]
+        except (TypeError, ValueError):
+            return None
+        if len(rgb) < 3:
+            return None
+        out.append(rgb)
+    return out or None
+
+
+#: Fallback seconds for one pass through a colour list, when the cosmetic
+#: carries no rate of its own.
+EMISSIVE_CYCLE_SECONDS = 3.6
+
+
+def emissive_animated(opts: dict | None) -> bool:
+    """`opts['emissive_animate']` -- default ON for multi-colour emissives."""
+    if not opts:
+        return True
+    return bool(opts.get("emissive_animate", True))
+
+
+def emissive_cycle_seconds(opts: dict | None) -> float:
+    """Seconds for one full colour cycle, from the cosmetic's own rate.
+
+    `EmissiveUnk2` is the animation rate, and it has two regimes across the 40
+    shipped emissives: the 9 that carry a scrolling `TextureSymbol` use
+    0.08-0.3 (UV per second), while the colour-cycling ones use 90-150 --
+    degrees per second. `rwd_emissive_0014` ("RGB") is the latter at 100, i.e.
+    360/100 = 3.6s for a full red-green-blue-red pass, which is the rolling
+    rainbow the game shows. `unk1` is 0.0 on every one of them.
+    """
+    rate = None
+    if opts:
+        entry = emissive_table().get(str(opts.get("emissive") or ""))
+        if entry is not None:
+            try:
+                rate = float(entry.get("unk2"))
+            except (TypeError, ValueError):
+                rate = None
+    if rate and rate > 1.0:                # degrees/second
+        return max(0.05, 360.0 / rate)
+    return EMISSIVE_CYCLE_SECONDS
+
+
+def _emissive_cycle(nt, colors, zone_index, zone_count, x, y, seconds):
+    """A colour that ROLLS through `colors`, offset by this zone's position.
+
+    A multi-colour emissive is not three zones lit at once in three colours --
+    it travels. `rwd_emissive_0014` ("RGB") reads red, then green, then blue, so
+    the colour list is a SEQUENCE in time and the mask's channels are where the
+    wave is at each moment. Giving zone k a phase offset of k/zone_count turns
+    that into a wave crossing the model rather than the whole chassis blinking
+    in unison.
+    """
+    phase = nt.nodes.new("ShaderNodeValue")
+    phase.label = "emissive phase (seconds)"
+    phase.location = (x - 700, y)
+    try:
+        drv = phase.outputs[0].driver_add("default_value").driver
+        drv.type = "SCRIPTED"
+        drv.expression = "frame / %g / %g" % (
+            max(1e-6, bpy.context.scene.render.fps), seconds)
+    except Exception:
+        phase.outputs[0].default_value = 0.0
+
+    offset = _math(nt, "ADD", x - 520, y, phase.outputs[0],
+                   float(zone_index) / max(1, zone_count),
+                   label=f"zone {zone_index} phase")
+    wrap = nt.nodes.new("ShaderNodeMath")
+    wrap.operation = "WRAP"
+    wrap.location = (x - 340, y)
+    nt.links.new(offset.outputs[0], wrap.inputs[0])
+    wrap.inputs[1].default_value = 1.0
+    wrap.inputs[2].default_value = 0.0
+
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.location = (x - 160, y)
+    ramp.label = "emissive colour cycle"
+    nt.links.new(wrap.outputs[0], ramp.inputs[0])
+    elements = ramp.color_ramp.elements
+    n = len(colors)
+    while len(elements) > 1:
+        elements.remove(elements[-1])
+    elements[0].position = 0.0
+    elements[0].color = (*colors[0], 1.0)
+    for i in range(1, n):
+        e = elements.new(i / float(n))
+        e.color = (*colors[i], 1.0)
+    last = elements.new(1.0)          # wrap back to the first colour
+    last.color = (*colors[0], 1.0)
+    return ramp.outputs["Color"]
+
+
+#: Cosmetic keys a caller sets when it is importing a PLAYER CHASSIS.
+COSMETIC_OPT_KEYS = ("tint", "emissive", "cosmetic")
+
+
+def cosmetic_requested(opts: dict | None) -> bool:
+    """Is this import a player chassis, rather than level geometry?
+
+    ⛔ The cosmetic passes used to run on EVERY material, gated only on "does it
+    have an emission map". That is true of ordinary level surfaces: 87 of the
+    241 materials in `mpl_arena_a` (36%) carry one, none of them flagged
+    `is_emissive`, and each was being pulled apart into red/green/blue zones and
+    recoloured -- so the arena lit up in cosmetic RGB.
+
+    The data cannot tell the two apart: chassis packages have ZERO emission-map
+    materials flagged `is_emissive`, exactly like the arena, so there is no
+    field to test. Only the caller knows what it is importing, which is why this
+    is an explicit opt-in. A scene/level import sets none of these keys and is
+    therefore left alone; `cosmetic` exists for a chassis imported with no
+    cosmetic chosen, which still needs the zone split (see below).
+    """
+    if not isinstance(opts, dict):
+        return False
+    return any(opts.get(k) for k in COSMETIC_OPT_KEYS)
+
+
+def build_cosmetic_emissive(nt, bsdf, spec, channels, mat, opts) -> bool:
+    """Recolour the emissive ZONE MASK with the player's emissive cosmetic.
+
+    The chassis emissive map is a mask, not a picture: its shipped red/green are
+    DEFAULTS the player's chosen emissive replaces, mask channel N taking colour
+    N. `rwd_emissive_0014` ("RGB") settles the mapping outright -- it authors
+    exactly #ff0000, #00ff00, #0000ff for channels 0,1,2 -- and the colour-count
+    histogram across the 40 shipped emissives (1, 2 or 3) never exceeds the
+    three mask channels.
+
+    ⚠ This runs even with no cosmetic chosen, because feeding the mask straight
+    into Emission Color is wrong on its own terms: the channels then ADD, so the
+    16.6%-lit red zone and the 2.4%-lit green zone light YELLOW where they
+    overlap (1.9% of the body) instead of the overlap belonging to one zone.
+    """
+    if not cosmetic_requested(opts):
+        return False                     # level geometry: not a zone mask
+    colors = resolve_emissive(opts) or IDENTITY_ZONES
+    emis = channels.get("emission")
+    if not isinstance(emis, dict) or not emis.get("file"):
+        return False
+    socket = _principled_input(bsdf, "Emission Color")
+    if socket is None or not socket.links:
+        return False
+    src = socket.links[0].from_socket
+
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    sep.location = (bsdf.location.x - 900, bsdf.location.y - 1750)
+    sep.label = "emissive zone mask"
+    nt.links.new(src, sep.inputs[0])
+
+    rolling = len(colors) > 1 and emissive_animated(opts)
+    seconds = emissive_cycle_seconds(opts)
+    acc = None
+    x = bsdf.location.x - 700
+    y = bsdf.location.y - 1750
+    for i in range(3):
+        # Every mask channel is a zone; with one colour they all share it.
+        if rolling:
+            zone_color = _emissive_cycle(nt, colors, i, 3, x + i * 260,
+                                         y - i * 320, seconds)
+        elif i < len(colors):
+            zone_color = None
+        else:
+            continue
+        mix, (fi, ai, bi, ri) = _mix_node(nt, "RGBA", "MIX", x + i * 260 + 60, y,
+                                          label=f"emissive zone {i}")
+        if acc is None:
+            mix.inputs[ai].default_value = (0.0, 0.0, 0.0, 1.0)
+        else:
+            nt.links.new(acc, mix.inputs[ai])
+        if zone_color is None:
+            mix.inputs[bi].default_value = (*colors[i], 1.0)
+        else:
+            nt.links.new(zone_color, mix.inputs[bi])
+        nt.links.new(sep.outputs[i], mix.inputs[fi])
+        acc = mix.outputs[ri]
+    if acc is None:
+        return False
+    nt.links.new(acc, socket)
+    mat["le_cosmetic_emissive"] = str(opts.get("emissive") or "explicit")
+    mat["le_cosmetic_emissive_colors"] = "; ".join(
+        "%.3f,%.3f,%.3f" % tuple(c) for c in colors)
+    if rolling:
+        mat["le_cosmetic_emissive_rolls"] = (
+            f"{len(colors)} colours cycled over {seconds:.2f}s (EmissiveUnk2), each "
+            f"mask zone phase-offset (opts['emissive_animate'])")
+    return True
+
+
+#: Colour attribute carrying the per-vertex tint zone id (see
+#: `scatter_import.TINT_ZONE_ATTR` and `scripts/evr_vertex_zones.py`).
+TINT_ZONE_ATTR = "EchoTintZone"
+
+#: How far the greyscale albedo is lifted toward white before the tint
+#: multiplies it. 0 = raw multiply (the tint goes muddy in the atlas' 0.15
+#: darks); 1 = flat tint with no surface detail at all.
+TINT_STRENGTH = 0.75
+
+
+def tint_strength(opts: dict | None) -> float:
+    """`opts['tint_strength']` -- 0..1, default `TINT_STRENGTH`."""
+    if not opts:
+        return TINT_STRENGTH
+    try:
+        return min(max(float(opts.get("tint_strength", TINT_STRENGTH)), 0.0), 1.0)
+    except (TypeError, ValueError):
+        return TINT_STRENGTH
+
+
+def tint_mode(opts: dict | None) -> str:
+    """`opts['tint_mode']` -- 'zone' (default), 'multiply' or 'duotone'.
+
+    ZONE is the right SHAPE of answer -- the game gives a chassis two hard-edged
+    regions, body and accent, plainly visible in Ready At Dawn's own art and in
+    the shipped Bubblemint reference (pink torso, mint shoulder and arm armour).
+    But the mask that separates them is NOT yet identified (see `zone_source`
+    for what has been ruled out), so zone mode currently paints the wrong parts.
+
+    MULTIPLY is therefore the default: it tints the whole surface, which is
+    wrong in placement but never wrong in COLOUR, and looks far closer to the
+    game than a confidently-misplaced split. Switch to `zone` once the mask is
+    known.
+
+    MULTIPLY keeps the albedo's own light/dark structure and colours it, which
+    is what the atlas is built for: the samurai body map runs 0.15 (under-parts)
+    to 0.9 (armour plates), and a plate multiplied by the tint's main colour
+    lands exactly on that colour.
+
+    DUOTONE maps that luminance between the two authored colours instead. It
+    uses both values, but measured on the shipped chassis it compresses the
+    albedo's 0.15..0.9 range into roughly 0.13..0.18 red -- the render goes flat
+    and pale and the plate/underpart split disappears. Kept because the second
+    colour's real role is unproven; it is not the default.
+    """
+    if not opts:
+        return "multiply"
+    mode = str(opts.get("tint_mode", "multiply")).lower()
+    return mode if mode in ("zone", "multiply", "duotone") else "multiply"
+
+
+#: Where the two-zone split comes from. `albedo` is the one that reproduces the
+#: game; the rest are kept because they were the candidates ruled out.
+ZONE_SOURCES = ("albedo", "vertex", "specular_r", "specular_g", "specular_b",
+                "specular_a", "composite_r", "composite_g", "composite_b")
+
+#: Albedo luminance above which a texel belongs to zone 1. The body atlas is
+#: strongly BIMODAL -- a dark cluster at 32-95 and a bright one at 208-255, with
+#: a trough between -- so anything in that trough separates the same two regions;
+#: 0.5 sits in it and matches the shipped Bubblemint reference's chest plate.
+ZONE_THRESHOLD = 0.45
+
+#: Albedo saturation at or above which a texel keeps its AUTHORED colour and is
+#: not tinted at all. A tintable region is painted greyscale on purpose, so real
+#: saturation marks the parts the tint must leave alone (the gold trim). 0 = off.
+TINT_PRESERVE_SATURATION = 0.25
+
+
+def tint_preserve_saturation(opts: dict | None) -> float:
+    """`opts['tint_preserve_saturation']` -- 0..1, default keeps coloured texels."""
+    if not opts:
+        return TINT_PRESERVE_SATURATION
+    try:
+        return min(max(float(opts.get("tint_preserve_saturation",
+                                      TINT_PRESERVE_SATURATION)), 0.0), 1.0)
+    except (TypeError, ValueError):
+        return TINT_PRESERVE_SATURATION
+
+
+def zone_threshold(opts: dict | None) -> float:
+    """`opts['tint_zone_threshold']` -- 0..1, default `ZONE_THRESHOLD`."""
+    if not opts:
+        return ZONE_THRESHOLD
+    try:
+        return min(max(float(opts.get("tint_zone_threshold", ZONE_THRESHOLD)), 0.0), 1.0)
+    except (TypeError, ValueError):
+        return ZONE_THRESHOLD
+
+
+def zone_source(opts: dict | None) -> str:
+    """`opts['tint_zone_source']` -- which signal splits the two tint colours.
+
+    ⛔ NOTHING here reproduces the game, and the whole list is recorded so the
+    next attempt does not re-walk it. The game gives a chassis two CLEAN,
+    hard-edged regions following panel geometry (Ready At Dawn's own art: teal
+    plates, gold trim). Every candidate below was rendered and compared:
+
+      * `albedo`      the base texture's luminance, thresholded through its
+                      bimodal trough. Splits roughly plate-vs-recess but is
+                      PATCHY -- it keys on every scratch, wear mark and baked
+                      shading variation, so the regions break up.
+      * `composite_b` a genuinely clean two-value mask, but it is above 0.5
+                      almost everywhere: thresholded it tints the whole chassis
+                      one colour.
+      * `vertex`      the per-vertex colour at stream-0 +4. Shading the chassis
+                      by it leaves the whole BODY black and lights only the
+                      helmet and hands -- a body-part id, not a tint split.
+      * `specular_*`  channels of the 4096 data map: R is plates-vs-edges, B is
+                      sparse (3.3% lit), A near-uniform. Its RGB is a warm
+                      "gold" hue over ~47% of the surface and spread across
+                      every part, so it cannot isolate trim either -- treating
+                      it as metal F0 turns most of the body gold.
+      * `composite_r/g` R is dead flat (the packer's filler), G is ambient
+                      occlusion.
+
+    Until one of these is settled, `tint_mode` stays on `multiply`: a
+    whole-surface tint is wrong in PLACEMENT but never wrong in COLOUR, and does
+    not break the chassis into patches in the wrong places.
+    """
+    if not opts:
+        return "albedo"
+    src = str(opts.get("tint_zone_source", "albedo")).lower()
+    return src if src in ZONE_SOURCES else "albedo"
+
+
+def _zone_mask_socket(nt, spec, pkg_dir, opts, x, y, albedo=None):
+    """The 0..1 socket that selects between the tint's two colours."""
+    src = zone_source(opts)
+    if src == "albedo":
+        if albedo is None:
+            return None
+        lum = nt.nodes.new("ShaderNodeRGBToBW")
+        lum.label = "albedo luminance"
+        lum.location = (x - 460, y + 120)
+        nt.links.new(albedo, lum.inputs[0])
+        step = nt.nodes.new("ShaderNodeMath")
+        step.operation = "GREATER_THAN"
+        step.label = "zone cut"
+        step.location = (x - 280, y + 120)
+        nt.links.new(lum.outputs[0], step.inputs[0])
+        step.inputs[1].default_value = zone_threshold(opts)
+        return step.outputs[0]
+    if src == "vertex":
+        attr = nt.nodes.new("ShaderNodeAttribute")
+        attr.attribute_name = TINT_ZONE_ATTR
+        attr.location = (x - 460, y + 120)
+        attr.label = "tint zone (per vertex)"
+        sep = nt.nodes.new("ShaderNodeSeparateColor")
+        sep.location = (x - 260, y + 120)
+        nt.links.new(attr.outputs["Color"], sep.inputs[0])
+        return sep.outputs[0]
+    role = ("layer0_composite_components" if src.startswith("composite")
+            else "layer0_specular_map")
+    tex = (spec.get("role_textures") or {}).get(role)
+    if not tex:
+        return None
+    img = _load_image(pkg_dir, f"textures/{tex}.dds", "Non-Color", "CHANNEL_PACKED")
+    if img is None:
+        return None
+    node = _tex_node(nt, img, "Non-Color", x - 620, y + 120, "CHANNEL_PACKED",
+                     label=f"tint zone ({src})")
+    channel = src.rsplit("_", 1)[1]
+    if channel == "a":
+        return node.outputs["Alpha"]
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    sep.location = (x - 380, y + 120)
+    nt.links.new(node.outputs["Color"], sep.inputs[0])
+    return sep.outputs[{"r": 0, "g": 1, "b": 2}[channel]]
+
+
+def build_cosmetic_tint(nt, bsdf, mat, opts, spec=None, pkg_dir=None) -> bool:
+    """Colour the greyscale albedo with the player's cosmetic tint.
+
+    Gated the same way as the emissive: a level import must never be tinted.
+    """
+    if not cosmetic_requested(opts):
+        return False
+    resolved = resolve_tint(opts)
+    if resolved is None:
+        return False
+    prim, sec = resolved
+    base_in = _principled_input(bsdf, "Base Color")
+    if base_in is None or not base_in.links:
+        return False                      # nothing to tint
+    src = base_in.links[0].from_socket
+    mode = tint_mode(opts)
+    x, y = bsdf.location.x - 480, bsdf.location.y + 420
+
+    if mode == "zone":
+        # The two colours belong to two hard-edged REGIONS. The albedo still
+        # supplies wear, panel lines and shading, but a straight multiply is far
+        # too weak: the atlas runs down to 0.15, so a tint multiplied by it goes
+        # muddy exactly where the armour should read strongest. `tint_strength`
+        # compresses the albedo toward 1.0 first, so the tint stays saturated
+        # and the map only modulates it.
+        mask = _zone_mask_socket(nt, spec or {}, pkg_dir, opts, x, y, src)
+        if mask is None:
+            return False
+        pick, (pf, pa, pb, pr) = _mix_node(nt, "RGBA", "MIX", x - 60, y + 120,
+                                           label="zone 0 / zone 1")
+        # Zone 0 is the BULK (11274 of 13047 body vertices) and takes the tint's
+        # SECONDARY; zone 1 is the 14% accent and takes the primary. That is the
+        # way round the cosmetic editor's own UI presents them -- it swaps the
+        # two when it draws the swatches, so the colour a player thinks of as
+        # the tint's main one is the struct's `secondary`.
+        # Zone 0 (below the cut, the darker regions) takes the tint's PRIMARY;
+        # zone 1 (the bright plates) takes the secondary -- the colour a player
+        # reads as the tint's main one, which the editor's UI also shows first.
+        pick.inputs[pa].default_value = (*prim, 1.0)
+        pick.inputs[pb].default_value = (*sec, 1.0)
+        nt.links.new(mask, pick.inputs[pf])
+        strength = tint_strength(opts)
+        detail = src
+        if strength > 0.0:
+            lift, (lf, la, lb, lr) = _mix_node(nt, "RGBA", "MIX", x - 240, y - 200,
+                                               label=f"albedo lift {strength:.2f}")
+            lift.inputs[lf].default_value = strength
+            nt.links.new(src, lift.inputs[la])
+            lift.inputs[lb].default_value = (1.0, 1.0, 1.0, 1.0)
+            detail = lift.outputs[lr]
+        mix, (fi, ai, bi, ri) = _mix_node(nt, "RGBA", "MULTIPLY", x, y,
+                                          label="cosmetic tint (zone)")
+        mix.inputs[fi].default_value = 1.0
+        nt.links.new(detail, mix.inputs[ai])
+        nt.links.new(pick.outputs[pr], mix.inputs[bi])
+        tinted = mix.outputs[ri]
+
+        # Parts of a chassis are NOT tinted -- they keep the colour the artist
+        # painted (the gold trim being the obvious one). The albedo says which:
+        # a tinted region is authored GREYSCALE precisely so the tint can supply
+        # its hue, so anything carrying real saturation was meant to keep it.
+        keep = tint_preserve_saturation(opts)
+        if keep > 0.0:
+            hsv = nt.nodes.new("ShaderNodeSeparateColor")
+            try:
+                hsv.mode = "HSV"
+            except (AttributeError, TypeError):
+                hsv = None
+            if hsv is not None:
+                hsv.location = (x - 240, y + 320)
+                hsv.label = "albedo saturation"
+                nt.links.new(src, hsv.inputs[0])
+                cut = _math(nt, "GREATER_THAN", x - 60, y + 320,
+                            hsv.outputs[1], keep, label="authored colour")
+                guard, (gf, ga, gb, gr) = _mix_node(
+                    nt, "RGBA", "MIX", x + 180, y,
+                    label="keep authored colour")
+                nt.links.new(tinted, guard.inputs[ga])
+                nt.links.new(src, guard.inputs[gb])
+                nt.links.new(cut.outputs[0], guard.inputs[gf])
+                tinted = guard.outputs[gr]
+                mat["le_cosmetic_tint_preserved_above"] = keep
+        mix = None
+        nt.links.new(tinted, base_in)
+        mat["le_cosmetic_tint"] = str(opts.get("tint") or "explicit")
+        mat["le_cosmetic_tint_mode"] = mode
+        mat["le_cosmetic_tint_primary"] = "%.4f,%.4f,%.4f" % tuple(prim)
+        mat["le_cosmetic_tint_secondary"] = "%.4f,%.4f,%.4f" % tuple(sec)
+        mat["le_cosmetic_tint_strength"] = strength
+        mat["le_cosmetic_tint_zone_source"] = zone_source(opts)
+        mat["le_cosmetic_tint_zone_threshold"] = zone_threshold(opts)
+        return True
+    elif mode == "duotone":
+        lum = nt.nodes.new("ShaderNodeRGBToBW")
+        lum.label = "albedo luminance (tint ramp)"
+        lum.location = (x - 220, y)
+        nt.links.new(src, lum.inputs[0])
+        mix, (fi, ai, bi, ri) = _mix_node(nt, "RGBA", "MIX", x, y,
+                                          label="cosmetic tint (duotone)")
+        mix.inputs[ai].default_value = (*prim, 1.0)
+        mix.inputs[bi].default_value = (*sec, 1.0)
+        nt.links.new(lum.outputs[0], mix.inputs[fi])
+    else:
+        # `secondary` is the tint's MAIN colour: it is the field the menu swatch
+        # is mostly made of, and the cosmetic editor shows it as "primary"
+        # (its UI swaps the two -- see data/evr_tints.json `note`).
+        mix, (fi, ai, bi, ri) = _mix_node(nt, "RGBA", "MULTIPLY", x, y,
+                                          label="cosmetic tint")
+        mix.inputs[fi].default_value = 1.0
+        nt.links.new(src, mix.inputs[ai])
+        mix.inputs[bi].default_value = (*sec, 1.0)
+    nt.links.new(mix.outputs[ri], base_in)
+
+    mat["le_cosmetic_tint"] = str(opts.get("tint") or "explicit")
+    mat["le_cosmetic_tint_mode"] = mode
+    mat["le_cosmetic_tint_primary"] = "%.4f,%.4f,%.4f" % tuple(prim)
+    mat["le_cosmetic_tint_secondary"] = "%.4f,%.4f,%.4f" % tuple(sec)
+    return True
+
+
+#: Opacity given to a blended surface whose every alpha source measures fully
+#: opaque.  ⚠ This number is NOT recovered from the data -- see
+#: `degenerate_blend_alpha` for exactly what is and is not known.
+BLEND_OPAQUE_ALPHA = 0.25
+
+
+def blend_opaque_alpha(opts: dict | None) -> float:
+    """`opts['blend_opaque_alpha']` -- opacity for a degenerate blend. 0 = off."""
+    if not opts:
+        return BLEND_OPAQUE_ALPHA
+    try:
+        return min(max(float(opts.get("blend_opaque_alpha",
+                                      BLEND_OPAQUE_ALPHA)), 0.0), 1.0)
+    except (TypeError, ValueError):
+        return BLEND_OPAQUE_ALPHA
+
+
+def degenerate_blend_alpha(spec: dict, channels: dict) -> bool:
+    """Is this a transparent draw whose alpha chain is provably a no-op?
+
+    A material the engine puts in the forward-transparent pass
+    (`eMTForwardTransparent` + a non-additive blend equation) blends
+    `dst = src*a + dst*(1-a)`.  At `a = 1` that IS the opaque result, so the
+    sorted draw buys nothing -- an engine does not author that by accident.
+
+    The samurai chassis visor (`4e318bad42bc8c19`, `mesh 4` of
+    `c2e85be6ffce4563`) is the measured case, and it is worth stating what was
+    checked, because the conclusion is a NEGATIVE:
+
+      * it is `eMTForwardTransparent` / `eBlendTranslucent` / BLEND on disk;
+      * its only alpha term is `BASE_COLOR_ALPHA` off a BC1 map, and that map
+        is opaque at every one of its 262144 texels (`opaque_fraction` 1.0);
+      * `k_alpha` is absent, so the global multiplier defaults to 1.0;
+      * of its 74 authored properties none is an opacity -- 11 were recovered
+        as CSymbol64 preimages (`baseuscale`, `rim_falloff`, `pattern_tint_0`,
+        `eye_emissive_tint`, ...) and the 26 unique to this material carry
+        gloss/fresnel-shaped values (15.0, 0.234, 0.103, 0.025), not coverage;
+      * the cosmetic TINT it is drawn with is a 128x128 BC7 palette whose alpha
+        measures 0.992 mean -- it supplies colour, not coverage.
+
+    So the opacity genuinely is not in the extracted material, while the
+    geometry insists it must exist: the plate sits at z 0.031..0.104 directly
+    in front of eyes at z 0.052 and irises at 0.063, and the 2110-vertex face
+    behind it -- eyes, cheeks, nose ridge, mouth -- is fully modelled and
+    completely invisible while the plate draws opaque.
+
+    ⚠ Therefore the VALUE is an appearance choice (`BLEND_OPAQUE_ALPHA`), not a
+    recovered one, and it is tagged as such on the material.  What is NOT a
+    guess is that 1.0 is wrong: it is the one value that makes the authored
+    blend equation a no-op.  `opts['blend_opaque_alpha'] = 0` restores the
+    opaque card.
+    """
+    if resolve_render_mode(spec) != "BLEND":
+        return False
+    if is_additive_blend(spec):
+        return False                          # the Add/Transparent path owns it
+    # ⛔ The blend EQUATION must be the thing that is translucent. A material can
+    # reach the blend pass on its MATTYPE alone while still carrying
+    # `eBlendOpaque` -- `eMTSkirt` is exactly that, a decal sheet whose coverage
+    # comes from its own alpha map. Forcing a flat opacity onto one dissolves a
+    # surface the artist authored as solid: on the Lone Echo 2 Delta unit it
+    # turned the arm's vein detail into transparent blue.
+    if str(spec.get("blend_mode_name") or "") in ("eBlendOpaque", ""):
+        return False
+    if k_alpha(spec) != 1.0:
+        return False                          # a real global alpha is authored
+    alpha_ch = channels.get("alpha")
+    if not isinstance(alpha_ch, dict):
+        return False
+    fraction = alpha_ch.get("opaque_fraction")
+    if fraction is None:
+        return False                          # not measured -> do not act
+    try:
+        return float(fraction) >= 1.0
+    except (TypeError, ValueError):
+        return False
+
+
+def build_degenerate_blend_alpha(nt, bsdf, spec, channels, mat, opts) -> bool:
+    """Give a no-op transparent draw a real opacity. Returns True if applied."""
+    if not degenerate_blend_alpha(spec, channels):
+        return False
+    value = blend_opaque_alpha(opts)
+    if value >= 1.0 or value <= 0.0:
+        return False
+    alpha_in = _principled_input(bsdf, "Alpha")
+    if alpha_in is None:
+        return False
+    for link in list(alpha_in.links):
+        nt.links.remove(link)                 # the map is 1.0 everywhere
+    alpha_in.default_value = value
+    mat["le_degenerate_blend_alpha"] = (
+        f"authored {spec.get('blend_mode_name') or 'BLEND'} whose only alpha "
+        f"source measures fully opaque; alpha={value} is an APPEARANCE choice "
+        f"(opts['blend_opaque_alpha']), not recovered from the material")
+    return True
 
 
 def build_translucent_emissive_alpha(nt, bsdf, spec, channels, mat) -> bool:
@@ -1801,6 +2749,26 @@ def _mix_node(nt, data_type, blend_type, x, y, label=""):
 #: presented as recovered. Change it freely; nothing downstream depends on it.
 UV_SCROLL_RATE_DEFAULT = 0.02
 
+#: Frames in the sky FLIPBOOK -- **measured**, not authored here.
+#:
+#: The note above says "there is no rate, no frame count and no direction
+#: anywhere", and the frame COUNT half of that is now recovered: the texture
+#: states it itself. Autocorrelating the row profile of `bb7ef8ce6d29476c` and
+#: `e36cdae9c6eaa43a` gives a period of exactly 1/8 of the height on BOTH, at
+#: both shipped resolutions -- 64 px over 512 (r=0.88) and 128 over 1024
+#: (r=0.80/0.85). Eight bands, each one animation frame.
+#:
+#: ⭐ Corroborated by the GEOMETRY, independently. The war room's dome pieces
+#: that bind `b149cb9cf8b7a9c3` (mesh 65/67, 480 verts) have UVs spanning
+#: `u[0.046..0.954]` but only `v[0.445..0.555]` -- a 0.110 slice of V against
+#: 1/8 = 0.125, centred at mid-texture. The mesh samples exactly ONE band, so
+#: advancing the animation can only mean stepping V by 1/8.
+#:
+#: ⚠ The RATE is still unknown, and the material's property is spelled
+#: `layer0_albedo_map_uoffset` (U) while the frames stack along V -- the
+#: geometry is what settles the axis, not the name.
+UV_FLIPBOOK_FRAMES = 8
+
 #: Material properties that mean "this layer's UVs move at runtime".
 UV_SCROLL_PROPERTIES = (
     "layer0_albedo_map_uoffset", "layer1_albedo_map_uoffset",
@@ -1833,12 +2801,31 @@ def uv_scroll_axes(spec: dict) -> tuple:
     return scroll_u, scroll_v
 
 
-def _drive_uv_scroll(mapping, axes, rate: float) -> list:
+#: Flipbook steps per SECOND when a material stacks frames along V.
+#:
+#: ⚠ NOT FROM THE DATA, and deliberately separate from `uv_scroll_rate`. The
+#: frame COUNT is read off the texture (`evr_flipbook` counts the bands); the
+#: SPEED is not authored anywhere -- the sky materials carry exactly one
+#: property between them and it is an offset, not a rate. Reusing the scroll
+#: rate made the sky effectively static: at its 0.02/s default the driver
+#: reads `floor(f / 24 * 0.02 * 8) / 8`, which is still 0 at frame 96. The
+#: level runs this fast enough to read as flicker, so the default is a step
+#: every other frame at 24 fps.
+UV_FLIPBOOK_STEPS_DEFAULT = 12.0
+
+
+def _drive_uv_scroll(mapping, axes, rate: float, frames: int = 0,
+                     steps: float = UV_FLIPBOOK_STEPS_DEFAULT) -> list:
     """Drive the Mapping node's Location from the scene clock.
 
     A driver rather than keyframes: it stays correct however long the timeline
     is and needs no bake, and `frame / fps` makes the rate independent of the
     scene's frame rate.
+
+    `frames > 1` makes it a FLIPBOOK: the offset advances in discrete `1/frames`
+    steps instead of sliding continuously, which is what an 8-band sky texture
+    actually does. See `UV_FLIPBOOK_FRAMES` for how the count was measured and
+    why the step lands on V.
     """
     driven = []
     for index, active in enumerate(axes):
@@ -1858,7 +2845,15 @@ def _drive_uv_scroll(mapping, axes, rate: float) -> list:
         var.targets[0].id = bpy.context.scene
         var.targets[0].data_path = "frame_current"
         fps = getattr(getattr(bpy.context.scene, "render", None), "fps", 24) or 24
-        driver.expression = "f / %d * %r" % (int(fps), float(rate))
+        if frames > 1:
+            # floor() to a frame index, then back to a UV offset. A sky band is
+            # 1/frames tall, so this lands each step exactly on the next band.
+            # `steps` is per SECOND and is its own setting -- see
+            # `UV_FLIPBOOK_STEPS_DEFAULT` for why it is not the scroll rate.
+            driver.expression = "floor(f / %d * %r) %% %d / %d" % (
+                int(fps), float(steps), int(frames), int(frames))
+        else:
+            driver.expression = "f / %d * %r" % (int(fps), float(rate))
         driven.append("uv"[index] if index < 2 else str(index))
     return driven
 
@@ -2172,10 +3167,33 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     # calls correct: "a flat colour with NO texture is the faithful result" --
     # untextured, NOT invisible.
     authored_blended = int(spec.get("blend_mode") or 0) != 0
+    # ⭐ NEVER AUTHORED, which is not the same thing as UNROUTED. The rule above
+    # keeps an opaque decal OPAQUE on purpose, because an unrouted role still
+    # names REAL ART -- that is the lobby i663/i899 revert and it stands
+    # untouched here.
+    #
+    # This is the other case. The material's ONLY declared texture was an
+    # ENGINE DEBUG PLACEHOLDER -- `34dfbe67e4424f76`, the UV test grid: a
+    # checkerboard captioned "(0, 0)" / "(1, 1)" with U and V axis arrows (see
+    # `le_mesh.materials.PLACEHOLDER_TEXTURES`). After `drop_placeholder_roles`
+    # the material binds nothing whatsoever: no channels, no roles. So
+    # "untextured, NOT invisible" has nothing left to be untextured WITH -- the
+    # slot was never authored at all, and the flat `bakecolor` fallback
+    # fabricates a large white lit slab out of a debug asset.
+    #
+    # ⚠ Deliberately narrow: the placeholder must be the ONLY thing the
+    # material ever declared. A material that retains ANY other role or channel
+    # is untouched, so this cannot reach the reverted case. Exactly ONE
+    # material in the whole extract qualifies -- `mpl_combat_war_room`'s
+    # `0a9fbf3fa203ce13` (`eMTSkirt` + `eBlendOpaque`), which was drawing as
+    # the level's beige ceiling.
+    never_authored = (bool(spec.get("placeholder_roles"))
+                      and not channels
+                      and not (spec.get("role_textures") or {}))
     nothing_to_draw = (bc is None
                        and channels.get("emission") is None
                        and resolve_render_mode(spec) == "BLEND"
-                       and authored_blended)
+                       and (authored_blended or never_authored))
     # Black base ONLY when emission is the colour source -- otherwise a white
     # base would be added on top of the glow and double it. With no emission
     # either there is nothing to double, and zeroing turns an untextured decal
@@ -2664,24 +3682,46 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
             # lower", which is how a lock/overlay layer is authored.
             _stack = emission_layers(spec)
             if len(_stack) > 1:
-                _y = -1100
+                _y, _composited = -1100, []
                 for _idx, _chan in _stack[1:]:
-                    _img = _load_image(pkg_dir, _chan.get("file", ""),
-                                       _chan.get("colorspace", "sRGB"),
-                                       image_alpha_mode(_chan))
-                    if _img is None:
-                        continue
                     _y -= 260
-                    _node = _tex_node(nt, _img, _chan.get("colorspace", "sRGB"),
-                                      -900, _y, image_alpha_mode(_chan),
-                                      label=f"emissive_map L{_idx}")
+                    # The gate is resolved BEFORE the image is loaded: a layer
+                    # parked at its OFF extreme must leave no node behind, or a
+                    # tree probe reads the suppressed texture as still present.
                     _blend = layer_blend_of(spec, _idx)
                     _sock, _const = (None, 1.0)
                     if _blend is not None:
                         _sock, _const = _layer_gate(nt, pkg_dir, _blend,
                                                     "emission", opts, -2400, _y)
+                    # ⭐ The gate the layer NAMES, read off the vertex data by
+                    # `evr_vertex_gate` and stamped on the blend by the
+                    # extractor. Before this the layer composited at
+                    # `amount_constant` 1.0 and replaced the one beneath it --
+                    # `mpl_arena_a`'s tunnel hand decal smeared over the ring
+                    # lights, and its gate is authored [0,0,0,255], CLOSED.
+                    # ⚠ Only a CONSTANT gate is stamped; a varying one is left
+                    # for the mask path, and dyson's lock art reads OPEN so it
+                    # is untouched.
+                    _gv = (_blend or {}).get("vertex_blend_value")
+                    if _sock is None and isinstance(_gv, (list, tuple)) and _gv:
+                        try:
+                            # MULTIPLIED in, not assigned: `_layer_gate` has
+                            # already folded `channel_blend_alpha` into `_const`
+                            # and an open gate must not throw that away.
+                            _const = _sat((1.0 if _const is None else _const)
+                                          * max(0.0, min(1.0, float(_gv[0]) / 255.0)))
+                        except (TypeError, ValueError):
+                            pass
                     if _sock is None and _const is not None and _const <= 0.0:
                         continue                 # parked at its OFF extreme
+                    _img = _load_image(pkg_dir, _chan.get("file", ""),
+                                       _chan.get("colorspace", "sRGB"),
+                                       image_alpha_mode(_chan))
+                    if _img is None:
+                        continue
+                    _node = _tex_node(nt, _img, _chan.get("colorspace", "sRGB"),
+                                      -900, _y, image_alpha_mode(_chan),
+                                      label=f"emissive_map L{_idx}")
                     # `le_mesh.materials`: mode 6/10 are the LERP forms
                     # `(1-m)*base + m*layer` (6 is the authored default), while
                     # 1/7 are ADDITIVE `base + layer*m`. Using one for the other
@@ -2700,7 +3740,11 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                         _mix.inputs[_fi].default_value = (
                             1.0 if _const is None else float(_const))
                     em_src = _mix.outputs[_ri]
-                mat["le_emissive_layers"] = [int(i) for i, _c in _stack]
+                    _composited.append(int(_idx))
+                # The layers actually COMPOSITED, not the layers offered: a
+                # gate-suppressed layer is absent from the tree and must read
+                # that way here too.
+                mat["le_emissive_layers"] = [int(_stack[0][0])] + _composited
 
             # ── AO, OR GENUINELY EMISSIVE? ───────────────────────────────
             # The AO reading is right for most materials (verified against the
@@ -2720,7 +3764,7 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
             # so NOTHING ever reached Emission and every glow mask was
             # inverted into Base Colour instead. `emissive_is_ao` keeps this
             # test and adds two that outrank it; see its docstring.
-            treat_as_ao = emissive_is_ao(spec, spec.get("channels", {}))
+            treat_as_ao = emissive_is_ao(spec, spec.get("channels", {}), pkg_dir)
 
             # ⛔ DO NOT gate this on the texture's COLORSPACE. Tried, wrong,
             # reverted -- and it broke 41 materials before it was caught.
@@ -3177,7 +4221,8 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
     scroll_u, scroll_v = uv_scroll_axes(spec)
     scroll_rate = opts.get("uv_scroll_rate", UV_SCROLL_RATE_DEFAULT)
     wants_scroll = (scroll_u or scroll_v) and scroll_rate
-    if (uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0)) or wants_scroll:
+    wants_slice = float(spec.get("flipbook_v_scale") or 1.0) != 1.0
+    if (uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0)) or wants_scroll             or wants_slice:
         try:
             targets = [n for n in nt.nodes
                        if n.type == "TEX_IMAGE" and not n.inputs["Vector"].links]
@@ -3187,19 +4232,52 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 mapping = nt.nodes.new("ShaderNodeMapping")
                 mapping.location = (-2600, 400)
                 labels = []
-                if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0):
-                    mapping.inputs["Scale"].default_value = (
-                        float(uv_scale[0]), float(uv_scale[1]), 1.0)
-                    labels.append(f"uv scale {uv_scale[0]:g}x{uv_scale[1]:g}")
+                _sx, _sy = ((float(uv_scale[0]), float(uv_scale[1]))
+                            if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0)
+                            else (1.0, 1.0))
+                # ⭐ SLICE V TO ONE FRAME. The sky texture stacks 8 bands and
+                # `mpl_arena_a` maps it two ways: meshes 2/3 span V 0.445..0.555
+                # -- already one band -- while meshes 4/5 span the whole 1.207
+                # and rendered all eight at once, which is the stack of stripes
+                # the sky came in as. `flipbook_v_scale` is 1/rows only for the
+                # second kind; see `evr_scene_extract._stamp_flipbooks`.
+                _vslice = float(spec.get("flipbook_v_scale") or 1.0)
+                if _vslice != 1.0:
+                    _sy *= _vslice
+                    labels.append("flipbook 1/%d of V" % round(1.0 / _vslice))
+                if (_sx, _sy) != (1.0, 1.0):
+                    mapping.inputs["Scale"].default_value = (_sx, _sy, 1.0)
+                    if uv_scale and tuple(uv_scale[:2]) != (1.0, 1.0):
+                        labels.append(f"uv scale {uv_scale[0]:g}x{uv_scale[1]:g}")
                 nt.links.new(coord.outputs["UV"], mapping.inputs["Vector"])
                 for node in targets:
                     nt.links.new(mapping.outputs["Vector"], node.inputs["Vector"])
                 if wants_scroll:
+                    # FLIPBOOK: opt-in, because it changes both the axis and the
+                    # motion. The sky's frames stack along V (the dome samples a
+                    # 0.110 slice of it, ~1/8) while the material's property is
+                    # spelled `uoffset`, so turning this on drives V in discrete
+                    # 1/frames steps instead of sliding U. Off by default --
+                    # nothing moves axis silently.
+                    # The row count is READ off the texture at extract time
+                    # (`evr_flipbook` counts the bands in its alpha); the option
+                    # is only the override for a package written before that.
+                    flipbook = int(spec.get("flipbook_rows")
+                                   or opts.get("uv_flipbook_frames", 0) or 0)
+                    axes = ((False, True) if flipbook > 1
+                            else (scroll_u, scroll_v))
                     driven = _drive_uv_scroll(
-                        mapping, (scroll_u, scroll_v), float(scroll_rate))
+                        mapping, axes, float(scroll_rate), flipbook,
+                        float(opts.get("uv_flipbook_steps",
+                                       UV_FLIPBOOK_STEPS_DEFAULT)))
                     if driven:
-                        labels.append("uv scroll %s @ %g/s"
-                                      % ("".join(driven), scroll_rate))
+                        labels.append(
+                            ("flipbook %s @ %g step/s" % ("".join(driven),
+                             opts.get("uv_flipbook_steps",
+                                      UV_FLIPBOOK_STEPS_DEFAULT)))
+                            if flipbook > 1 else
+                            ("uv scroll %s @ %g/s" % ("".join(driven),
+                                                      scroll_rate)))
                         mat["le_uv_scroll_rate"] = float(scroll_rate)
                         mat["le_uv_scroll_axes"] = "".join(driven)
                         mat["le_uv_scroll_note"] = (
@@ -3228,6 +4306,36 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
             build_translucent_emissive_alpha(nt, bsdf, spec, channels, mat)
         except Exception:
             pass
+
+    # Same defect from the other side: the surface DOES bind an alpha, but that
+    # alpha measures 1.0 at every texel, so the blend is still a no-op. Runs
+    # after the emissive rule so a material that has a real emissive coverage
+    # source keeps it.
+    try:
+        build_degenerate_blend_alpha(nt, bsdf, spec, channels, mat, opts)
+    except Exception:
+        pass
+
+    # Echo VR's data map carries the metal/roughness the Lone Echo schema reads
+    # from a channel the packer left flat. Runs before the tint so the tint
+    # still sees a finished base-colour chain.
+    try:
+        build_evr_metal_rough(nt, bsdf, spec, channels, pkg_dir, mat, opts)
+    except Exception:
+        pass
+
+    # The player's cosmetic tint colours the greyscale albedo. Runs last so it
+    # sits on top of the finished base-colour chain (layers, gates, AO), and
+    # deliberately NOT on emission -- the emissive is a ZONE MASK recoloured by
+    # its own cosmetic, which is a different choice the player makes separately.
+    try:
+        build_cosmetic_tint(nt, bsdf, mat, opts, spec, pkg_dir)
+    except Exception:
+        pass
+    try:
+        build_cosmetic_emissive(nt, bsdf, spec, channels, mat, opts)
+    except Exception:
+        pass
 
     return mat
 
@@ -3307,6 +4415,178 @@ def lightmap_variant(mat, lm_spec: dict, opts: dict | None = None, ctx: dict | N
 # ---------------------------------------------------------------------------
 # Per-mesh vertex-colour variant
 # ---------------------------------------------------------------------------
+
+#: A UV span wider than this is TILING rather than a 0..1 chart.
+PANEL_TILE_SPAN = 1.2
+
+
+def fit_texture_to_uv_bounds(mat, tex_hash: str, bounds, tag: str = ""):
+    """Map ONE texture across the mesh's whole UV range instead of tiling it.
+
+    ⭐ `mpl_arena_a`'s scoreboard (`b1d4c3494ca01a3f`) is the case. Its uv0 is a
+    WORLD-SPACE planar projection -- `u` tracks object x and `v` object y, so
+    the mesh bbox `[-2.09, -1.03]..[2.09, 1.03]` produces a UV span of
+    4.04 x 1.98. That is correct for the detail layers it also binds (a circuit
+    flowmap, a noise field, a triangle grid) which are MEANT to repeat once per
+    world unit. It is wrong for the scoreboard, which is one panel that the
+    engine redraws with the live score, name and time -- and it imports as a
+    4x2 grid of repeated panels.
+
+    ⚠ No transform for this exists in the material: all 658 of its properties
+    are single floats and none normalises the span. The engine maps this
+    surface through its UI path rather than the mesh UVs, which is not
+    something the package records -- so the fit is derived from the MESH's own
+    UV bounds rather than decoded.
+
+    Gated hard, because it is inferred: only a texture a `CTextureOverrideCR`
+    record names, on a mesh whose UVs actually tile. Across `mpl_arena_a`'s 12
+    override models exactly ONE qualifies -- this one.
+    """
+    if mat is None or not tex_hash or not bounds:
+        return mat
+    (u0, u1), (v0, v1) = bounds
+    su, sv = (u1 - u0), (v1 - v0)
+    if su <= PANEL_TILE_SPAN and sv <= PANEL_TILE_SPAN:
+        return mat                       # already a 0..1 chart
+    if su <= 1e-6 or sv <= 1e-6:
+        return mat
+    key = "%s__fit_%s" % (mat.name, tex_hash[:8])
+    existing = bpy.data.materials.get(key)
+    if existing is not None:
+        return existing
+    var = mat.copy()
+    var.name = key
+    nt = var.node_tree
+    if nt is None:
+        return var
+    target = [n for n in nt.nodes
+              if n.type == "TEX_IMAGE" and n.image
+              and tex_hash.lower() in n.image.name.lower()]
+    if not target:
+        bpy.data.materials.remove(var)
+        return mat
+    uvmap = nt.nodes.new("ShaderNodeUVMap")
+    uvmap.uv_map = "uv0"
+    uvmap.location = (target[0].location.x - 620, target[0].location.y - 120)
+    mapping = nt.nodes.new("ShaderNodeMapping")
+    mapping.label = "fit %s to mesh UV bounds%s" % (tex_hash[:8],
+                                                    (" (%s)" % tag) if tag else "")
+    mapping.location = (target[0].location.x - 400, target[0].location.y - 120)
+    mapping.inputs["Location"].default_value = (-u0 / su, -v0 / sv, 0.0)
+    mapping.inputs["Scale"].default_value = (1.0 / su, 1.0 / sv, 1.0)
+    nt.links.new(uvmap.outputs["UV"], mapping.inputs["Vector"])
+    for node in target:
+        for link in list(node.inputs["Vector"].links):
+            nt.links.remove(link)
+        nt.links.new(mapping.outputs["Vector"], node.inputs["Vector"])
+    var["le_panel_fit"] = (
+        "%s mapped across the mesh's UV bounds u[%.3f,%.3f] v[%.3f,%.3f] "
+        "instead of tiling %.2fx%.2f (inferred -- see fit_texture_to_uv_bounds)"
+        % (tex_hash, u0, u1, v0, v1, su, sv))
+    return var
+
+
+def explosion_tinted_variant(mat, rgb, tag: str = ""):
+    """Multiply BOTH Base Color and Emission by `rgb`. Returns a cached variant.
+
+    ⭐ The goal-explosion props need both. `mpl_arena_a` splits each one across
+    two materials -- `91346845c1629c7f` carries the emission and
+    `91346845c1629f7f` the base colour and alpha -- and both textures are
+    greyscale, so tinting only the emission leaves half the prop white. The
+    colour itself is the OTHER end's authored team tint; see
+    `evr_goal_explosion`.
+
+    Modulation, not replacement, for the same reason `emission_tinted_variant`
+    modulates: the prop keeps its own texture, and a black channel stays black.
+    """
+    if mat is None or not rgb or len(rgb) < 3:
+        return mat
+    key = "%s__goal_%02x%02x%02x" % (mat.name,
+                                     int(max(0.0, min(1.0, rgb[0])) * 255),
+                                     int(max(0.0, min(1.0, rgb[1])) * 255),
+                                     int(max(0.0, min(1.0, rgb[2])) * 255))
+    existing = bpy.data.materials.get(key)
+    if existing is not None:
+        return existing
+    var = mat.copy()
+    var.name = key
+    nt = var.node_tree
+    if nt is None:
+        return var
+    bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return var
+    colour = (float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0)
+    seen: list = []
+    for name in ("Base Color", "Emission Color", "Emission"):
+        sock = bsdf.inputs.get(name)
+        if sock is None:
+            continue
+        mix, (_fi, _ai, _bi, _ri) = _mix_node(
+            nt, "RGBA", "MULTIPLY",
+            bsdf.location.x - 320, bsdf.location.y - 220 - 260 * len(seen),
+            label="%s x scoring team%s" % (name, (" (%s)" % tag) if tag else ""))
+        seen.append(name)
+        mix.inputs[_fi].default_value = 1.0
+        if sock.is_linked:
+            nt.links.new(sock.links[0].from_socket, mix.inputs[_ai])
+        else:
+            try:
+                mix.inputs[_ai].default_value = tuple(sock.default_value)
+            except (TypeError, ValueError):
+                mix.inputs[_ai].default_value = (1.0, 1.0, 1.0, 1.0)
+        mix.inputs[_bi].default_value = colour
+        nt.links.new(mix.outputs[_ri], sock)
+    # An emissive prop with the strength left at 0 shows nothing to tint.
+    strength = bsdf.inputs.get("Emission Strength")
+    if strength is not None and not strength.is_linked and strength.default_value <= 0.0:
+        strength.default_value = 1.0
+    var["le_goal_explosion_tint"] = list(colour[:3])
+    return var
+
+
+def emission_tinted_variant(mat, rgb, tag: str = ""):
+    """Multiply a material's EMISSION by `rgb`. Returns a cached variant.
+
+    Modulation, not replacement: the band keeps its own texture and intensity
+    and is scaled by the colour, so a dim light gives a dim band and a black
+    channel removes that channel. Base Color is untouched.
+    """
+    if mat is None or not rgb or len(rgb) < 3:
+        return mat
+    key = "%s__lit_%02x%02x%02x" % (mat.name,
+                                    int(max(0.0, min(1.0, rgb[0])) * 255),
+                                    int(max(0.0, min(1.0, rgb[1])) * 255),
+                                    int(max(0.0, min(1.0, rgb[2])) * 255))
+    existing = bpy.data.materials.get(key)
+    if existing is not None:
+        return existing
+    var = mat.copy()
+    var.name = key
+    nt = var.node_tree
+    if nt is None:
+        return var
+    bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return var
+    em = bsdf.inputs.get("Emission Color") or bsdf.inputs.get("Emission")
+    if em is None:
+        return var
+    mix = nt.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY"
+    mix.label = "emission x nearest light%s" % ((" (%s)" % tag) if tag else "")
+    mix.location = (bsdf.location.x - 240, bsdf.location.y - 700)
+    mix.inputs["Factor"].default_value = 1.0
+    if em.is_linked:
+        nt.links.new(em.links[0].from_socket, mix.inputs[6])
+    else:
+        mix.inputs[6].default_value = tuple(em.default_value)
+    mix.inputs[7].default_value = (float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0)
+    nt.links.new(mix.outputs[2], em)
+    var["le_emission_light_tint"] = [round(float(c), 6) for c in rgb[:3]]
+    return var
+
 
 def vertex_radiance_variant(mat, layer_name: str):
     """`emission = albedo * baked irradiance`, from a colour ATTRIBUTE.

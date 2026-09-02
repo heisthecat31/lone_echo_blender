@@ -46,3 +46,5 @@ app/settings.json
 app/extract/evrFileTools/
 app/extract/**/bin/
 *.pyc
+/Dev
+/blender_tool/tests

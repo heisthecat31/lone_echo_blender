@@ -1,0 +1,2465 @@
+{
+ "format": "evr_tints",
+ "version": 2,
+ "source": "43934c379cf1e366 cosmetic list, ext-data heap",
+ "note": "Read from the cosmetic list's ext-data heap (one contiguous blob after the 664-byte descriptors, consumed in entry order, ImageListingEntrySize + OtherEntrySize per entry). Entries are selected by CosmeticTypeSymbol (+0x68), which -- like every symbol in this table -- is stored BYTE-REVERSED; selecting by internal-name prefix instead silently drops the `rwd_*` ones. \u26a0 The authored float32 are sRGB-ENCODED, not linear: `tint_neutral_m_default` (\"Black Hole\") authors 0.15/0.9, which as sRGB are #262626 and #e6e6e6 -- near-black and white, matching the game. Read as linear they become a washed-out mid-grey pair (#6c6c6c/#f3f3f3), which is how every tint ended up too weak. `*_linear` is the converted value a renderer wants; `*_hex` is the direct byte encoding. A tint is 6 float32: PrimaryColor RGB then SecondaryColor RGB. The cosmetic editor's UI swaps the two when it shows them, so its 'primary' swatch is this `secondary` field, which is also the colour the menu thumbnail is mostly made of. `tint_chassis_default` (\"No Tint\") authors the sentinel (-1,-1,-1).",
+ "tints": [
+  {
+   "name": "rwd_tint_0000",
+   "display": "Bubblemint",
+   "description": "",
+   "primary": [
+    0.105882,
+    0.572549,
+    0.494118
+   ],
+   "secondary": [
+    0.929412,
+    0.368627,
+    0.490196
+   ],
+   "primary_linear": [
+    0.01096,
+    0.287441,
+    0.208637
+   ],
+   "secondary_linear": [
+    0.846874,
+    0.111932,
+    0.205079
+   ],
+   "primary_hex": "#1b927e",
+   "secondary_hex": "#ed5e7d"
+  },
+  {
+   "name": "rwd_tint_0001",
+   "display": "Swiss",
+   "description": "",
+   "primary": [
+    0.321569,
+    0.333333,
+    0.337255
+   ],
+   "secondary": [
+    0.964706,
+    0.862745,
+    0.254902
+   ],
+   "primary_linear": [
+    0.084376,
+    0.090842,
+    0.093059
+   ],
+   "secondary_linear": [
+    0.921582,
+    0.715693,
+    0.052861
+   ],
+   "primary_hex": "#525556",
+   "secondary_hex": "#f6dc41"
+  },
+  {
+   "name": "rwd_tint_0002",
+   "display": "Lilac",
+   "description": "",
+   "primary": [
+    0.654902,
+    0.035294,
+    0.631373
+   ],
+   "secondary": [
+    0.945098,
+    0.929412,
+    0.960784
+   ],
+   "primary_linear": [
+    0.386429,
+    0.002732,
+    0.356401
+   ],
+   "secondary_linear": [
+    0.879622,
+    0.846874,
+    0.913098
+   ],
+   "primary_hex": "#a709a1",
+   "secondary_hex": "#f1edf5"
+  },
+  {
+   "name": "rwd_tint_0003",
+   "display": "Prime",
+   "description": "",
+   "primary": [
+    0.211765,
+    0.384314,
+    0.341176
+   ],
+   "secondary": [
+    0.952941,
+    0.768627,
+    0.294118
+   ],
+   "primary_linear": [
+    0.03689,
+    0.122139,
+    0.095307
+   ],
+   "secondary_linear": [
+    0.896269,
+    0.552011,
+    0.07036
+   ],
+   "primary_hex": "#366257",
+   "secondary_hex": "#f3c44b"
+  },
+  {
+   "name": "rwd_tint_0004",
+   "display": "Moonwalker",
+   "description": "",
+   "primary": [
+    0.768627,
+    0.423529,
+    0.196078
+   ],
+   "secondary": [
+    0.207843,
+    0.721569,
+    0.639216
+   ],
+   "primary_linear": [
+    0.552011,
+    0.149959,
+    0.031896
+   ],
+   "secondary_linear": [
+    0.035601,
+    0.479321,
+    0.366253
+   ],
+   "primary_hex": "#c46c32",
+   "secondary_hex": "#35b8a3"
+  },
+  {
+   "name": "rwd_tint_0005",
+   "display": "Flaxen",
+   "description": "",
+   "primary": [
+    0.752941,
+    0.6,
+    0.105882
+   ],
+   "secondary": [
+    0.917647,
+    0.8,
+    0.27451
+   ],
+   "primary_linear": [
+    0.527115,
+    0.318547,
+    0.01096
+   ],
+   "secondary_linear": [
+    0.822786,
+    0.603827,
+    0.061246
+   ],
+   "primary_hex": "#c0991b",
+   "secondary_hex": "#eacc46"
+  },
+  {
+   "name": "rwd_tint_0006",
+   "display": "Reptilian",
+   "description": "",
+   "primary": [
+    0.580392,
+    0.631373,
+    0.239216
+   ],
+   "secondary": [
+    0.239216,
+    0.431373,
+    0.207843
+   ],
+   "primary_linear": [
+    0.296138,
+    0.356401,
+    0.046665
+   ],
+   "secondary_linear": [
+    0.046665,
+    0.155927,
+    0.035601
+   ],
+   "primary_hex": "#94a13d",
+   "secondary_hex": "#3d6e35"
+  },
+  {
+   "name": "rwd_tint_0007",
+   "display": "Marimo",
+   "description": "",
+   "primary": [
+    0.054902,
+    0.066667,
+    0.376471
+   ],
+   "secondary": [
+    0.168627,
+    0.72549,
+    0.047059
+   ],
+   "primary_linear": [
+    0.004391,
+    0.005605,
+    0.116971
+   ],
+   "secondary_linear": [
+    0.024158,
+    0.48515,
+    0.003677
+   ],
+   "primary_hex": "#0e1160",
+   "secondary_hex": "#2bb90c"
+  },
+  {
+   "name": "rwd_tint_0008",
+   "display": "Oxidation",
+   "description": "",
+   "primary": [
+    0.45098,
+    0.176471,
+    0.07451
+   ],
+   "secondary": [
+    0.435294,
+    0.466667,
+    0.537255
+   ],
+   "primary_linear": [
+    0.171441,
+    0.026241,
+    0.006512
+   ],
+   "secondary_linear": [
+    0.158961,
+    0.184475,
+    0.250158
+   ],
+   "primary_hex": "#732d13",
+   "secondary_hex": "#6f7789"
+  },
+  {
+   "name": "rwd_tint_0009",
+   "display": "Badlands",
+   "description": "",
+   "primary": [
+    0.258824,
+    0.345098,
+    0.227451
+   ],
+   "secondary": [
+    0.756863,
+    0.631373,
+    0.458824
+   ],
+   "primary_linear": [
+    0.05448,
+    0.097587,
+    0.042311
+   ],
+   "secondary_linear": [
+    0.533277,
+    0.356401,
+    0.177889
+   ],
+   "primary_hex": "#42583a",
+   "secondary_hex": "#c1a175"
+  },
+  {
+   "name": "rwd_tint_0010",
+   "display": "Ignition",
+   "description": "",
+   "primary": [
+    0.721569,
+    0.141176,
+    0.141176
+   ],
+   "secondary": [
+    0.894118,
+    0.870588,
+    0.847059
+   ],
+   "primary_linear": [
+    0.479321,
+    0.017642,
+    0.017642
+   ],
+   "secondary_linear": [
+    0.775823,
+    0.73046,
+    0.686686
+   ],
+   "primary_hex": "#b82424",
+   "secondary_hex": "#e4ded8"
+  },
+  {
+   "name": "rwd_tint_0011",
+   "display": "Fuse",
+   "description": "",
+   "primary": [
+    0.211765,
+    0.294118,
+    0.415686
+   ],
+   "secondary": [
+    0.898039,
+    0.419608,
+    0.176471
+   ],
+   "primary_linear": [
+    0.03689,
+    0.07036,
+    0.144128
+   ],
+   "secondary_linear": [
+    0.783537,
+    0.147027,
+    0.026241
+   ],
+   "primary_hex": "#364b6a",
+   "secondary_hex": "#e56b2d"
+  },
+  {
+   "name": "rwd_tint_0012",
+   "display": "Amalgam",
+   "description": "",
+   "primary": [
+    0.34902,
+    0.098039,
+    0.309804
+   ],
+   "secondary": [
+    0.709804,
+    0.223529,
+    0.631373
+   ],
+   "primary_linear": [
+    0.099899,
+    0.009721,
+    0.078187
+   ],
+   "secondary_linear": [
+    0.462077,
+    0.040915,
+    0.356401
+   ],
+   "primary_hex": "#59194f",
+   "secondary_hex": "#b539a1"
+  },
+  {
+   "name": "rwd_tint_0013",
+   "display": "Algae",
+   "description": "",
+   "primary": [
+    0.457585,
+    0.10051,
+    0.529
+   ],
+   "secondary": [
+    0.341176,
+    0.85098,
+    0.007843
+   ],
+   "primary_linear": [
+    0.176861,
+    0.010102,
+    0.241872
+   ],
+   "secondary_linear": [
+    0.095307,
+    0.693871,
+    0.000607
+   ],
+   "primary_hex": "#751a87",
+   "secondary_hex": "#57d902"
+  },
+  {
+   "name": "rwd_tint_0014",
+   "display": "Coastline",
+   "description": "",
+   "primary": [
+    0.007843,
+    0.188235,
+    0.780392
+   ],
+   "secondary": [
+    0.921569,
+    0.690196,
+    0.086275
+   ],
+   "primary_linear": [
+    0.000607,
+    0.029557,
+    0.571125
+   ],
+   "secondary_linear": [
+    0.830771,
+    0.434153,
+    0.008023
+   ],
+   "primary_hex": "#0230c7",
+   "secondary_hex": "#ebb016"
+  },
+  {
+   "name": "rwd_tint_0015",
+   "display": "Mesopelagic",
+   "description": "",
+   "primary": [
+    0.099946,
+    0.237435,
+    0.380392
+   ],
+   "secondary": [
+    0.225329,
+    0.52316,
+    0.776471
+   ],
+   "primary_linear": [
+    0.010014,
+    0.04599,
+    0.119538
+   ],
+   "secondary_linear": [
+    0.041553,
+    0.236107,
+    0.564712
+   ],
+   "primary_hex": "#193d61",
+   "secondary_hex": "#3985c6"
+  },
+  {
+   "name": "rwd_tint_0016",
+   "display": "Drizzle",
+   "description": "",
+   "primary": [
+    0.388235,
+    0.286275,
+    0.682353
+   ],
+   "secondary": [
+    0.207843,
+    0.788235,
+    0.866667
+   ],
+   "primary_linear": [
+    0.124772,
+    0.066626,
+    0.423268
+   ],
+   "secondary_linear": [
+    0.035601,
+    0.584078,
+    0.723056
+   ],
+   "primary_hex": "#6349ae",
+   "secondary_hex": "#35c9dd"
+  },
+  {
+   "name": "rwd_tint_0017",
+   "display": "Molten",
+   "description": "",
+   "primary": [
+    0.74902,
+    0.133333,
+    0.007843
+   ],
+   "secondary": [
+    1.0,
+    0.564706,
+    0.211765
+   ],
+   "primary_linear": [
+    0.520996,
+    0.015996,
+    0.000607
+   ],
+   "secondary_linear": [
+    1.0,
+    0.278894,
+    0.03689
+   ],
+   "primary_hex": "#bf2202",
+   "secondary_hex": "#ff9036"
+  },
+  {
+   "name": "rwd_tint_0018",
+   "display": "Chic",
+   "description": "",
+   "primary": [
+    0.133333,
+    0.372549,
+    0.447059
+   ],
+   "secondary": [
+    0.94902,
+    0.788235,
+    0.52549
+   ],
+   "primary_linear": [
+    0.015996,
+    0.114435,
+    0.16827
+   ],
+   "secondary_linear": [
+    0.887924,
+    0.584078,
+    0.238397
+   ],
+   "primary_hex": "#225f72",
+   "secondary_hex": "#f2c986"
+  },
+  {
+   "name": "rwd_tint_0019",
+   "display": "Mesopelagic",
+   "description": "",
+   "primary": [
+    0.458963,
+    0.107576,
+    0.532966
+   ],
+   "secondary": [
+    0.343158,
+    0.851414,
+    0.011739
+   ],
+   "primary_linear": [
+    0.178004,
+    0.011239,
+    0.245833
+   ],
+   "secondary_linear": [
+    0.096456,
+    0.694669,
+    0.000909
+   ],
+   "primary_hex": "#751b88",
+   "secondary_hex": "#58d903"
+  },
+  {
+   "name": "rwd_tint_0020",
+   "display": "Eminence",
+   "description": "",
+   "primary": [
+    0.188235,
+    0.152941,
+    0.25098
+   ],
+   "secondary": [
+    0.490196,
+    0.25098,
+    1.0
+   ],
+   "primary_linear": [
+    0.029557,
+    0.020289,
+    0.051269
+   ],
+   "secondary_linear": [
+    0.205079,
+    0.051269,
+    1.0
+   ],
+   "primary_hex": "#302740",
+   "secondary_hex": "#7d40ff"
+  },
+  {
+   "name": "rwd_tint_0021",
+   "display": "Ectoplasm",
+   "description": "",
+   "primary": [
+    0.266667,
+    0.176471,
+    0.521569
+   ],
+   "secondary": [
+    0.294118,
+    0.843137,
+    0.545098
+   ],
+   "primary_linear": [
+    0.057806,
+    0.026241,
+    0.234551
+   ],
+   "secondary_linear": [
+    0.07036,
+    0.679542,
+    0.258183
+   ],
+   "primary_hex": "#442d85",
+   "secondary_hex": "#4bd78b"
+  },
+  {
+   "name": "rwd_tint_0022",
+   "display": "Chlorophyll",
+   "description": "",
+   "primary": [
+    0.243137,
+    0.423529,
+    0.611765
+   ],
+   "secondary": [
+    0.713726,
+    0.933333,
+    0.388235
+   ],
+   "primary_linear": [
+    0.048172,
+    0.149959,
+    0.332452
+   ],
+   "secondary_linear": [
+    0.467785,
+    0.854992,
+    0.124772
+   ],
+   "primary_hex": "#3e6c9c",
+   "secondary_hex": "#b6ee63"
+  },
+  {
+   "name": "rwd_tint_0023",
+   "display": "Urban",
+   "description": "",
+   "primary": [
+    0.811765,
+    0.376471,
+    0.282353
+   ],
+   "secondary": [
+    0.85098,
+    0.85098,
+    0.85098
+   ],
+   "primary_linear": [
+    0.623961,
+    0.116971,
+    0.064803
+   ],
+   "secondary_linear": [
+    0.693871,
+    0.693871,
+    0.693871
+   ],
+   "primary_hex": "#cf6048",
+   "secondary_hex": "#d9d9d9"
+  },
+  {
+   "name": "rwd_tint_0024",
+   "display": "Bubble Pop",
+   "description": "",
+   "primary": [
+    0.294118,
+    0.635294,
+    0.780392
+   ],
+   "secondary": [
+    0.831373,
+    0.541176,
+    0.737255
+   ],
+   "primary_linear": [
+    0.07036,
+    0.361307,
+    0.571125
+   ],
+   "secondary_linear": [
+    0.658376,
+    0.254152,
+    0.502887
+   ],
+   "primary_hex": "#4ba2c7",
+   "secondary_hex": "#d48abc"
+  },
+  {
+   "name": "rwd_tint_0025",
+   "display": "Velvet",
+   "description": "",
+   "primary": [
+    0.098039,
+    0.235294,
+    0.380392
+   ],
+   "secondary": [
+    0.670588,
+    0.160784,
+    0.25098
+   ],
+   "primary_linear": [
+    0.009721,
+    0.045186,
+    0.119538
+   ],
+   "secondary_linear": [
+    0.40724,
+    0.022174,
+    0.051269
+   ],
+   "primary_hex": "#193c61",
+   "secondary_hex": "#ab2940"
+  },
+  {
+   "name": "rwd_tint_0026",
+   "display": "rwd_tint_0026",
+   "description": "",
+   "primary": [
+    0.965325,
+    0.762978,
+    0.265904
+   ],
+   "secondary": [
+    0.197992,
+    0.336019,
+    0.346005
+   ],
+   "primary_linear": [
+    0.922925,
+    0.542968,
+    0.057477
+   ],
+   "secondary_linear": [
+    0.032483,
+    0.092357,
+    0.098119
+   ],
+   "primary_hex": "#f6c344",
+   "secondary_hex": "#325658"
+  },
+  {
+   "name": "rwd_tint_0027",
+   "display": "rwd_tint_0027",
+   "description": "",
+   "primary": [
+    0.652531,
+    0.888735,
+    0.456502
+   ],
+   "secondary": [
+    0.895128,
+    0.690851,
+    0.372285
+   ],
+   "primary_linear": [
+    0.383339,
+    0.765304,
+    0.175966
+   ],
+   "secondary_linear": [
+    0.777806,
+    0.43507,
+    0.114266
+   ],
+   "primary_hex": "#a6e374",
+   "secondary_hex": "#e4b05f"
+  },
+  {
+   "name": "rwd_tint_0028",
+   "display": "Weathered",
+   "description": "",
+   "primary": [
+    0.141176,
+    0.341176,
+    0.184314
+   ],
+   "secondary": [
+    0.87451,
+    0.756863,
+    0.454902
+   ],
+   "primary_linear": [
+    0.017642,
+    0.095307,
+    0.028426
+   ],
+   "secondary_linear": [
+    0.737911,
+    0.533277,
+    0.174647
+   ],
+   "primary_hex": "#24572f",
+   "secondary_hex": "#dfc174"
+  },
+  {
+   "name": "rwd_tint_0029",
+   "display": "Jasper",
+   "description": "",
+   "primary": [
+    0.541176,
+    0.117647,
+    0.168627
+   ],
+   "secondary": [
+    0.733333,
+    0.752941,
+    0.952941
+   ],
+   "primary_linear": [
+    0.254152,
+    0.012983,
+    0.024158
+   ],
+   "secondary_linear": [
+    0.496932,
+    0.527115,
+    0.896269
+   ],
+   "primary_hex": "#8a1e2b",
+   "secondary_hex": "#bbc0f3"
+  },
+  {
+   "name": "rwd_tint_s1_a_default",
+   "display": "Morning Glory",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.333257,
+    0.026505,
+    0.639994
+   ],
+   "secondary": [
+    0.919997,
+    0.2392,
+    0.688533
+   ],
+   "primary_linear": [
+    0.090799,
+    0.002051,
+    0.367239
+   ],
+   "secondary_linear": [
+    0.827565,
+    0.046659,
+    0.431832
+   ],
+   "primary_hex": "#5507a3",
+   "secondary_hex": "#eb3db0"
+  },
+  {
+   "name": "rwd_tint_s1_b_default",
+   "display": "Seafoam",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.065599,
+    0.368673,
+    0.409995
+   ],
+   "secondary": [
+    0.205875,
+    0.823529,
+    0.601175
+   ],
+   "primary_linear": [
+    0.005488,
+    0.111961,
+    0.139981
+   ],
+   "secondary_linear": [
+    0.034965,
+    0.644479,
+    0.31992
+   ],
+   "primary_hex": "#115e69",
+   "secondary_hex": "#34d299"
+  },
+  {
+   "name": "rwd_tint_s1_c_default",
+   "display": "Burnt Embers",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.439994,
+    0.052796,
+    0.192187
+   ],
+   "secondary": [
+    0.639994,
+    0.639994,
+    0.639994
+   ],
+   "primary_linear": [
+    0.162642,
+    0.004192,
+    0.030722
+   ],
+   "secondary_linear": [
+    0.367239,
+    0.367239,
+    0.367239
+   ],
+   "primary_hex": "#700d31",
+   "secondary_hex": "#a3a3a3"
+  },
+  {
+   "name": "rwd_tint_s1_d_default",
+   "display": "Luminescence",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.17,
+    0.17,
+    0.17
+   ],
+   "secondary": [
+    0.0,
+    0.751995,
+    0.8
+   ],
+   "primary_linear": [
+    0.024515,
+    0.024515,
+    0.024515
+   ],
+   "secondary_linear": [
+    0.0,
+    0.525635,
+    0.603827
+   ],
+   "primary_hex": "#2b2b2b",
+   "secondary_hex": "#00c0cc"
+  },
+  {
+   "name": "rwd_tint_s2_a_default",
+   "display": "Stereoscopic",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.123567,
+    0.413149,
+    0.537255
+   ],
+   "secondary": [
+    0.82353,
+    0.295308,
+    0.261592
+   ],
+   "primary_linear": [
+    0.014077,
+    0.142271,
+    0.250158
+   ],
+   "secondary_linear": [
+    0.644481,
+    0.070937,
+    0.055641
+   ],
+   "primary_hex": "#206989",
+   "secondary_hex": "#d24b43"
+  },
+  {
+   "name": "rwd_tint_s2_b_default",
+   "display": "Patina",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.509804,
+    0.181295,
+    0.169935
+   ],
+   "secondary": [
+    0.329596,
+    0.447059,
+    0.349882
+   ],
+   "primary_linear": [
+    0.223228,
+    0.027573,
+    0.024498
+   ],
+   "secondary_linear": [
+    0.088758,
+    0.16827,
+    0.100411
+   ],
+   "primary_hex": "#822e2b",
+   "secondary_hex": "#547259"
+  },
+  {
+   "name": "rwd_tint_s2_c_default",
+   "display": "Desert Jewel",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.071611,
+    0.470588,
+    0.422847
+   ],
+   "secondary": [
+    0.819608,
+    0.566076,
+    0.273203
+   ],
+   "primary_linear": [
+    0.006168,
+    0.187821,
+    0.149447
+   ],
+   "secondary_linear": [
+    0.637597,
+    0.280376,
+    0.060665
+   ],
+   "primary_hex": "#12786c",
+   "secondary_hex": "#d19046"
+  },
+  {
+   "name": "rwd_tint_s3_tint_a",
+   "display": "Frostflame",
+   "description": "",
+   "primary": [
+    0.82353,
+    0.295308,
+    0.261592
+   ],
+   "secondary": [
+    0.243,
+    0.173,
+    0.78
+   ],
+   "primary_linear": [
+    0.644481,
+    0.070937,
+    0.055641
+   ],
+   "secondary_linear": [
+    0.048119,
+    0.025307,
+    0.570482
+   ],
+   "primary_hex": "#d24b43",
+   "secondary_hex": "#3e2cc7"
+  },
+  {
+   "name": "rwd_tint_s3_tint_b",
+   "display": "Bloodstained",
+   "description": "",
+   "primary": [
+    0.55,
+    0.132,
+    0.15708
+   ],
+   "secondary": [
+    0.894118,
+    0.690259,
+    0.384471
+   ],
+   "primary_linear": [
+    0.263273,
+    0.015726,
+    0.021271
+   ],
+   "secondary_linear": [
+    0.775823,
+    0.434242,
+    0.122244
+   ],
+   "primary_hex": "#8c2228",
+   "secondary_hex": "#e4b062"
+  },
+  {
+   "name": "rwd_tint_s3_tint_c",
+   "display": "Biohazard",
+   "description": "",
+   "primary": [
+    0.166433,
+    0.439216,
+    0.113871
+   ],
+   "secondary": [
+    0.610268,
+    0.737255,
+    0.112757
+   ],
+   "primary_linear": [
+    0.023593,
+    0.16203,
+    0.012312
+   ],
+   "secondary_linear": [
+    0.330663,
+    0.502887,
+    0.012118
+   ],
+   "primary_hex": "#2a701d",
+   "secondary_hex": "#9cbc1d"
+  },
+  {
+   "name": "rwd_tint_s3_tint_d",
+   "display": "Mixed Berry",
+   "description": "",
+   "primary": [
+    0.722,
+    0.388,
+    0.957
+   ],
+   "secondary": [
+    0.514,
+    0.047,
+    0.145
+   ],
+   "primary_linear": [
+    0.479959,
+    0.124613,
+    0.904956
+   ],
+   "secondary_linear": [
+    0.227229,
+    0.003671,
+    0.018478
+   ],
+   "primary_hex": "#b863f4",
+   "secondary_hex": "#830c25"
+  },
+  {
+   "name": "rwd_tint_s3_tint_e",
+   "display": "Tranquility",
+   "description": "",
+   "primary": [
+    0.72,
+    0.72,
+    0.72
+   ],
+   "secondary": [
+    0.0672,
+    0.60816,
+    0.84
+   ],
+   "primary_linear": [
+    0.477,
+    0.477,
+    0.477
+   ],
+   "secondary_linear": [
+    0.005665,
+    0.328154,
+    0.673859
+   ],
+   "primary_hex": "#b8b8b8",
+   "secondary_hex": "#119bd6"
+  },
+  {
+   "name": "tint_blue_a_default",
+   "display": "Blue Moon",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.113,
+    0.235,
+    0.317
+   ],
+   "secondary": [
+    0.196,
+    0.463,
+    0.603
+   ],
+   "primary_linear": [
+    0.01216,
+    0.045076,
+    0.08194
+   ],
+   "secondary_linear": [
+    0.031872,
+    0.181378,
+    0.32206
+   ],
+   "primary_hex": "#1d3c51",
+   "secondary_hex": "#32769a"
+  },
+  {
+   "name": "tint_blue_b_default",
+   "display": "Ultraviolet",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.164,
+    0.164,
+    0.407
+   ],
+   "secondary": [
+    0.321,
+    0.274,
+    0.843
+   ],
+   "primary_linear": [
+    0.022975,
+    0.022975,
+    0.137827
+   ],
+   "secondary_linear": [
+    0.084071,
+    0.061019,
+    0.679293
+   ],
+   "primary_hex": "#2a2a68",
+   "secondary_hex": "#5246d7"
+  },
+  {
+   "name": "tint_blue_c_default",
+   "display": "Bio-organic",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.153,
+    0.42,
+    0.525
+   ],
+   "secondary": [
+    0.078,
+    0.251,
+    0.302
+   ],
+   "primary_linear": [
+    0.020302,
+    0.147319,
+    0.237915
+   ],
+   "secondary_linear": [
+    0.006941,
+    0.051277,
+    0.074233
+   ],
+   "primary_hex": "#276b86",
+   "secondary_hex": "#14404d"
+  },
+  {
+   "name": "tint_blue_d_default",
+   "display": "Amethyst",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.234,
+    0.106,
+    0.322
+   ],
+   "secondary": [
+    0.522,
+    0.259,
+    0.675
+   ],
+   "primary_linear": [
+    0.044704,
+    0.010979,
+    0.084608
+   ],
+   "secondary_linear": [
+    0.234972,
+    0.054554,
+    0.413208
+   ],
+   "primary_hex": "#3c1b52",
+   "secondary_hex": "#8542ac"
+  },
+  {
+   "name": "tint_blue_e_default",
+   "display": "Subterranean",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.086,
+    0.184,
+    0.341
+   ],
+   "secondary": [
+    0.169,
+    0.357,
+    0.659
+   ],
+   "primary_linear": [
+    0.007986,
+    0.028337,
+    0.095206
+   ],
+   "secondary_linear": [
+    0.024254,
+    0.1047,
+    0.391805
+   ],
+   "primary_hex": "#162f57",
+   "secondary_hex": "#2b5ba8"
+  },
+  {
+   "name": "tint_blue_f_default",
+   "display": "Cryosphere",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.149,
+    0.361,
+    0.702
+   ],
+   "secondary": [
+    0.925,
+    0.925,
+    0.925
+   ],
+   "primary_linear": [
+    0.019378,
+    0.107156,
+    0.450842
+   ],
+   "secondary_linear": [
+    0.837793,
+    0.837793,
+    0.837793
+   ],
+   "primary_hex": "#265cb3",
+   "secondary_hex": "#ececec"
+  },
+  {
+   "name": "tint_blue_g_default",
+   "display": "Synthwave",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.0,
+    0.459,
+    0.553
+   ],
+   "secondary": [
+    0.816,
+    0.149,
+    0.843
+   ],
+   "primary_linear": [
+    0.0,
+    0.178035,
+    0.266417
+   ],
+   "secondary_linear": [
+    0.631303,
+    0.019378,
+    0.679293
+   ],
+   "primary_hex": "#00758d",
+   "secondary_hex": "#d026d7"
+  },
+  {
+   "name": "tint_blue_h_default",
+   "display": "Vaporwave",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.4,
+    0.012,
+    0.761
+   ],
+   "secondary": [
+    0.071,
+    0.89,
+    0.776
+   ],
+   "primary_linear": [
+    0.132868,
+    0.000929,
+    0.539822
+   ],
+   "secondary_linear": [
+    0.006097,
+    0.767769,
+    0.563945
+   ],
+   "primary_hex": "#6603c2",
+   "secondary_hex": "#12e3c6"
+  },
+  {
+   "name": "tint_blue_i_default",
+   "display": "Deep Sea",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.169,
+    0.376,
+    0.827
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.024254,
+    0.116665,
+    0.650607
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#2b60d3"
+  },
+  {
+   "name": "tint_blue_j_default",
+   "display": "Cyberpunk",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.31,
+    0.173,
+    0.839
+   ],
+   "secondary": [
+    0.133,
+    0.761,
+    1.0
+   ],
+   "primary_linear": [
+    0.078288,
+    0.025307,
+    0.672054
+   ],
+   "secondary_linear": [
+    0.015928,
+    0.539822,
+    1.0
+   ],
+   "primary_hex": "#4f2cd6",
+   "secondary_hex": "#22c2ff"
+  },
+  {
+   "name": "tint_blue_k_default",
+   "display": "Whitewater",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.925,
+    0.925,
+    0.925
+   ],
+   "secondary": [
+    0.149,
+    0.361,
+    0.702
+   ],
+   "primary_linear": [
+    0.837793,
+    0.837793,
+    0.837793
+   ],
+   "secondary_linear": [
+    0.019378,
+    0.107156,
+    0.450842
+   ],
+   "primary_hex": "#ececec",
+   "secondary_hex": "#265cb3"
+  },
+  {
+   "name": "tint_chassis_default",
+   "display": "No Tint",
+   "description": "Progression Reward Item",
+   "primary": [
+    -1.0,
+    -1.0,
+    -1.0
+   ],
+   "secondary": [
+    -1.0,
+    -1.0,
+    -1.0
+   ],
+   "primary_linear": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "secondary_linear": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "primary_hex": "#000000",
+   "secondary_hex": "#000000"
+  },
+  {
+   "name": "tint_neutral_a_default",
+   "display": "Smoke Screen",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.215,
+    0.215,
+    0.215
+   ],
+   "secondary": [
+    0.443,
+    0.443,
+    0.443
+   ],
+   "primary_linear": [
+    0.037972,
+    0.037972,
+    0.037972
+   ],
+   "secondary_linear": [
+    0.165023,
+    0.165023,
+    0.165023
+   ],
+   "primary_hex": "#373737",
+   "secondary_hex": "#717171"
+  },
+  {
+   "name": "tint_neutral_a_s10_default",
+   "display": "Series-10",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.447,
+    0.447,
+    0.447
+   ],
+   "secondary": [
+    0.224,
+    0.224,
+    0.224
+   ],
+   "primary_linear": [
+    0.168222,
+    0.168222,
+    0.168222
+   ],
+   "secondary_linear": [
+    0.041081,
+    0.041081,
+    0.041081
+   ],
+   "primary_hex": "#727272",
+   "secondary_hex": "#393939"
+  },
+  {
+   "name": "tint_neutral_b_default",
+   "display": "Viola",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.282,
+    0.106,
+    0.322
+   ],
+   "secondary": [
+    0.773,
+    0.722,
+    0.133
+   ],
+   "primary_linear": [
+    0.064641,
+    0.010979,
+    0.084608
+   ],
+   "secondary_linear": [
+    0.559071,
+    0.479959,
+    0.015928
+   ],
+   "primary_hex": "#481b52",
+   "secondary_hex": "#c5b822"
+  },
+  {
+   "name": "tint_neutral_c_default",
+   "display": "Carotenoid",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.184,
+    0.462,
+    0.207
+   ],
+   "secondary": [
+    0.882,
+    0.278,
+    0.074
+   ],
+   "primary_linear": [
+    0.028337,
+    0.180539,
+    0.035328
+   ],
+   "secondary_linear": [
+    0.752262,
+    0.062815,
+    0.006451
+   ],
+   "primary_hex": "#2f7635",
+   "secondary_hex": "#e14713"
+  },
+  {
+   "name": "tint_neutral_d_default",
+   "display": "Lightspeed",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.906,
+    0.906,
+    0.906
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.799338,
+    0.799338,
+    0.799338
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#e7e7e7"
+  },
+  {
+   "name": "tint_neutral_e_default",
+   "display": "Bubble Gum",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.772,
+    0.075,
+    0.333
+   ],
+   "secondary": [
+    0.898,
+    0.463,
+    0.635
+   ],
+   "primary_linear": [
+    0.557452,
+    0.006571,
+    0.090655
+   ],
+   "secondary_linear": [
+    0.78346,
+    0.181378,
+    0.360937
+   ],
+   "primary_hex": "#c51355",
+   "secondary_hex": "#e576a2"
+  },
+  {
+   "name": "tint_neutral_f_default",
+   "display": "Solar Flare",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.624,
+    0.071,
+    0.078
+   ],
+   "secondary": [
+    0.929,
+    0.859,
+    0.063
+   ],
+   "primary_linear": [
+    0.347281,
+    0.006097,
+    0.006941
+   ],
+   "secondary_linear": [
+    0.846023,
+    0.708704,
+    0.005208
+   ],
+   "primary_hex": "#9f1214",
+   "secondary_hex": "#eddb10"
+  },
+  {
+   "name": "tint_neutral_g_default",
+   "display": "Redshift",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.243,
+    0.173,
+    0.78
+   ],
+   "secondary": [
+    0.949,
+    0.059,
+    0.161
+   ],
+   "primary_linear": [
+    0.048119,
+    0.025307,
+    0.570482
+   ],
+   "secondary_linear": [
+    0.887882,
+    0.004795,
+    0.022227
+   ],
+   "primary_hex": "#3e2cc7",
+   "secondary_hex": "#f20f29"
+  },
+  {
+   "name": "tint_neutral_h_default",
+   "display": "Sunspot",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.894,
+    0.591,
+    0.004
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.775591,
+    0.308143,
+    0.00031
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#e49701"
+  },
+  {
+   "name": "tint_neutral_i_default",
+   "display": "Aurora",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.482,
+    0.161,
+    0.588
+   ],
+   "secondary": [
+    0.086,
+    0.922,
+    0.925
+   ],
+   "primary_linear": [
+    0.197757,
+    0.022227,
+    0.30472
+   ],
+   "secondary_linear": [
+    0.007986,
+    0.831651,
+    0.837793
+   ],
+   "primary_hex": "#7b2996",
+   "secondary_hex": "#16ebec"
+  },
+  {
+   "name": "tint_neutral_j_default",
+   "display": "Afterglow",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.024,
+    0.302,
+    0.463
+   ],
+   "secondary": [
+    0.941,
+    0.941,
+    0.941
+   ],
+   "primary_linear": [
+    0.001858,
+    0.074233,
+    0.181378
+   ],
+   "secondary_linear": [
+    0.870997,
+    0.870997,
+    0.870997
+   ],
+   "primary_hex": "#064d76",
+   "secondary_hex": "#f0f0f0"
+  },
+  {
+   "name": "tint_neutral_k_default",
+   "display": "Irradiated",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.655,
+    0.118,
+    0.416
+   ],
+   "secondary": [
+    0.243,
+    0.898,
+    0.361
+   ],
+   "primary_linear": [
+    0.386557,
+    0.013047,
+    0.144359
+   ],
+   "secondary_linear": [
+    0.048119,
+    0.78346,
+    0.107156
+   ],
+   "primary_hex": "#a71e6a",
+   "secondary_hex": "#3ee55c"
+  },
+  {
+   "name": "tint_neutral_l_default",
+   "display": "Cardinal",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.863,
+    0.149,
+    0.259
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.716171,
+    0.019378,
+    0.054554
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#dc2642"
+  },
+  {
+   "name": "tint_neutral_m_default",
+   "display": "Black Hole",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.9,
+    0.9,
+    0.9
+   ],
+   "secondary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "primary_linear": [
+    0.787412,
+    0.787412,
+    0.787412
+   ],
+   "secondary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "primary_hex": "#e5e5e5",
+   "secondary_hex": "#262626"
+  },
+  {
+   "name": "tint_neutral_n_default",
+   "display": "Tidal",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.941,
+    0.941,
+    0.941
+   ],
+   "secondary": [
+    0.024,
+    0.302,
+    0.463
+   ],
+   "primary_linear": [
+    0.870997,
+    0.870997,
+    0.870997
+   ],
+   "secondary_linear": [
+    0.001858,
+    0.074233,
+    0.181378
+   ],
+   "primary_hex": "#f0f0f0",
+   "secondary_hex": "#064d76"
+  },
+  {
+   "name": "tint_neutral_spooky_a_default",
+   "display": "Pumpkin Pie",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.824,
+    0.306,
+    0.047
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.645309,
+    0.076245,
+    0.003671
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#d24e0c"
+  },
+  {
+   "name": "tint_neutral_spooky_b_default",
+   "display": "Starry Night",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.506,
+    0.055,
+    0.824
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.219637,
+    0.004401,
+    0.645309
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#810ed2"
+  },
+  {
+   "name": "tint_neutral_spooky_c_default",
+   "display": "Enchanted",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.047,
+    0.718,
+    0.059
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.003671,
+    0.474051,
+    0.004795
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#0cb70f"
+  },
+  {
+   "name": "tint_neutral_spooky_d_default",
+   "display": "Corn Husk",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.361,
+    0.094,
+    0.286
+   ],
+   "secondary": [
+    0.937,
+    0.569,
+    0.0
+   ],
+   "primary_linear": [
+    0.107156,
+    0.009117,
+    0.066497
+   ],
+   "secondary_linear": [
+    0.862625,
+    0.283555,
+    0.0
+   ],
+   "primary_hex": "#5c1849",
+   "secondary_hex": "#ef9100"
+  },
+  {
+   "name": "tint_neutral_spooky_e_default",
+   "display": "Blood Moon",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.24,
+    0.008,
+    0.0
+   ],
+   "secondary": [
+    0.765,
+    0.122,
+    0.165
+   ],
+   "primary_linear": [
+    0.046964,
+    0.000619,
+    0.0
+   ],
+   "secondary_linear": [
+    0.546195,
+    0.013783,
+    0.023228
+   ],
+   "primary_hex": "#3d0200",
+   "secondary_hex": "#c31f2a"
+  },
+  {
+   "name": "tint_neutral_summer_a_default",
+   "display": "Terraformed",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.235,
+    0.498,
+    0.663
+   ],
+   "secondary": [
+    0.0,
+    0.831,
+    0.557
+   ],
+   "primary_linear": [
+    0.045076,
+    0.212195,
+    0.397093
+   ],
+   "secondary_linear": [
+    0.0,
+    0.657711,
+    0.270643
+   ],
+   "primary_hex": "#3c7fa9",
+   "secondary_hex": "#00d48e"
+  },
+  {
+   "name": "tint_neutral_xmas_a_default",
+   "display": "Evergreen",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.0,
+    0.663,
+    0.31
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.0,
+    0.397093,
+    0.078288
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#00a94f"
+  },
+  {
+   "name": "tint_neutral_xmas_b_default",
+   "display": "Snowstorm",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.008,
+    0.227,
+    0.435
+   ],
+   "secondary": [
+    0.906,
+    0.906,
+    0.906
+   ],
+   "primary_linear": [
+    0.000619,
+    0.042149,
+    0.158732
+   ],
+   "secondary_linear": [
+    0.799338,
+    0.799338,
+    0.799338
+   ],
+   "primary_hex": "#023a6f",
+   "secondary_hex": "#e7e7e7"
+  },
+  {
+   "name": "tint_neutral_xmas_c_default",
+   "display": "Autumnal",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.392,
+    0.0,
+    0.059
+   ],
+   "secondary": [
+    0.976,
+    0.682,
+    0.094
+   ],
+   "primary_linear": [
+    0.12733,
+    0.0,
+    0.004795
+   ],
+   "secondary_linear": [
+    0.94627,
+    0.422782,
+    0.009117
+   ],
+   "primary_hex": "#64000f",
+   "secondary_hex": "#f9ae18"
+  },
+  {
+   "name": "tint_neutral_xmas_d_default",
+   "display": "Peppermint",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.49,
+    0.099,
+    0.099
+   ],
+   "secondary": [
+    0.906,
+    0.906,
+    0.906
+   ],
+   "primary_linear": [
+    0.204902,
+    0.009868,
+    0.009868
+   ],
+   "secondary_linear": [
+    0.799338,
+    0.799338,
+    0.799338
+   ],
+   "primary_hex": "#7d1919",
+   "secondary_hex": "#e7e7e7"
+  },
+  {
+   "name": "tint_neutral_xmas_e_default",
+   "display": "Wintergreen",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.0,
+    0.329,
+    0.129
+   ],
+   "secondary": [
+    0.906,
+    0.906,
+    0.906
+   ],
+   "primary_linear": [
+    0.0,
+    0.088428,
+    0.015127
+   ],
+   "secondary_linear": [
+    0.799338,
+    0.799338,
+    0.799338
+   ],
+   "primary_hex": "#005421",
+   "secondary_hex": "#e7e7e7"
+  },
+  {
+   "name": "tint_orange_a_default",
+   "display": "Rust",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.305,
+    0.156,
+    0.113
+   ],
+   "secondary": [
+    0.674,
+    0.337,
+    0.223
+   ],
+   "primary_linear": [
+    0.075739,
+    0.021012,
+    0.01216
+   ],
+   "secondary_linear": [
+    0.411851,
+    0.092914,
+    0.040729
+   ],
+   "primary_hex": "#4e281d",
+   "secondary_hex": "#ac5639"
+  },
+  {
+   "name": "tint_orange_b_default",
+   "display": "Sandstone",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.345,
+    0.196,
+    0.121
+   ],
+   "secondary": [
+    0.698,
+    0.443,
+    0.129
+   ],
+   "primary_linear": [
+    0.09753,
+    0.031872,
+    0.013596
+   ],
+   "secondary_linear": [
+    0.445146,
+    0.165023,
+    0.015127
+   ],
+   "primary_hex": "#58321f",
+   "secondary_hex": "#b27121"
+  },
+  {
+   "name": "tint_orange_c_default",
+   "display": "Corrosion",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.447,
+    0.146,
+    0.026
+   ],
+   "secondary": [
+    0.765,
+    0.288,
+    0.129
+   ],
+   "primary_linear": [
+    0.168222,
+    0.018701,
+    0.002012
+   ],
+   "secondary_linear": [
+    0.546195,
+    0.067437,
+    0.015127
+   ],
+   "primary_hex": "#722507",
+   "secondary_hex": "#c34921"
+  },
+  {
+   "name": "tint_orange_d_default",
+   "display": "Thermal",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.4,
+    0.118,
+    0.024
+   ],
+   "secondary": [
+    0.753,
+    0.598,
+    0.133
+   ],
+   "primary_linear": [
+    0.132868,
+    0.013047,
+    0.001858
+   ],
+   "secondary_linear": [
+    0.527207,
+    0.316217,
+    0.015928
+   ],
+   "primary_hex": "#661e06",
+   "secondary_hex": "#c09822"
+  },
+  {
+   "name": "tint_orange_e_default",
+   "display": "Heatsink",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.337,
+    0.075,
+    0.066
+   ],
+   "secondary": [
+    0.702,
+    0.23,
+    0.168
+   ],
+   "primary_linear": [
+    0.092914,
+    0.006571,
+    0.005532
+   ],
+   "secondary_linear": [
+    0.450842,
+    0.043234,
+    0.023995
+   ],
+   "primary_hex": "#561311",
+   "secondary_hex": "#b33b2b"
+  },
+  {
+   "name": "tint_orange_f_default",
+   "display": "Protostar",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.639,
+    0.208,
+    0.086
+   ],
+   "secondary": [
+    0.925,
+    0.925,
+    0.925
+   ],
+   "primary_linear": [
+    0.36598,
+    0.035652,
+    0.007986
+   ],
+   "secondary_linear": [
+    0.837793,
+    0.837793,
+    0.837793
+   ],
+   "primary_hex": "#a33516",
+   "secondary_hex": "#ececec"
+  },
+  {
+   "name": "tint_orange_g_default",
+   "display": "Honeycomb",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.759,
+    0.603,
+    0.23
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.536652,
+    0.32206,
+    0.043234
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#c29a3b"
+  },
+  {
+   "name": "tint_orange_h_default",
+   "display": "Star Ruby",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.514,
+    0.047,
+    0.145
+   ],
+   "secondary": [
+    0.722,
+    0.388,
+    0.957
+   ],
+   "primary_linear": [
+    0.227229,
+    0.003671,
+    0.018478
+   ],
+   "secondary_linear": [
+    0.479959,
+    0.124613,
+    0.904956
+   ],
+   "primary_hex": "#830c25",
+   "secondary_hex": "#b863f4"
+  },
+  {
+   "name": "tint_orange_i_default",
+   "display": "Solar Wind",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.592,
+    0.031,
+    0.11
+   ],
+   "secondary": [
+    0.816,
+    0.765,
+    0.082
+   ],
+   "primary_linear": [
+    0.309289,
+    0.002399,
+    0.011645
+   ],
+   "secondary_linear": [
+    0.631303,
+    0.546195,
+    0.007453
+   ],
+   "primary_hex": "#97081c",
+   "secondary_hex": "#d0c315"
+  },
+  {
+   "name": "tint_orange_j_default",
+   "display": "Biomass",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "secondary": [
+    0.686,
+    0.282,
+    0.0
+   ],
+   "primary_linear": [
+    0.019607,
+    0.019607,
+    0.019607
+   ],
+   "secondary_linear": [
+    0.42831,
+    0.064641,
+    0.0
+   ],
+   "primary_hex": "#262626",
+   "secondary_hex": "#af4800"
+  },
+  {
+   "name": "tint_orange_k_default",
+   "display": "Paprika",
+   "description": "Progression Reward Item",
+   "primary": [
+    0.925,
+    0.925,
+    0.925
+   ],
+   "secondary": [
+    0.639,
+    0.208,
+    0.086
+   ],
+   "primary_linear": [
+    0.837793,
+    0.837793,
+    0.837793
+   ],
+   "secondary_linear": [
+    0.36598,
+    0.035652,
+    0.007986
+   ],
+   "primary_hex": "#ececec",
+   "secondary_hex": "#a33516"
+  }
+ ]
+}

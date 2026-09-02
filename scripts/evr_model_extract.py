@@ -124,6 +124,11 @@ def extract(root: Path, model_hash: str, out_dir: Path, *,
         # can tell a glow mask from an ambient-occlusion map without decoding
         # textures itself.
         EM.annotate_emissive_masks(specs, package)
+        # And measure each BLEND material's alpha map, so the add-on can spot a
+        # transparent draw whose alpha source is opaque at every texel.
+        EM.annotate_alpha_planes(specs, package)
+        # Flag a roughness channel the packer filled with a constant.
+        EM.annotate_data_maps(specs, package)
         (package / "materials.json").write_text(json.dumps(
             {"format": "le_materials", "version": 2, "master": model_hash,
              "source": "evr_model_extract", "textures_subdir": "textures",
