@@ -1,0 +1,144 @@
+{
+ "CAnimationCRWin10": [
+  8,
+  24,
+  176,
+  216
+ ],
+ "CCharacterAnimationCRWin10": [
+  8,
+  24,
+  56,
+  64,
+  176,
+  400
+ ],
+ "CCheckpointCRWin10": [
+  24,
+  216
+ ],
+ "CEventCRWin10": [
+  24,
+  216
+ ],
+ "CGReflectionProbeResourceWin10": [
+  56
+ ],
+ "CJsonConfigCRWin10": [
+  24,
+  40
+ ],
+ "CMaterialTypesBVHResourceWin10": [
+  16
+ ],
+ "CModelLODCRWin10": [
+  2,
+  8,
+  20,
+  24,
+  56,
+  152
+ ],
+ "CModelSwapperCRWin10": [
+  8,
+  24,
+  56,
+  168
+ ],
+ "CPlatformCRWin10": [
+  24,
+  80,
+  272,
+  384
+ ],
+ "CPluginCRWin10": [
+  24,
+  192,
+  736
+ ],
+ "CPositionSelectionCRWin10": [
+  8,
+  24,
+  88
+ ],
+ "CR15KillVolCRWin10": [
+  24,
+  216,
+  232
+ ],
+ "CR15NetBitFieldCRWin10": [
+  24,
+  56,
+  88
+ ],
+ "CR15NetPlayerModelSwapperCRWin10": [
+  8,
+  24,
+  56,
+  192
+ ],
+ "CR15NetUISettingsCRWin10": [
+  8,
+  20,
+  24,
+  88
+ ],
+ "CR15PlatformCRWin10": [
+  24,
+  88,
+  272,
+  392
+ ],
+ "CR15PropInputCRWin10": [
+  24,
+  144,
+  272,
+  448,
+  6148914691236517205
+ ],
+ "CR15SyncGrabCRWin10": [
+  24,
+  56,
+  128,
+  824
+ ],
+ "CR15TagCRWin10": [
+  4,
+  24,
+  56,
+  88
+ ],
+ "CR15TeamCRWin10": [
+  24,
+  40
+ ],
+ "CR15UISettingsCRWin10": [
+  8,
+  24,
+  88
+ ],
+ "CSVOResourceWin10": [
+  14,
+  112,
+  2422
+ ],
+ "CSettingsTranslatorCRWin10": [
+  8,
+  24,
+  32
+ ],
+ "CSettingsUICRWin10": [
+  4,
+  24,
+  104
+ ],
+ "CTagCRWin10": [
+  24,
+  56,
+  88
+ ],
+ "CTeamCRWin10": [
+  24,
+  40
+ ]
+}

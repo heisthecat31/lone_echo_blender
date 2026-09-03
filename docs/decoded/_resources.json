@@ -1,0 +1,27 @@
+{
+ "CComponentSpaceResourceWin10": {
+  "levels": 31,
+  "min": 192,
+  "max": 1648
+ },
+ "CGFSEffectsResourceWin10": {
+  "levels": 31,
+  "min": 1416,
+  "max": 1416
+ },
+ "CGVisibilityResourceWin10": {
+  "levels": 31,
+  "min": 92,
+  "max": 265300
+ },
+ "CGameLevelResourceWin10": {
+  "levels": 31,
+  "min": 1400,
+  "max": 86976
+ },
+ "CPhysicsResourceWin10": {
+  "levels": 31,
+  "min": 72,
+  "max": 13962648
+ }
+}

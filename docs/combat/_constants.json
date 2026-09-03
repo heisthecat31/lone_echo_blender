@@ -1,0 +1,2079 @@
+{
+ "CActorLODCRWin10": {
+  "stride": 48,
+  "entries_examined": 41,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "float 0.00743239",
+   "4": "float 2.84315e-05",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000040",
+   "28": "zero",
+   "40": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   36,
+   44
+  ],
+  "invariant_bytes": 28,
+  "varying_bytes": 20
+ },
+ "CActorRegionLODCRWin10": {
+  "stride": 32,
+  "entries_examined": 32,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xA642A24E",
+   "4": "float 3.7916e-08",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   24
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CAmbientSoundCRWin10": {
+  "stride": 280,
+  "entries_examined": 14,
+  "levels": [
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x2C9EDD3C",
+   "4": "0x6089664C",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000010",
+   "28": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "zero",
+   "64": "zero",
+   "68": "0x00000001",
+   "72": "zero",
+   "76": "zero",
+   "80": "zero",
+   "84": "zero",
+   "88": "zero",
+   "92": "zero",
+   "96": "zero",
+   "100": "zero",
+   "104": "zero",
+   "108": "zero",
+   "112": "zero",
+   "116": "zero",
+   "120": "zero",
+   "124": "0x00000001",
+   "128": "zero",
+   "132": "zero",
+   "136": "zero",
+   "140": "zero",
+   "144": "zero",
+   "148": "zero",
+   "152": "zero",
+   "156": "zero",
+   "160": "zero",
+   "164": "zero",
+   "168": "zero",
+   "172": "zero",
+   "176": "zero",
+   "180": "0x00000001",
+   "184": "zero",
+   "188": "zero",
+   "192": "zero",
+   "196": "zero",
+   "200": "zero",
+   "204": "zero",
+   "208": "zero",
+   "212": "zero",
+   "216": "zero",
+   "220": "zero",
+   "224": "zero",
+   "228": "zero",
+   "232": "zero",
+   "236": "0x00000001",
+   "240": "zero",
+   "244": "zero",
+   "248": "zero",
+   "252": "zero",
+   "256": "zero",
+   "260": "zero",
+   "264": "zero",
+   "268": "zero",
+   "272": "zero",
+   "276": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   36
+  ],
+  "invariant_bytes": 264,
+  "varying_bytes": 16
+ },
+ "CBillboardCRWin10": {
+  "stride": 80,
+  "entries_examined": 123,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x0950622C",
+   "4": "0x974A2D38",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "28": "zero",
+   "40": "0xFFFFFFFF",
+   "44": "0xFFFFFFFF",
+   "48": "zero",
+   "52": "zero",
+   "56": "0xFFFFFFFF",
+   "60": "0xFFFFFFFF",
+   "64": "zero",
+   "72": "zero",
+   "76": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   24,
+   32,
+   36,
+   68
+  ],
+  "invariant_bytes": 56,
+  "varying_bytes": 24
+ },
+ "CBoundingSphereCRWin10": {
+  "stride": 48,
+  "entries_examined": 3718,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xD93889C7",
+   "4": "0x5430D599",
+   "20": "0x00000001",
+   "24": "0x00000004",
+   "28": "zero",
+   "32": "zero",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 36,
+  "varying_bytes": 12
+ },
+ "CComponentRegionLODCRWin10": {
+  "stride": 88,
+  "entries_examined": 4,
+  "levels": [
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x16A3B10C",
+   "4": "0xCCE4A1D2",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000010",
+   "28": "zero",
+   "32": "zero",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "0x00000001",
+   "64": "0x00000020",
+   "68": "zero",
+   "72": "zero",
+   "76": "zero",
+   "80": "zero",
+   "84": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 80,
+  "varying_bytes": 8
+ },
+ "CDecalCRWin10": {
+  "stride": 296,
+  "entries_examined": 540,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "20": "zero",
+   "28": "zero",
+   "88": "float 1",
+   "104": "zero",
+   "108": "zero",
+   "128": "zero",
+   "132": "zero",
+   "152": "zero",
+   "156": "zero",
+   "176": "zero",
+   "180": "zero",
+   "200": "zero",
+   "204": "zero",
+   "224": "float 1",
+   "228": "float 1",
+   "232": "float 1",
+   "236": "float 1",
+   "244": "float 256",
+   "248": "float 0.125",
+   "256": "float 1",
+   "260": "float 1",
+   "268": "zero",
+   "272": "float 1",
+   "276": "float 1",
+   "280": "zero",
+   "284": "zero",
+   "288": "0xFFFFFFFF",
+   "292": "0xFFFFFFFF"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   16,
+   24,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52,
+   56,
+   60,
+   64,
+   68,
+   72,
+   76,
+   80,
+   84,
+   92,
+   96,
+   100,
+   112,
+   116,
+   120,
+   124,
+   136,
+   140,
+   144,
+   148,
+   160,
+   164,
+   168,
+   172,
+   184,
+   188,
+   192,
+   196,
+   208,
+   212,
+   216,
+   220,
+   240,
+   252,
+   264
+  ],
+  "invariant_bytes": 112,
+  "varying_bytes": 184
+ },
+ "CDynamicLODRegionTargetCRWin10": {
+  "stride": 32,
+  "entries_examined": 6,
+  "levels": [
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x0CA1E3A0",
+   "4": "0xFFF35F2A",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CFrustumCullCRWin10": {
+  "stride": 32,
+  "entries_examined": 3103,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x6EE23F1A",
+   "4": "0x0EFF8178",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   20,
+   24
+  ],
+  "invariant_bytes": 12,
+  "varying_bytes": 20
+ },
+ "CInputCRWin10": {
+  "stride": 32,
+  "entries_examined": 4,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x27EF9172",
+   "4": "float 0.000113765",
+   "8": "0x86155095",
+   "12": "0xA8ADFF57",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 32,
+  "varying_bytes": 0
+ },
+ "CLevelAABBCRWin10": {
+  "stride": 56,
+  "entries_examined": 2345,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x109D8206",
+   "4": "float 0.000792552",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "0x00000004",
+   "28": "zero",
+   "32": "zero",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 48,
+  "varying_bytes": 8
+ },
+ "CMaterialTypeCRWin10": {
+  "stride": 32,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x2BBF816F",
+   "4": "0xF4675E41",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "COcclusionCullCRWin10": {
+  "stride": 32,
+  "entries_examined": 3103,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x836AAAAA",
+   "4": "0xF9A77C39",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   20,
+   24
+  ],
+  "invariant_bytes": 12,
+  "varying_bytes": 20
+ },
+ "CParticleEffectCRWin10": {
+  "stride": 152,
+  "entries_examined": 60,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "20": "zero",
+   "24": "0x00000005",
+   "28": "zero",
+   "60": "zero",
+   "64": "zero",
+   "68": "zero",
+   "72": "zero",
+   "76": "zero",
+   "80": "zero",
+   "96": "zero",
+   "100": "zero",
+   "104": "zero",
+   "108": "zero",
+   "112": "zero",
+   "116": "zero",
+   "120": "zero",
+   "124": "0x00000001",
+   "128": "0x00000020",
+   "132": "zero",
+   "136": "zero",
+   "140": "zero",
+   "144": "zero",
+   "148": "zero"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   16,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52,
+   56,
+   84,
+   88,
+   92
+  ],
+  "invariant_bytes": 92,
+  "varying_bytes": 60
+ },
+ "CPhysicsCRWin10": {
+  "stride": 48,
+  "entries_examined": 375,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xE22AD937",
+   "4": "0x5B8CC538",
+   "20": "zero",
+   "28": "zero",
+   "32": "zero",
+   "36": "float 1",
+   "40": "0xFFFFFFFF",
+   "44": "0xFFFFFFFF"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24
+  ],
+  "invariant_bytes": 32,
+  "varying_bytes": 16
+ },
+ "CR15BounceCRWin10": {
+  "stride": 48,
+  "entries_examined": 39,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x9A26458D",
+   "4": "0x7A804600",
+   "20": "zero",
+   "28": "zero",
+   "44": "float 1"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   32,
+   36,
+   40
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 28
+ },
+ "CR15ButtonInteractCRWin10": {
+  "stride": 296,
+  "entries_examined": 2553,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "28": "zero",
+   "40": "float 0.035",
+   "52": "zero",
+   "72": "0xFFFFFFFF",
+   "76": "0xFFFFFFFF",
+   "112": "zero",
+   "120": "zero",
+   "124": "zero",
+   "200": "0xFFFFFFFF",
+   "204": "0xFFFFFFFF",
+   "216": "0xFFFFFFFF",
+   "220": "0xFFFFFFFF",
+   "224": "0xFFFFFFFF",
+   "228": "0xFFFFFFFF",
+   "240": "zero",
+   "256": "zero",
+   "260": "zero",
+   "264": "0xFFFFFFFF",
+   "268": "0xFFFFFFFF",
+   "272": "0xFFFFFFFF",
+   "276": "0xFFFFFFFF",
+   "280": "0xFFFFFFFF",
+   "284": "0xFFFFFFFF",
+   "288": "0xFFFFFFFF",
+   "292": "0xFFFFFFFF"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   24,
+   32,
+   36,
+   44,
+   48,
+   56,
+   60,
+   64,
+   68,
+   80,
+   84,
+   88,
+   92,
+   96,
+   100,
+   104,
+   108,
+   116,
+   128,
+   132,
+   136,
+   140,
+   144,
+   148,
+   152,
+   156,
+   160,
+   164,
+   168,
+   172,
+   176,
+   180,
+   184,
+   188,
+   192,
+   196,
+   208,
+   212,
+   232,
+   236,
+   244,
+   248,
+   252
+  ],
+  "invariant_bytes": 108,
+  "varying_bytes": 188
+ },
+ "CR15CollisionCRWin10": {
+  "stride": 56,
+  "entries_examined": 35,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xEF778E3A",
+   "4": "0x9EEFFF46",
+   "16": "0x000FFFFF",
+   "20": "zero",
+   "24": "0x00000001",
+   "28": "zero",
+   "32": "0xFFFFFFFF",
+   "36": "0xFFFFFFFF",
+   "40": "0xFFFFFFFF",
+   "44": "0xFFFFFFFF",
+   "48": "float 0.2",
+   "52": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 48,
+  "varying_bytes": 8
+ },
+ "CR15DampenerCRWin10": {
+  "stride": 64,
+  "entries_examined": 19,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "20": "zero",
+   "28": "zero",
+   "40": "float 5",
+   "44": "float 10",
+   "48": "float 1",
+   "52": "float 1",
+   "56": "float 1",
+   "60": "float 1"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   16,
+   24,
+   32,
+   36
+  ],
+  "invariant_bytes": 32,
+  "varying_bytes": 32
+ },
+ "CR15FrisbeeCRWin10": {
+  "stride": 32,
+  "entries_examined": 20,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xF0B8B181",
+   "4": "0x84C65832",
+   "16": "0x000FFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CR15ImpulseToHandTouchTypeCRWin10": {
+  "stride": 32,
+  "entries_examined": 18,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0xE149376D",
+   "4": "0x82A3EB45",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CR15InteractOutputCRWin10": {
+  "stride": 32,
+  "entries_examined": 19,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 0.00317453",
+   "4": "0x9A6F1E83",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CR15LinearConstraintTouchInteractCRWin10": {
+  "stride": 288,
+  "entries_examined": 19,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 0.00317453",
+   "4": "0x9A6F1E83",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "32": "float 0.00317453",
+   "36": "0x9A6F1E83",
+   "40": "0xFFFFFFFF",
+   "44": "0xFFFFFFFF",
+   "48": "0xFFFFFFFF",
+   "52": "zero",
+   "56": "zero",
+   "60": "zero",
+   "64": "0x00000001",
+   "68": "zero",
+   "72": "zero",
+   "76": "zero",
+   "80": "zero",
+   "84": "zero",
+   "88": "zero",
+   "92": "zero",
+   "104": "zero",
+   "108": "zero",
+   "112": "0x8D260515",
+   "116": "0xABFE651C",
+   "128": "zero",
+   "132": "zero",
+   "136": "0x8D260515",
+   "140": "0xABFE651C",
+   "144": "zero",
+   "148": "float 0.5",
+   "152": "float 0.95",
+   "156": "zero",
+   "160": "zero",
+   "164": "zero",
+   "168": "0xFFFFFFFF",
+   "172": "0xFFFFFFFF",
+   "176": "0xFFFFFFFF",
+   "180": "0xFFFFFFFF",
+   "184": "0xFFFFFFFF",
+   "188": "zero",
+   "192": "0x00000020",
+   "196": "zero",
+   "200": "zero",
+   "204": "zero",
+   "208": "zero",
+   "212": "zero",
+   "216": "zero",
+   "220": "zero",
+   "224": "zero",
+   "228": "zero",
+   "232": "zero",
+   "236": "zero",
+   "240": "zero",
+   "244": "float 1",
+   "248": "zero",
+   "252": "zero",
+   "256": "zero",
+   "260": "float 1",
+   "264": "zero",
+   "268": "zero",
+   "272": "zero",
+   "276": "zero",
+   "284": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   96,
+   100,
+   120,
+   124,
+   280
+  ],
+  "invariant_bytes": 260,
+  "varying_bytes": 28
+ },
+ "CR15LinearPositionConstraintCRWin10": {
+  "stride": 136,
+  "entries_examined": 19,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 0.00317453",
+   "4": "0x9A6F1E83",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero",
+   "32": "0x00000001",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "zero",
+   "72": "zero",
+   "76": "zero",
+   "80": "0x8D260515",
+   "84": "0xABFE651C",
+   "96": "zero",
+   "100": "zero",
+   "104": "0x8D260515",
+   "108": "0xABFE651C",
+   "112": "zero",
+   "116": "float 0.5",
+   "120": "float 0.95",
+   "124": "zero",
+   "128": "zero",
+   "132": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   64,
+   68,
+   88,
+   92
+  ],
+  "invariant_bytes": 112,
+  "varying_bytes": 24
+ },
+ "CR15NetActorCRWin10": {
+  "stride": 32,
+  "entries_examined": 85,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x903773DA",
+   "4": "0xCFB89F03",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CR15NetAimAssistCRWin10": {
+  "stride": 48,
+  "entries_examined": 75,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x11BBC952",
+   "4": "0xCC9E89D8",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000001",
+   "28": "zero",
+   "32": "float 10",
+   "36": "float 0.25",
+   "40": "float 20",
+   "44": "float 0.25"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 40,
+  "varying_bytes": 8
+ },
+ "CR15NetAutoTargetCRWin10": {
+  "stride": 104,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "float 70196.7",
+   "4": "float 423994",
+   "8": "0xA9BF5A13",
+   "12": "0x10E40287",
+   "16": "0x000FFFFF",
+   "20": "zero",
+   "24": "0x00000001",
+   "28": "zero",
+   "32": "float 20",
+   "36": "float 0.3",
+   "40": "float 2",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "float 1",
+   "64": "0xC03FDFE6",
+   "68": "float 0.0729012",
+   "72": "float 2.14369",
+   "76": "float 1",
+   "80": "0xD40B806E",
+   "84": "0xA8F84E7D",
+   "88": "zero",
+   "92": "zero",
+   "96": "0xFFFFFFFF",
+   "100": "0xFFFFFFFF"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 104,
+  "varying_bytes": 0
+ },
+ "CR15NetBulletCRWin10": {
+  "stride": 136,
+  "entries_examined": 45,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x0E07C1B2",
+   "4": "float 134643",
+   "20": "zero",
+   "28": "zero",
+   "68": "zero",
+   "72": "0x00000001",
+   "76": "zero",
+   "112": "0xFFFFFFFF",
+   "116": "0xFFFFFFFF"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52,
+   56,
+   60,
+   64,
+   80,
+   84,
+   88,
+   92,
+   96,
+   100,
+   104,
+   108,
+   120,
+   124,
+   128,
+   132
+  ],
+  "invariant_bytes": 36,
+  "varying_bytes": 100
+ },
+ "CR15NetDamageableCRWin10": {
+  "stride": 56,
+  "entries_examined": 86,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xC2F5920F",
+   "4": "0xC9DC08CF",
+   "20": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52
+  ],
+  "invariant_bytes": 16,
+  "varying_bytes": 40
+ },
+ "CR15NetDebugDrawCRWin10": {
+  "stride": 32,
+  "entries_examined": 516,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 0.0142225",
+   "4": "float 22033.4",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CR15NetDynamicCoverCRWin10": {
+  "stride": 32,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "float 7005.65",
+   "4": "0xFD0FD898",
+   "8": "0xD5292926",
+   "12": "float 0.0681393",
+   "16": "0x001FFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 32,
+  "varying_bytes": 0
+ },
+ "CR15NetDynamicPosterCRWin10": {
+  "stride": 72,
+  "entries_examined": 9,
+  "levels": [
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x09D229E0",
+   "4": "0x5915C961",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "32": "0xB2F74B01",
+   "36": "0xEB899520",
+   "40": "0x051B2F23",
+   "52": "zero",
+   "56": "0xFFFFFFFF",
+   "60": "0xFFFFFFFF",
+   "64": "0x2E3D410E",
+   "68": "0x80011E8D"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   44,
+   48
+  ],
+  "invariant_bytes": 56,
+  "varying_bytes": 16
+ },
+ "CR15NetExplosionCRWin10": {
+  "stride": 96,
+  "entries_examined": 45,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "20": "zero",
+   "28": "zero",
+   "56": "zero"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   16,
+   24,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52,
+   60,
+   64,
+   68,
+   72,
+   76,
+   80,
+   84,
+   88,
+   92
+  ],
+  "invariant_bytes": 12,
+  "varying_bytes": 84
+ },
+ "CR15NetFollowPlayerCRWin10": {
+  "stride": 40,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x1CC3E962",
+   "4": "0x718D4EF0",
+   "8": "0xA9BF5A13",
+   "12": "0x10E40287",
+   "16": "0x000FFFFF",
+   "20": "zero",
+   "24": "0x00000001",
+   "28": "zero",
+   "32": "float 1.5",
+   "36": "float 2.5"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 40,
+  "varying_bytes": 0
+ },
+ "CR15NetGhostLODCRWin10": {
+  "stride": 88,
+  "entries_examined": 2224,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x75FF883C",
+   "4": "0x794F2561",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "32": "zero",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "0x00000001",
+   "64": "0x00000020",
+   "68": "zero",
+   "72": "zero",
+   "76": "zero",
+   "80": "zero",
+   "84": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 76,
+  "varying_bytes": 12
+ },
+ "CR15NetGunCRWin10": {
+  "stride": 160,
+  "entries_examined": 600,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x9B2F5386",
+   "4": "0x7A804A0A",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "36": "zero",
+   "40": "0x5BC85873",
+   "44": "0xEB587BB2",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "float 1",
+   "64": "0xC0400000",
+   "68": "0xC2B40000",
+   "88": "zero",
+   "92": "zero",
+   "96": "0x8D260515",
+   "100": "0xABFE651C",
+   "112": "zero",
+   "116": "zero",
+   "120": "0xFFFFFFFF",
+   "124": "0xFFFFFFFF",
+   "128": "zero",
+   "136": "0xFFFFFFFF",
+   "140": "0xFFFFFFFF",
+   "152": "float 10",
+   "156": "0x00000001"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   72,
+   76,
+   80,
+   84,
+   104,
+   108,
+   132,
+   144,
+   148
+  ],
+  "invariant_bytes": 112,
+  "varying_bytes": 48
+ },
+ "CR15NetIdCRWin10": {
+  "stride": 32,
+  "entries_examined": 1062,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x2CEB8D62",
+   "4": "0x24BCC119",
+   "16": "0xFFFFFFFF",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   20
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CR15NetKillTickerCRWin10": {
+  "stride": 32,
+  "entries_examined": 4,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 5.07668e+07",
+   "4": "0x9E205E04",
+   "8": "0x86155095",
+   "12": "0xA8ADFF57",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 32,
+  "varying_bytes": 0
+ },
+ "CR15NetMagazineCRWin10": {
+  "stride": 40,
+  "entries_examined": 35,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x827D6823",
+   "4": "0xD5B9A165",
+   "16": "0x000FFFFF",
+   "20": "zero",
+   "28": "zero",
+   "32": "float 30",
+   "36": "float 9999"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   24
+  ],
+  "invariant_bytes": 28,
+  "varying_bytes": 12
+ },
+ "CR15NetPayloadCRWin10": {
+  "stride": 72,
+  "entries_examined": 2,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 5.04327e-10",
+   "4": "0x9C80EAD4",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000020",
+   "28": "zero",
+   "32": "float 1",
+   "36": "float 1",
+   "40": "float 6",
+   "44": "float 1",
+   "48": "float 1.2",
+   "52": "float 1.3",
+   "56": "float 1.35",
+   "60": "float 1",
+   "64": "float 0.1",
+   "68": "float 0.2"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 64,
+  "varying_bytes": 8
+ },
+ "CR15NetPhysicsCRWin10": {
+  "stride": 40,
+  "entries_examined": 58,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xF995E4A3",
+   "4": "0x8FEE6557",
+   "20": "zero",
+   "28": "zero",
+   "32": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   36
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 20
+ },
+ "CR15NetPooledActorCRWin10": {
+  "stride": 40,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xE1A26CE8",
+   "4": "0x105121C3",
+   "8": "0xD5292926",
+   "12": "float 0.0681393",
+   "16": "0x001FFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "32": "0x00000001",
+   "36": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 40,
+  "varying_bytes": 0
+ },
+ "CR15NetPunchableCRWin10": {
+  "stride": 48,
+  "entries_examined": 13,
+  "levels": [
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xDFF5DEB5",
+   "4": "0x8DBBE870",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "32": "float 3",
+   "36": "zero",
+   "40": "0xFFFFFFFF",
+   "44": "0xFFFFFFFF"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 40,
+  "varying_bytes": 8
+ },
+ "CR15NetSensorTargetCRWin10": {
+  "stride": 32,
+  "entries_examined": 48,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xFBAA0D46",
+   "4": "0xA7F862E8",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CR15NetTouchInteractCRWin10": {
+  "stride": 40,
+  "entries_examined": 66,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x1BA186D0",
+   "4": "0xD669C468",
+   "20": "zero",
+   "28": "zero",
+   "32": "float 300",
+   "36": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 16
+ },
+ "CR15NetTrackMoverCRWin10": {
+  "stride": 48,
+  "entries_examined": 2,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x13A56E1A",
+   "4": "0x81CB05E0",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "40": "zero",
+   "44": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   36
+  ],
+  "invariant_bytes": 32,
+  "varying_bytes": 16
+ },
+ "CR15NetVarCRWin10": {
+  "stride": 32,
+  "entries_examined": 4,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x0E641B4B",
+   "4": "0x2019BD26",
+   "8": "0x64A5A81A",
+   "12": "0xBA21571F",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000010",
+   "28": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 32,
+  "varying_bytes": 0
+ },
+ "CR15OrientationConstraintCRWin10": {
+  "stride": 112,
+  "entries_examined": 19,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "float 0.00317453",
+   "4": "0x9A6F1E83",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "0x00000020",
+   "28": "zero",
+   "32": "zero",
+   "36": "zero",
+   "40": "zero",
+   "44": "zero",
+   "48": "zero",
+   "52": "zero",
+   "56": "zero",
+   "60": "zero",
+   "64": "zero",
+   "68": "zero",
+   "72": "zero",
+   "76": "float 1",
+   "80": "zero",
+   "84": "zero",
+   "88": "zero",
+   "92": "float 1",
+   "96": "zero",
+   "100": "zero",
+   "104": "zero",
+   "108": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 104,
+  "varying_bytes": 8
+ },
+ "CR15ParentedConstraintCRWin10": {
+  "stride": 32,
+  "entries_examined": 29,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x90571652",
+   "4": "0x70340DF2",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 12
+ },
+ "CR15RigidAttachConstraintCRWin10": {
+  "stride": 40,
+  "entries_examined": 10,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x6D78586C",
+   "4": "0x1D952863",
+   "20": "zero",
+   "28": "zero",
+   "36": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   32
+  ],
+  "invariant_bytes": 20,
+  "varying_bytes": 20
+ },
+ "CR15SpawnPointCRWin10": {
+  "stride": 48,
+  "entries_examined": 20,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0xF16B8C3C",
+   "4": "0x03534276",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000020",
+   "28": "zero",
+   "32": "0xFFFFFFFF",
+   "36": "0xFFFFFFFF",
+   "44": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   40
+  ],
+  "invariant_bytes": 36,
+  "varying_bytes": 12
+ },
+ "CR15StickySurfaceCRWin10": {
+  "stride": 88,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x5DC13065",
+   "4": "0x7C949DFD",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "44": "zero",
+   "52": "zero",
+   "60": "zero",
+   "64": "zero",
+   "68": "zero",
+   "72": "0xFFFFFFFF",
+   "76": "0xFFFFFFFF",
+   "80": "zero",
+   "84": "0x01000000"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   36,
+   40,
+   48,
+   56
+  ],
+  "invariant_bytes": 60,
+  "varying_bytes": 28
+ },
+ "CR15TouchInteractCRWin10": {
+  "stride": 64,
+  "entries_examined": 195,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0x22F7B1FC",
+   "4": "0x2E401314",
+   "28": "zero",
+   "48": "zero",
+   "56": "float 1",
+   "60": "float 160"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   20,
+   24,
+   32,
+   36,
+   40,
+   44,
+   52
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 40
+ },
+ "CR15TrackPointCRWin10": {
+  "stride": 56,
+  "entries_examined": 250,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x9771A3AA",
+   "4": "0x0620ED97",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "28": "zero",
+   "48": "zero",
+   "52": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   24,
+   32,
+   36,
+   40,
+   44
+  ],
+  "invariant_bytes": 28,
+  "varying_bytes": 28
+ },
+ "CR15TriggerCRWin10": {
+  "stride": 72,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xE4BDB196",
+   "4": "0x85D45832",
+   "8": "0xAC9FBFF8",
+   "12": "0x26B939FC",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "0x00000001",
+   "28": "zero",
+   "32": "0xE1797488",
+   "36": "0x0671C5E4",
+   "40": "zero",
+   "44": "zero",
+   "48": "0xA604FF08",
+   "52": "0x8A133114",
+   "56": "zero",
+   "60": "zero",
+   "64": "float 0.7",
+   "68": "zero"
+  },
+  "varying_offsets": [],
+  "invariant_bytes": 72,
+  "varying_bytes": 0
+ },
+ "CSharedCanvasUICRWin10": {
+  "stride": 72,
+  "entries_examined": 68,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x51A1BF53",
+   "4": "0xA7724110",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero",
+   "56": "zero",
+   "60": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   32,
+   36,
+   40,
+   44,
+   48,
+   52,
+   64,
+   68
+  ],
+  "invariant_bytes": 32,
+  "varying_bytes": 40
+ },
+ "CSoundCRWin10": {
+  "stride": 80,
+  "entries_examined": 1276,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x26EA8A62",
+   "4": "float 0.000113765",
+   "20": "zero",
+   "28": "zero",
+   "32": "zero",
+   "40": "zero",
+   "60": "float 1",
+   "64": "0xFFFFFFFF",
+   "68": "0xFFFFFFFF",
+   "72": "zero",
+   "76": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12,
+   16,
+   24,
+   36,
+   44,
+   48,
+   52,
+   56
+  ],
+  "invariant_bytes": 44,
+  "varying_bytes": 36
+ },
+ "CStaticLODRegionTargetCRWin10": {
+  "stride": 32,
+  "entries_examined": 28,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "invariant": {
+   "0": "0x6A57023E",
+   "4": "0x18708948",
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CStaticRaycastCRWin10": {
+  "stride": 32,
+  "entries_examined": 5,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "0": "0xEF67B6D2",
+   "4": "0x53C70747",
+   "16": "0xFFFFFFFF",
+   "20": "zero",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   8,
+   12
+  ],
+  "invariant_bytes": 24,
+  "varying_bytes": 8
+ },
+ "CTextureOverrideCRWin10": {
+  "stride": 32,
+  "entries_examined": 1754,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "16": "0xFFFFFFFF",
+   "20": "0x00000001",
+   "24": "zero",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12
+  ],
+  "invariant_bytes": 16,
+  "varying_bytes": 16
+ },
+ "CTextureStreamingCRWin10": {
+  "stride": 40,
+  "entries_examined": 3666,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "invariant": {
+   "20": "0x00000001",
+   "24": "0x00000004",
+   "28": "zero"
+  },
+  "varying_offsets": [
+   0,
+   4,
+   8,
+   12,
+   16,
+   32,
+   36
+  ],
+  "invariant_bytes": 12,
+  "varying_bytes": 28
+ }
+}

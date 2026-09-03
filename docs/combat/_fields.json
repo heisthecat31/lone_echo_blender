@@ -1,0 +1,505 @@
+{
+ "CActorRegionLODCRWin10": {
+  "stride": 32,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "24": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9375,
+     "n": 32
+    }
+   ]
+  }
+ },
+ "CBillboardCRWin10": {
+  "stride": 80,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "24": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9919,
+     "n": 123
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9919,
+     "n": 123
+    }
+   ],
+   "68": [
+    {
+     "means": "actor scale.x",
+     "rate": 0.9837,
+     "n": 123
+    },
+    {
+     "means": "actor scale.y",
+     "rate": 0.9837,
+     "n": 123
+    },
+    {
+     "means": "actor scale.z",
+     "rate": 0.9837,
+     "n": 123
+    }
+   ]
+  }
+ },
+ "CParticleEffectCRWin10": {
+  "stride": 152,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "16": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9167,
+     "n": 60
+    }
+   ],
+   "56": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9167,
+     "n": 60
+    }
+   ]
+  }
+ },
+ "CPhysicsCRWin10": {
+  "stride": 48,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "24": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9173,
+     "n": 375
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9227,
+     "n": 375
+    }
+   ]
+  }
+ },
+ "CR15ButtonInteractCRWin10": {
+  "stride": 296,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "0": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.x",
+     "rate": 0.9452,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.y",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9424,
+     "n": 2553
+    }
+   ],
+   "24": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.x",
+     "rate": 0.9452,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.y",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9424,
+     "n": 2553
+    }
+   ],
+   "104": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.x",
+     "rate": 0.942,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.y",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9424,
+     "n": 2553
+    }
+   ],
+   "108": [
+    {
+     "means": "actor rot.w",
+     "rate": 0.9432,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.x",
+     "rate": 0.9483,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.y",
+     "rate": 0.9483,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.z",
+     "rate": 0.9483,
+     "n": 2553
+    }
+   ],
+   "116": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.x",
+     "rate": 0.942,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.y",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9424,
+     "n": 2553
+    }
+   ],
+   "232": [
+    {
+     "means": "actor pos.z",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.x",
+     "rate": 0.9444,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.y",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9412,
+     "n": 2553
+    }
+   ],
+   "236": [
+    {
+     "means": "actor rot.w",
+     "rate": 0.9401,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.x",
+     "rate": 0.9777,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.y",
+     "rate": 0.9777,
+     "n": 2553
+    },
+    {
+     "means": "actor scale.z",
+     "rate": 0.9777,
+     "n": 2553
+    }
+   ]
+  }
+ },
+ "CR15LinearConstraintTouchInteractCRWin10": {
+  "stride": 288,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "proven": {
+   "96": [
+    {
+     "means": "actor ref",
+     "n": 19
+    }
+   ],
+   "120": [
+    {
+     "means": "actor ref",
+     "n": 19
+    }
+   ]
+  },
+  "partial": {
+   "280": [
+    {
+     "means": "actor rot.z",
+     "rate": 0.9474,
+     "n": 19
+    }
+   ]
+  }
+ },
+ "CR15LinearPositionConstraintCRWin10": {
+  "stride": 136,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "proven": {
+   "64": [
+    {
+     "means": "actor ref",
+     "n": 19
+    }
+   ],
+   "88": [
+    {
+     "means": "actor ref",
+     "n": 19
+    }
+   ]
+  },
+  "partial": {}
+ },
+ "CR15NetDamageableCRWin10": {
+  "stride": 56,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "24": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9884,
+     "n": 86
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9884,
+     "n": 86
+    }
+   ]
+  }
+ },
+ "CR15NetGunCRWin10": {
+  "stride": 160,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {
+   "80": [
+    {
+     "means": "actor ref",
+     "n": 600
+    }
+   ],
+   "104": [
+    {
+     "means": "actor ref",
+     "n": 600
+    }
+   ]
+  },
+  "partial": {}
+ },
+ "CR15RigidAttachConstraintCRWin10": {
+  "stride": 40,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {
+   "32": [
+    {
+     "means": "entry index",
+     "n": 10
+    }
+   ]
+  },
+  "partial": {}
+ },
+ "CR15TouchInteractCRWin10": {
+  "stride": 64,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat"
+  ],
+  "proven": {},
+  "partial": {
+   "20": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9077,
+     "n": 195
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9179,
+     "n": 195
+    }
+   ],
+   "24": [
+    {
+     "means": "actor rot.x",
+     "rate": 0.9077,
+     "n": 195
+    },
+    {
+     "means": "actor rot.z",
+     "rate": 0.9179,
+     "n": 195
+    }
+   ]
+  }
+ },
+ "CR15TrackPointCRWin10": {
+  "stride": 56,
+  "levels": [
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "proven": {},
+  "partial": {
+   "40": [
+    {
+     "means": "actor ref",
+     "rate": 0.992,
+     "n": 250
+    }
+   ]
+  }
+ },
+ "CSharedCanvasUICRWin10": {
+  "stride": 72,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "proven": {
+   "48": [
+    {
+     "means": "actor ref",
+     "n": 68
+    }
+   ]
+  },
+  "partial": {}
+ },
+ "CSoundCRWin10": {
+  "stride": 80,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_fission",
+   "mpl_combat_gauss"
+  ],
+  "proven": {},
+  "partial": {
+   "44": [
+    {
+     "means": "actor scale.x",
+     "rate": 0.9506,
+     "n": 1276
+    },
+    {
+     "means": "actor scale.y",
+     "rate": 0.9506,
+     "n": 1276
+    },
+    {
+     "means": "actor scale.z",
+     "rate": 0.9506,
+     "n": 1276
+    }
+   ]
+  }
+ }
+}

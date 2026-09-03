@@ -1,0 +1,59 @@
+{
+ "CCharacterAnimationCRWin10": {
+  "per_entry_bytes": 952,
+  "bases": [
+   216,
+   408
+  ]
+ },
+ "CCheckpointCRWin10": {
+  "per_entry_bytes": 416,
+  "bases": [
+   288
+  ]
+ },
+ "CJsonConfigCRWin10": {
+  "per_entry_bytes": 40,
+  "bases": [
+   128
+  ]
+ },
+ "CPluginCRWin10": {
+  "per_entry_bytes": 928,
+  "bases": [
+   184
+  ]
+ },
+ "CR15PlatformCRWin10": {
+  "per_entry_bytes": 752,
+  "bases": [
+   240
+  ]
+ },
+ "CR15SyncGrabCRWin10": {
+  "per_entry_bytes": 3408,
+  "bases": [
+   240
+  ]
+ },
+ "CR15TeamCRWin10": {
+  "per_entry_bytes": 80,
+  "bases": [
+   184
+  ]
+ },
+ "CTagCRWin10": {
+  "per_entry_bytes": 160,
+  "bases": [
+   168,
+   184,
+   200
+  ]
+ },
+ "CTeamCRWin10": {
+  "per_entry_bytes": 80,
+  "bases": [
+   184
+  ]
+ }
+}

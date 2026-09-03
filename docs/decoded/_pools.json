@@ -1,0 +1,1634 @@
+{
+ "CActorJugglerCRWin10": {
+  "stride": 144,
+  "levels": [
+   "r14_glb_global_mp"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 224
+  },
+  "header_candidates": [
+   32,
+   88
+  ],
+  "live_headers": [
+   32,
+   88
+  ],
+  "tables": 2,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CAnimationCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 2672,
+   "mpl_tutorial_lobby": 672,
+   "mpl_tutorial_hands": 3472,
+   "mpl_tutorial_arena": 18672,
+   "mpl_tutorial_boost": 1872,
+   "r14_glb_global_mp": 11824,
+   "mpl_combat_combustion": 142912,
+   "mpl_tutorial_air_brake": 1872,
+   "mpl_combat_dyson": 143312,
+   "mpl_combat_gauss": 144144,
+   "mpl_arena_a": 20240,
+   "mpl_lobby_b_arena": 2640,
+   "mpl_tutorial_micro_thrusters": 2672,
+   "mpl_lobby_b_combat": 128912,
+   "mpl_lobby_b2": 2672,
+   "mpl_combat_fission": 143712,
+   "r14_glb_global_tutorial": 2032
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CBlackboardCRWin10": {
+  "stride": 592,
+  "levels": [
+   "r14_glb_global_mp",
+   "mnu_master_mp_ingame",
+   "mnu_master",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 1272,
+   "mnu_master_mp_ingame": 1936,
+   "mnu_master": 2272,
+   "mpl_lobby_b2": 496
+  },
+  "header_candidates": [
+   32,
+   88,
+   144,
+   200,
+   256,
+   296,
+   304,
+   312,
+   352,
+   360,
+   368,
+   408,
+   416,
+   424,
+   464,
+   480,
+   536
+  ],
+  "live_headers": [
+   32,
+   88,
+   144,
+   200,
+   480,
+   536
+  ],
+  "tables": 6,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CCharacterAnimationCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_movement",
+   "r14_glb_global_mp",
+   "mnu_master_mp_ingame",
+   "mnu_master",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 1168,
+   "r14_glb_global_mp": 2312,
+   "mnu_master_mp_ingame": 1360,
+   "mnu_master": 1360,
+   "r14_glb_global_tutorial": 1360
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CCheckpointCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_boost",
+   "mpl_tutorial_air_brake",
+   "mpl_tutorial_master",
+   "mpl_tutorial_micro_thrusters"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 704,
+   "mpl_tutorial_hands": 704,
+   "mpl_tutorial_boost": 704,
+   "mpl_tutorial_air_brake": 704,
+   "mpl_tutorial_master": 2784,
+   "mpl_tutorial_micro_thrusters": 704
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CComponentLODCRWin10": {
+  "stride": 96,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_combat_gauss_section01b",
+   "mpl_combat_gauss_section01a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 1200,
+   "mpl_tutorial_lobby": 12240,
+   "mpl_tutorial_hands": 2760,
+   "mpl_tutorial_arena": 29640,
+   "mpl_tutorial_boost": 1320,
+   "r14_glb_global_mp": 5040,
+   "mpl_combat_combustion": 45840,
+   "mpl_tutorial_air_brake": 600,
+   "mpl_combat_dyson": 46320,
+   "mpl_combat_gauss": 45840,
+   "mpl_arena_a": 49560,
+   "mpl_lobby_b_arena": 6672,
+   "mpl_combat_gauss_section01b": 7920,
+   "mpl_combat_gauss_section01a": 4920,
+   "mpl_tutorial_micro_thrusters": 1320,
+   "mpl_lobby_b_combat": 41584,
+   "mpl_lobby_b2": 27360,
+   "mpl_combat_fission": 45600
+  },
+  "header_candidates": [
+   24,
+   40
+  ],
+  "live_headers": [
+   24,
+   40
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CComponentLODZoneCRWin10": {
+  "stride": 144,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_combat_combustion": 40,
+   "mpl_combat_dyson": 40,
+   "mpl_combat_gauss": 40,
+   "mpl_lobby_b_combat": 40,
+   "mpl_combat_fission": 40
+  },
+  "header_candidates": [
+   32,
+   88
+  ],
+  "live_headers": [
+   32,
+   88
+  ],
+  "tables": 2,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CComponentRegionLODCRWin10": {
+  "stride": 88,
+  "levels": [
+   "mpl_tutorial_arena",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b2",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 96,
+   "r14_glb_global_mp": 992,
+   "mpl_combat_combustion": 96,
+   "mpl_combat_dyson": 96,
+   "mpl_combat_gauss": 96,
+   "mpl_arena_a": 96,
+   "mpl_lobby_b2": 192,
+   "mpl_combat_fission": 96
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CEventCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_combat_gauss_section02",
+   "mpl_combat_gauss_section03",
+   "mpl_arena_a",
+   "mpl_combat_celebration_room_orange",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mpl_combat_gauss_section01b",
+   "mpl_combat_gauss_section01a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "mpl_combat_celebration_room_blue",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 6328,
+   "mpl_tutorial_lobby": 2904,
+   "mpl_tutorial_hands": 2744,
+   "mpl_tutorial_arena": 17080,
+   "mpl_tutorial_boost": 4792,
+   "r14_glb_global_mp": 2040,
+   "mpl_combat_combustion": 19720,
+   "mpl_tutorial_air_brake": 4280,
+   "mpl_combat_dyson": 33064,
+   "mpl_combat_gauss": 24328,
+   "mpl_combat_gauss_section02": 1176,
+   "mpl_combat_gauss_section03": 1208,
+   "mpl_arena_a": 18104,
+   "mpl_combat_celebration_room_orange": 696,
+   "mpl_lobby_b_arena": 4936,
+   "mpl_combat_fission_cargobay": 1096,
+   "mpl_combat_fission_pantheon": 1176,
+   "mpl_combat_fission_prologue": 696,
+   "mpl_combat_gauss_section01b": 856,
+   "mpl_combat_gauss_section01a": 696,
+   "mpl_tutorial_micro_thrusters": 4792,
+   "mpl_lobby_b_combat": 17768,
+   "mpl_lobby_b2": 29672,
+   "mpl_combat_fission": 15112,
+   "mpl_combat_celebration_room_blue": 696,
+   "mpl_combat_fission_climax": 936
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CGReflectionProbeResourceWin10": {
+  "stride": 56,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_arena",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_arena_a",
+   "mpl_combat_celebration_room_orange",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "mpl_combat_celebration_room_blue",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 4512,
+   "mpl_tutorial_arena": 4160,
+   "mpl_combat_combustion": 4336,
+   "mpl_combat_dyson": 5392,
+   "mpl_arena_a": 4160,
+   "mpl_combat_celebration_room_orange": 816,
+   "mpl_lobby_b_arena": 4160,
+   "mpl_combat_fission_cargobay": 2928,
+   "mpl_combat_fission_pantheon": 2400,
+   "mpl_combat_fission_prologue": 1168,
+   "mpl_lobby_b_combat": 16128,
+   "mpl_lobby_b2": 4512,
+   "mpl_combat_fission": 464,
+   "mpl_combat_celebration_room_blue": 992,
+   "mpl_combat_fission_climax": 3808
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CJsonConfigCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_mp",
+   "r14_glb_global_root",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 928,
+   "r14_glb_global_root": 168,
+   "r14_glb_global_tutorial": 168
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CLODRegionCRWin10": {
+  "stride": 200,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 1608,
+   "mpl_arena_a": 272,
+   "mpl_lobby_b_arena": 472,
+   "mpl_lobby_b_combat": 536,
+   "mpl_lobby_b2": 1608
+  },
+  "header_candidates": [
+   32,
+   88,
+   144
+  ],
+  "live_headers": [
+   32,
+   88,
+   144
+  ],
+  "tables": 3,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CLegacyCameraDataCRWin10": {
+  "stride": 192,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_combat_gauss_section03",
+   "mpl_arena_a",
+   "mpl_combat_celebration_room_orange",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mpl_combat_gauss_section01a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "mpl_combat_celebration_room_blue",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 2064,
+   "mpl_tutorial_lobby": 4112,
+   "mpl_tutorial_hands": 2064,
+   "mpl_tutorial_arena": 2064,
+   "mpl_tutorial_boost": 2064,
+   "mpl_combat_combustion": 2064,
+   "mpl_tutorial_air_brake": 2064,
+   "mpl_combat_dyson": 4112,
+   "mpl_combat_gauss": 2064,
+   "mpl_combat_gauss_section03": 2064,
+   "mpl_arena_a": 8208,
+   "mpl_combat_celebration_room_orange": 4112,
+   "mpl_lobby_b_arena": 2064,
+   "mpl_combat_fission_cargobay": 2064,
+   "mpl_combat_fission_pantheon": 2064,
+   "mpl_combat_fission_prologue": 2064,
+   "mpl_combat_gauss_section01a": 2064,
+   "mpl_tutorial_micro_thrusters": 2064,
+   "mpl_lobby_b_combat": 2064,
+   "mpl_lobby_b2": 4112,
+   "mpl_combat_fission": 2064,
+   "mpl_combat_celebration_room_blue": 4112,
+   "mpl_combat_fission_climax": 2064
+  },
+  "header_candidates": [
+   32,
+   48,
+   64,
+   80,
+   96,
+   104,
+   112,
+   128,
+   144
+  ],
+  "live_headers": [
+   32,
+   48,
+   80,
+   128,
+   144
+  ],
+  "tables": 5,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CListCRWin10": {
+  "stride": 440,
+  "levels": [
+   "mpl_tutorial_arena",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 2288,
+   "r14_glb_global_mp": 368,
+   "mpl_combat_combustion": 168,
+   "mpl_combat_dyson": 168,
+   "mpl_combat_gauss": 168,
+   "mpl_arena_a": 2064,
+   "mpl_lobby_b_arena": 160,
+   "mpl_combat_fission": 168
+  },
+  "header_candidates": [
+   48,
+   104,
+   160,
+   200,
+   208,
+   216,
+   256,
+   264,
+   272,
+   312,
+   320,
+   328,
+   368,
+   384
+  ],
+  "live_headers": [
+   48,
+   104,
+   384
+  ],
+  "tables": 3,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CMaterialTypesBVHResourceWin10": {
+  "stride": 16,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_combat_gauss_section02",
+   "mpl_combat_gauss_section03",
+   "mpl_arena_a",
+   "mpl_combat_celebration_room_orange",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mpl_combat_gauss_section01b",
+   "mpl_combat_gauss_section01a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "mpl_combat_celebration_room_blue",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 8,
+   "mpl_tutorial_lobby": 8,
+   "mpl_tutorial_hands": 8,
+   "mpl_tutorial_arena": 8,
+   "mpl_tutorial_boost": 8,
+   "mpl_combat_combustion": 8,
+   "mpl_tutorial_air_brake": 8,
+   "mpl_combat_dyson": 8,
+   "mpl_combat_gauss": 8,
+   "mpl_combat_gauss_section02": 8,
+   "mpl_combat_gauss_section03": 8,
+   "mpl_arena_a": 8,
+   "mpl_combat_celebration_room_orange": 8,
+   "mpl_lobby_b_arena": 8,
+   "mpl_combat_fission_cargobay": 8,
+   "mpl_combat_fission_pantheon": 8,
+   "mpl_combat_fission_prologue": 8,
+   "mpl_combat_gauss_section01b": 8,
+   "mpl_combat_gauss_section01a": 8,
+   "mpl_tutorial_micro_thrusters": 8,
+   "mpl_lobby_b_combat": 8,
+   "mpl_lobby_b2": 8,
+   "mpl_combat_fission": 8,
+   "mpl_combat_celebration_room_blue": 8,
+   "mpl_combat_fission_climax": 8
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CModelLODCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_mp"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 1960
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CModelSwapperCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_mp",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 5192,
+   "mpl_lobby_b2": 1368
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "COccluderMeshResourceWin10": {
+  "stride": 136,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_arena",
+   "mpl_arena_a",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 76164,
+   "mpl_tutorial_arena": 66176,
+   "mpl_arena_a": 66176,
+   "mpl_lobby_b2": 76164
+  },
+  "header_candidates": [
+   0,
+   56
+  ],
+  "live_headers": [
+   0,
+   56
+  ],
+  "tables": 2,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CParticleEffectCRWin10": {
+  "stride": 152,
+  "levels": [
+   "mpl_tutorial_arena",
+   "r14_glb_global_mp",
+   "mpl_arena_a"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 672,
+   "r14_glb_global_mp": 512,
+   "mpl_arena_a": 672
+  },
+  "header_candidates": [
+   96
+  ],
+  "live_headers": [
+   96
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CPlatformCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 73848,
+   "mpl_tutorial_boost": 3184,
+   "mpl_arena_a": 73848,
+   "mpl_lobby_b_arena": 3184,
+   "mpl_tutorial_micro_thrusters": 3184,
+   "mpl_lobby_b_combat": 3184
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CPluginCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_mp",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 2040,
+   "r14_glb_global_tutorial": 1112
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CPositionSelectionCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_arena_a"
+  ],
+  "pools": {
+   "mpl_arena_a": 216
+  },
+  "header_candidates": [
+   0
+  ],
+  "live_headers": [
+   0
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15DialoguePOICRWin10": {
+  "stride": 464,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_boost",
+   "mpl_tutorial_air_brake",
+   "mpl_lobby_b_arena",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 80,
+   "mpl_tutorial_lobby": 856,
+   "mpl_tutorial_boost": 40,
+   "mpl_tutorial_air_brake": 80,
+   "mpl_lobby_b_arena": 680,
+   "mpl_tutorial_micro_thrusters": 40,
+   "mpl_lobby_b2": 856
+  },
+  "header_candidates": [
+   64,
+   72,
+   80,
+   88,
+   96,
+   104,
+   112,
+   120,
+   128,
+   136,
+   176,
+   232,
+   296,
+   352,
+   408
+  ],
+  "live_headers": [
+   176,
+   232,
+   296,
+   352
+  ],
+  "tables": 4,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15KillVolCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_boost",
+   "mpl_tutorial_micro_thrusters"
+  ],
+  "pools": {
+   "mpl_tutorial_boost": 22640,
+   "mpl_tutorial_micro_thrusters": 5680
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15MenuPlayerCRWin10": {
+  "stride": 104,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 608,
+   "mnu_master": 608
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetAIWaypointCRWin10": {
+  "stride": 96,
+  "levels": [
+   "mpl_arena_a"
+  ],
+  "pools": {
+   "mpl_arena_a": 656
+  },
+  "header_candidates": [
+   24,
+   40
+  ],
+  "live_headers": [
+   24,
+   40
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetBalanceSettingsCRWin10": {
+  "stride": 88,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_arena",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 72,
+   "mpl_tutorial_arena": 64,
+   "mpl_combat_combustion": 64,
+   "mpl_combat_dyson": 64,
+   "mpl_combat_gauss": 64,
+   "mpl_arena_a": 64,
+   "mpl_combat_fission": 64
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15NetBitFieldCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_lobby_b_combat",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_combat_combustion": 27072,
+   "mpl_combat_dyson": 27072,
+   "mpl_combat_gauss": 27072,
+   "mpl_lobby_b_combat": 27072,
+   "mpl_combat_fission": 27072
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetCaptureVolumeCRWin10": {
+  "stride": 96,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson"
+  ],
+  "pools": {
+   "mpl_combat_combustion": 112,
+   "mpl_combat_dyson": 16
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15NetCustomizationCRWin10": {
+  "stride": 128,
+  "levels": [
+   "mpl_tutorial_arena",
+   "r14_glb_global_mp",
+   "mpl_arena_a",
+   "mpl_lobby_b2",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 320,
+   "r14_glb_global_mp": 480,
+   "mpl_arena_a": 320,
+   "mpl_lobby_b2": 80,
+   "r14_glb_global_tutorial": 80
+  },
+  "header_candidates": [
+   72
+  ],
+  "live_headers": [
+   72
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15NetGhostLODCRWin10": {
+  "stride": 88,
+  "levels": [
+   "r14_glb_global_mp",
+   "mpl_lobby_b_arena"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 352,
+   "mpl_lobby_b_arena": 256
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15NetPlayerModelSwapperCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_mp",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 3328,
+   "mpl_lobby_b2": 992
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetPunchCRWin10": {
+  "stride": 96,
+  "levels": [
+   "r14_glb_global_mp"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 2880
+  },
+  "header_candidates": [
+   24,
+   40
+  ],
+  "live_headers": [
+   24,
+   40
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetRewardItemCRWin10": {
+  "stride": 664,
+  "levels": [
+   "r14_glb_global_root"
+  ],
+  "pools": {
+   "r14_glb_global_root": 30384
+  },
+  "header_candidates": [
+   72,
+   80,
+   192,
+   200,
+   208,
+   272,
+   352,
+   360,
+   368,
+   432,
+   488
+  ],
+  "live_headers": [
+   432,
+   488
+  ],
+  "tables": 2,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15NetSpectatorCameraCRWin10": {
+  "stride": 200,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 3568,
+   "mpl_combat_combustion": 3464,
+   "mpl_combat_dyson": 3464,
+   "mpl_combat_gauss": 3464,
+   "mpl_arena_a": 8632,
+   "mpl_combat_fission": 3464
+  },
+  "header_candidates": [
+   32,
+   88,
+   144
+  ],
+  "live_headers": [
+   32,
+   88,
+   144
+  ],
+  "tables": 3,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetUISettingsCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_arena",
+   "mpl_arena_a"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 404,
+   "mpl_arena_a": 404
+  },
+  "header_candidates": [
+   0
+  ],
+  "live_headers": [
+   0
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15NetVoipBroadcasterCRWin10": {
+  "stride": 88,
+  "levels": [
+   "r14_glb_global_mp",
+   "mnu_master_mp_ingame",
+   "mnu_master"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 240,
+   "mnu_master_mp_ingame": 120,
+   "mnu_master": 120
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15PlatformCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_combat_combustion": 6256,
+   "mpl_combat_dyson": 9264,
+   "mpl_combat_gauss": 6256,
+   "mpl_combat_fission": 4752
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15PlayerNavCRWin10": {
+  "stride": 208,
+  "levels": [
+   "r14_glb_global_mp",
+   "r14_glb_global_tutorial"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 8048,
+   "r14_glb_global_tutorial": 4024
+  },
+  "header_candidates": [
+   32,
+   176
+  ],
+  "live_headers": [
+   32,
+   176
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15PropInputCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mpl_lobby_b2": 3312
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15SyncGrabCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_arena",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 3648,
+   "mpl_tutorial_hands": 7056,
+   "mpl_tutorial_arena": 3648,
+   "mpl_tutorial_boost": 3648,
+   "mpl_combat_combustion": 24096,
+   "mpl_tutorial_air_brake": 3648,
+   "mpl_combat_dyson": 24096,
+   "mpl_combat_gauss": 24096,
+   "mpl_arena_a": 7056,
+   "mpl_lobby_b_arena": 10464,
+   "mpl_tutorial_micro_thrusters": 3648,
+   "mpl_lobby_b_combat": 24096,
+   "mpl_lobby_b2": 3648,
+   "mpl_combat_fission": 24096
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15TagCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 488,
+   "mnu_master": 488
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15TeamCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_arena",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_combat",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 504,
+   "r14_glb_global_mp": 744,
+   "mpl_combat_combustion": 824,
+   "mpl_combat_dyson": 824,
+   "mpl_combat_gauss": 824,
+   "mpl_arena_a": 504,
+   "mpl_lobby_b_combat": 824,
+   "mpl_combat_fission": 824
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15UILayoutCRWin10": {
+  "stride": 96,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mnu_master",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b2",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 144,
+   "mpl_tutorial_hands": 24,
+   "mpl_tutorial_arena": 48,
+   "mpl_tutorial_boost": 24,
+   "mpl_combat_combustion": 48,
+   "mpl_combat_dyson": 48,
+   "mpl_combat_gauss": 48,
+   "mpl_arena_a": 672,
+   "mnu_master": 24,
+   "mpl_tutorial_micro_thrusters": 24,
+   "mpl_lobby_b2": 576,
+   "mpl_combat_fission": 48
+  },
+  "header_candidates": [
+   24,
+   40
+  ],
+  "live_headers": [
+   24,
+   40
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15UIPage2CRWin10": {
+  "stride": 328,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 39424,
+   "mnu_master": 62080,
+   "mpl_lobby_b2": 31880
+  },
+  "header_candidates": [
+   32,
+   88,
+   144,
+   184,
+   200,
+   272
+  ],
+  "live_headers": [
+   32,
+   88,
+   200,
+   272
+  ],
+  "tables": 4,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15UIPage2ElementCRWin10": {
+  "stride": 96,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master",
+   "mpl_lobby_b2"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 16,
+   "mnu_master": 16,
+   "mpl_lobby_b2": 96
+  },
+  "header_candidates": [
+   32
+  ],
+  "live_headers": [
+   32
+  ],
+  "tables": 1,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CR15UIPageCRWin10": {
+  "stride": 264,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b2",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 48,
+   "mpl_tutorial_hands": 16,
+   "mpl_tutorial_arena": 32,
+   "mpl_tutorial_boost": 16,
+   "mpl_combat_combustion": 16,
+   "mpl_combat_dyson": 16,
+   "mpl_combat_gauss": 16,
+   "mpl_arena_a": 400,
+   "mpl_tutorial_micro_thrusters": 16,
+   "mpl_lobby_b2": 2176,
+   "mpl_combat_fission": 16
+  },
+  "header_candidates": [
+   32,
+   88,
+   136,
+   152,
+   208
+  ],
+  "live_headers": [
+   32,
+   136,
+   152,
+   208
+  ],
+  "tables": 4,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CR15UISettingsCRWin10": {
+  "stride": 24,
+  "levels": [
+   "r14_glb_global_root",
+   "mnu_master"
+  ],
+  "pools": {
+   "r14_glb_global_root": 390,
+   "mnu_master": 419
+  },
+  "header_candidates": [
+   0
+  ],
+  "live_headers": [
+   0
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CRxAICRWin10": {
+  "stride": 144,
+  "levels": [
+   "r14_glb_global_mp"
+  ],
+  "pools": {
+   "r14_glb_global_mp": 10976
+  },
+  "header_candidates": [
+   32,
+   88
+  ],
+  "live_headers": [
+   32,
+   88
+  ],
+  "tables": 2,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CSVOResourceWin10": {
+  "stride": 2032,
+  "levels": [
+   "mpl_arena_a"
+  ],
+  "pools": {
+   "mpl_arena_a": 803504
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CScriptCRWin10": {
+  "stride": 720,
+  "levels": [
+   "mpl_tutorial_movement",
+   "mpl_tutorial_lobby",
+   "mpl_tutorial_hands",
+   "mpl_tutorial_arena",
+   "mpl_tutorial_boost",
+   "r14_glb_global_mp",
+   "mpl_combat_combustion",
+   "mpl_tutorial_air_brake",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mnu_master_mp_ingame",
+   "mpl_combat_gauss_section02",
+   "mpl_combat_gauss_section03",
+   "mpl_arena_a",
+   "mpl_combat_celebration_room_orange",
+   "mpl_lobby_b_arena",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mpl_tutorial_master",
+   "mnu_master",
+   "mpl_combat_gauss_section01b",
+   "mpl_combat_gauss_section01a",
+   "mpl_tutorial_micro_thrusters",
+   "mpl_lobby_b_combat",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "mpl_combat_celebration_room_blue",
+   "r14_glb_global_tutorial",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_movement": 3400,
+   "mpl_tutorial_lobby": 32680,
+   "mpl_tutorial_hands": 2512,
+   "mpl_tutorial_arena": 11848,
+   "mpl_tutorial_boost": 1760,
+   "r14_glb_global_mp": 1976,
+   "mpl_combat_combustion": 80696,
+   "mpl_tutorial_air_brake": 4432,
+   "mpl_combat_dyson": 87616,
+   "mpl_combat_gauss": 86952,
+   "mnu_master_mp_ingame": 12888,
+   "mpl_combat_gauss_section02": 24,
+   "mpl_combat_gauss_section03": 120,
+   "mpl_arena_a": 19120,
+   "mpl_combat_celebration_room_orange": 24,
+   "mpl_lobby_b_arena": 19256,
+   "mpl_combat_fission_cargobay": 432,
+   "mpl_combat_fission_pantheon": 632,
+   "mpl_combat_fission_prologue": 176,
+   "mpl_tutorial_master": 32,
+   "mnu_master": 23736,
+   "mpl_combat_gauss_section01b": 24,
+   "mpl_combat_gauss_section01a": 24,
+   "mpl_tutorial_micro_thrusters": 2056,
+   "mpl_lobby_b_combat": 56912,
+   "mpl_lobby_b2": 63008,
+   "mpl_combat_fission": 82832,
+   "mpl_combat_celebration_room_blue": 24,
+   "r14_glb_global_tutorial": 824,
+   "mpl_combat_fission_climax": 2248
+  },
+  "header_candidates": [
+   48,
+   104,
+   144,
+   160,
+   216,
+   256,
+   272,
+   328,
+   384,
+   440,
+   496,
+   552,
+   608,
+   664
+  ],
+  "live_headers": [
+   48,
+   160,
+   272,
+   328,
+   384,
+   440,
+   496,
+   552,
+   608
+  ],
+  "tables": 9,
+  "solved": true,
+  "sum_matches_pool": true
+ },
+ "CSettingsTranslatorCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 248,
+   "mnu_master": 248
+  },
+  "header_candidates": [
+   0
+  ],
+  "live_headers": [
+   0
+  ],
+  "tables": 1,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CSettingsUICRWin10": {
+  "stride": 24,
+  "levels": [
+   "mnu_master_mp_ingame",
+   "mnu_master"
+  ],
+  "pools": {
+   "mnu_master_mp_ingame": 616,
+   "mnu_master": 616
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CTagCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_lobby",
+   "r14_glb_global_mp",
+   "mpl_combat_gauss",
+   "mnu_master_mp_ingame",
+   "mpl_combat_fission_cargobay",
+   "mpl_combat_fission_pantheon",
+   "mpl_combat_fission_prologue",
+   "mnu_master",
+   "mpl_lobby_b2",
+   "mpl_combat_fission",
+   "r14_glb_global_tutorial",
+   "mpl_combat_fission_climax"
+  ],
+  "pools": {
+   "mpl_tutorial_lobby": 344,
+   "r14_glb_global_mp": 1144,
+   "mpl_combat_gauss": 344,
+   "mnu_master_mp_ingame": 344,
+   "mpl_combat_fission_cargobay": 328,
+   "mpl_combat_fission_pantheon": 328,
+   "mpl_combat_fission_prologue": 328,
+   "mnu_master": 344,
+   "mpl_lobby_b2": 504,
+   "mpl_combat_fission": 344,
+   "r14_glb_global_tutorial": 360,
+   "mpl_combat_fission_climax": 328
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ },
+ "CTeamCRWin10": {
+  "stride": 24,
+  "levels": [
+   "mpl_tutorial_arena",
+   "mpl_combat_combustion",
+   "mpl_combat_dyson",
+   "mpl_combat_gauss",
+   "mpl_arena_a",
+   "mpl_lobby_b_combat",
+   "mpl_combat_fission"
+  ],
+  "pools": {
+   "mpl_tutorial_arena": 2264,
+   "mpl_combat_combustion": 904,
+   "mpl_combat_dyson": 904,
+   "mpl_combat_gauss": 904,
+   "mpl_arena_a": 2264,
+   "mpl_lobby_b_combat": 904,
+   "mpl_combat_fission": 904
+  },
+  "header_candidates": [],
+  "live_headers": [],
+  "tables": 0,
+  "solved": false,
+  "sum_matches_pool": false
+ }
+}

@@ -443,3 +443,10 @@ table only. `CBVHResource` — root bounds only.
 | `evr_structural_decode.py` | decode a model from its own tables rather than by scanning |
 | `evr_resource_types.py` | type hashes, Win7↔Win10 translation, `verify_win7_hashes()` |
 | `le2_port.py` | Lone Echo 2 level → Echo VR flat layout |
+
+## Combat formats
+
+The combat-specific record and resource formats are documented separately in
+[docs/combat/](combat/README.md) — the CR envelope, all 61 flat CR types, the
+ordered-pool records, scripts, and the gameplay records (payload, track points,
+spawns, triggers).
