@@ -68,7 +68,11 @@ def _le_mesh_reflection_probe():
     except ImportError:
         pass
     here = Path(__file__).resolve()
-    for cand in (here.parents[2], here.parents[1]):
+    # `parents[0]` matters for an INSTALLED add-on: under Blender's addons dir
+    # the research-tree layout does not exist, so the only place `le_mesh` can
+    # be is beside this file. Without it `RP` stays None, `wire_object` reports
+    # "le_mesh unavailable", and the probe pass silently wires nothing.
+    for cand in (here.parents[2], here.parents[1], here.parents[0]):
         if str(cand) not in sys.path:
             sys.path.insert(0, str(cand))
     try:
@@ -280,6 +284,7 @@ def resolve_probe_context(pkg_dir, manifest, opts=None) -> dict:
         "resource": section.get("resource"),
         "colorspace": section.get("colorspace") or COLORSPACE_PROBE,
         "files": {},
+        "mip_files": {},
         "equirects": {},
         "source": "manifest" if section else "absent",
         "notes": [],
@@ -297,6 +302,15 @@ def resolve_probe_context(pkg_dir, manifest, opts=None) -> dict:
             p = base / rel
         if p.is_file():
             ctx["files"][int(spec["index"])] = str(p)
+        mips = []
+        for rel_m in spec.get("mip_files") or ():
+            q = Path(rel_m)
+            if base is not None and not q.is_absolute():
+                q = base / rel_m
+            if q.is_file():
+                mips.append(str(q))
+        if mips:
+            ctx.setdefault("mip_files", {})[int(spec["index"])] = mips
     if not ctx["files"]:
         ctx["notes"].append(
             "the section names no extracted cube DDS — re-run the extractor "
@@ -355,15 +369,23 @@ def load_cube_strip(path, colorspace=COLORSPACE_PROBE):
     return img, w
 
 
-def equirect_image_for_probe(ctx, probe_index: int, opts=None):
+def equirect_image_for_probe(ctx, probe_index: int, opts=None, mip: int = 0):
     """Build (and cache) the equirectangular environment image for one probe."""
     if bpy is None:                                    # pragma: no cover
         raise RuntimeError("equirect_image_for_probe needs Blender")
     i = int(probe_index)
-    cached = ctx.setdefault("equirects", {}).get(i)
+    mip = max(0, int(mip))
+    key = (i, mip)
+    cached = ctx.setdefault("equirects", {}).get(key)
     if cached is not None and cached.name in bpy.data.images:
         return cached
-    path = ctx.get("files", {}).get(i)
+    # ⭐ ROUGHNESS -> MIP. The engine samples the probe's mip chain by
+    # roughness; this module only ever loaded mip 0, so every surface got the
+    # sharp reflection and roughness only dimmed it through `gloss^2`. The
+    # per-mip strips come from `evr_apply_probes.py`; without them this falls
+    # back to the single strip and behaves exactly as before.
+    mip_files = (ctx.get("mip_files") or {}).get(i) or []
+    path = mip_files[mip] if mip < len(mip_files) else ctx.get("files", {}).get(i)
     if not path:
         return None
     width = int(_f(opts, "probe_equirect_width", DEFAULT_EQUIRECT_WIDTH))
@@ -372,7 +394,7 @@ def equirect_image_for_probe(ctx, probe_index: int, opts=None):
     px = [0.0] * (len(src.pixels))
     src.pixels.foreach_get(px)
     flat = equirect_pixels_from_strip(px, dim, width, height)
-    name = f"le_probe_{i:02d}_equirect"
+    name = f"le_probe_{i:02d}_mip{mip}_equirect"
     img = bpy.data.images.get(name)
     if img is not None:
         bpy.data.images.remove(img)
@@ -386,8 +408,8 @@ def equirect_image_for_probe(ctx, probe_index: int, opts=None):
     _set_colorspace(img, ctx.get("colorspace") or COLORSPACE_PROBE,
                     COLORSPACE_PROBE_FALLBACK)
     img.pixels.foreach_set(flat)
-    ctx["equirects"][i] = img
-    ctx.setdefault("equirect_stats", {})[i] = {
+    ctx["equirects"][key] = img
+    ctx.setdefault("equirect_stats", {})[key] = {
         "width": width, "height": height,
         "max": max(flat[0:len(flat):4]) if flat else 0.0,
         "mean": (sum(flat[0:len(flat):4]) / max(1, width * height)) if flat else 0.0,
@@ -567,6 +589,31 @@ def wire_ambient_specular(mat, node_tree, bsdf, probe_spec, env_image, opts=None
     }
 
 
+def mip_for_roughness(bsdf, n_mips: int) -> int:
+    """Which probe mip a material should sample, from its own roughness.
+
+    A linear map: `roughness * (n_mips - 1)`, so a mirror takes mip 0 and a
+    fully rough surface takes the coarsest exported level. This is NOT the
+    engine's prefilter curve -- that is not decoded -- but it is the right
+    DIRECTION, and it replaces sampling mip 0 at every roughness.
+
+    A LINKED roughness (a texture) has no single value at build time, so it
+    takes the middle of the chain rather than pretending to know.
+    """
+    if n_mips <= 1:
+        return 0
+    rough = None
+    inp = bsdf.inputs.get("Roughness") if bsdf is not None else None
+    if inp is not None and not inp.links:
+        try:
+            rough = float(inp.default_value)
+        except (TypeError, ValueError):
+            rough = None
+    if rough is None:
+        rough = 0.5
+    return max(0, min(n_mips - 1, int(round(rough * (n_mips - 1)))))
+
+
 def wire_object(ob, ctx, obj_manifest, opts=None) -> dict:
     """Wire every material slot of `ob` for the probe its mesh record names.
 
@@ -584,9 +631,7 @@ def wire_object(ob, ctx, obj_manifest, opts=None) -> dict:
     if resolved_mode(opts) == MODE_OFF:
         return {"wired": 0, "reason": "probe_mode=off"}
     probe = int(spec["index"])
-    img = equirect_image_for_probe(ctx, probe, opts)
-    if img is None:
-        return {"wired": 0, "reason": "no cube DDS for probe %d" % probe}
+    n_mips = len(((ctx.get("mip_files") or {}).get(probe)) or ())
     reports = []
     for slot in ob.material_slots:
         mat = slot.material
@@ -603,7 +648,16 @@ def wire_object(ob, ctx, obj_manifest, opts=None) -> dict:
         elif mat.get(PROP_PROBE) == probe:
             reports.append({"wired": True, "probe": probe, "already": True})
             continue
+        # The mip is chosen PER MATERIAL, because roughness is a material
+        # property: a rough surface must sample a coarser, blurrier level, which
+        # is what the engine does and what this module used to skip entirely.
+        bsdf = _find_principled(mat.node_tree)
+        img = equirect_image_for_probe(ctx, probe, opts,
+                                       mip=mip_for_roughness(bsdf, n_mips))
+        if img is None:
+            reports.append({"wired": 0, "reason": "no cube DDS for probe %d" % probe})
+            continue
         reports.append(wire_ambient_specular(
-            mat, mat.node_tree, _find_principled(mat.node_tree), spec, img, opts))
+            mat, mat.node_tree, bsdf, spec, img, opts))
     return {"wired": sum(1 for r in reports if r.get("wired")),
             "probe": probe, "reports": reports}

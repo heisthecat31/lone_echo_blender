@@ -40,10 +40,30 @@ SIDECAR_FORMAT = "evr_lighting"
 #: authoring path calls it (`custom_level_importer` creates "EchoLightmap").
 LIGHTMAP_UV = "EchoLightmap"
 
-#: Watts for an intensity-1.0 light. The records store a relative multiplier
-#: with no unit, so this is a viewing default, not a decoded quantity.
-DEFAULT_WATTS = 25.0
+#: ⭐ Watts for an intensity-1.0 light. NOT a viewing default any more -- it is
+#: the documented conversion (docs/LIGHTING.md, "Units"). The engine's
+#: `primarycolor` is a linear HDR radiometric scale with the intensity folded
+#: in; a Blender point/spot lamp of power P watts and normalised colour C gives
+#: irradiance `E = P*C / (4*pi*d^2)`. Equating the two:
+#:
+#:     energy(POINT/SPOT) = 4*pi * max(primarycolor)
+#:     energy(SUN)        =        max(primarycolor)      (W/m^2, no 4*pi)
+#:
+#: Echo VR keeps colour and intensity in separate fields, so
+#: `max(primarycolor) == intensity * max(colour)`; arena's 138 records are all
+#: normalised (`max(colour) == 1.0` on 138/138), but the factor is applied
+#: rather than assumed.
+#:
+#: The old 25.0 was a guess and ran 1.99x hot -- arena's point/spot rig alone
+#: came to 132,756 W against the derived 66,731 W, which is why the viewport
+#: blew out.
+WATTS_PER_INTENSITY = 4.0 * math.pi
+DEFAULT_WATTS = WATTS_PER_INTENSITY
 DEFAULT_RADIUS = 0.05
+#: Volumes that author no falloff get their reach from their own size.
+#: MEASURED, not chosen: over the 136 arena volumes that DO author one,
+#: `falloff_far / max half-extent` has a median of 3.251.
+FALLOFF_FAR_PER_EXTENT = 3.251
 
 
 def sidecar_path(package) -> Path | None:
@@ -109,12 +129,20 @@ def import_lights(doc: dict, context, y_up_to_z_up: bool = True,
             pass
 
         intensity = float(rec.get("intensity") or 1.0)
+        # `max(primarycolor)`: the authored colour is normalised on every Echo
+        # VR record measured, but a non-normalised one would otherwise be
+        # silently dimmed by Blender's own energy*colour product.
+        try:
+            cmax = max(float(c) for c in (rec.get("color") or [1, 1, 1])[:3])
+        except (TypeError, ValueError):
+            cmax = 1.0
+        cmax = cmax if cmax > 0.0 else 1.0
         if kind == "SUN":
             # A Blender sun is irradiance in W/m2, so the authored intensity
             # transfers directly rather than through the watt scale below.
-            data.energy = max(intensity, 0.0)
+            data.energy = max(intensity, 0.0) * cmax
         else:
-            data.energy = DEFAULT_WATTS * max(intensity, 0.0)
+            data.energy = WATTS_PER_INTENSITY * max(intensity, 0.0) * cmax
             data.shadow_soft_size = DEFAULT_RADIUS
             # ⭐ THE AUTHORED CONE. Without it every spot took Blender's 45 deg
             # default with a near-sharp edge, while the records carry 59-81 deg
@@ -156,6 +184,114 @@ def import_lights(doc: dict, context, y_up_to_z_up: bool = True,
     if skipped:
         out["skipped_static"] = skipped
     return out
+
+
+def import_volume_lights(doc: dict, context, y_up_to_z_up: bool = True,
+                         collection=None, scale: float = 1.0) -> dict:
+    """Build the level's `SGVolumetricLightParams` -- the SECOND light table.
+
+    ⭐ This is the half of the lighting the importer never had. A scene resource
+    carries TWO light tables and `import_lights` reads only the first, so
+    `mpl_arena_a` imported 138 of its 354 colour sources and the war room
+    imported 17 of 780. The missing table is where the war room's pink comes
+    from -- 752 of its 763 records are `rgb (1.0, 0.550, 0.812)`.
+
+    Each record is a hexahedron volume (engine `CGVolumeHexahedronLight`), not a
+    point light, so the position used here is the CENTROID of its eight world
+    corners rather than the record's own `position`, which is one corner of the
+    3x3's translation and sits off the volume.
+
+    ⚠ Blender has no volume-light primitive, so this is an approximation and
+    says so: a POINT light at the centroid, sized and cut off by the authored
+    falloff. What is NOT a guess any more is the falloff itself -- `radius_*`,
+    `falloff_*`, `fade_*` and the exponent are decoded fields (see
+    `scripts/evr_lights.py`), where previously this table was reported and never
+    lit with because none of that was known.
+    """
+    records = doc.get("volume_lights") or []
+    if not records:
+        return {"created": 0, "reason": "no volume_lights in sidecar"}
+
+    target = collection or context.scene.collection
+    created = 0
+    for rec in records:
+        data = bpy.data.lights.new(name="evr_volume", type="POINT")
+        try:
+            data.color = tuple(float(c) for c in (rec.get("color") or [1, 1, 1])[:3])
+        except (TypeError, ValueError):
+            pass
+        magnitude = float(rec.get("magnitude") or 0.0)
+        try:
+            cmax = max(float(c) for c in (rec.get("color") or [1, 1, 1])[:3])
+        except (TypeError, ValueError):
+            cmax = 1.0
+        data.energy = WATTS_PER_INTENSITY * max(magnitude, 0.0) * (cmax or 1.0)
+
+        # Softness from the volume's own cached radius when it has one, else
+        # from its smallest half-extent -- a volume is not a point, and a
+        # point-sized highlight in the middle of a light shaft reads wrong.
+        soft = float(rec.get("radius_outer") or 0.0)
+        if soft <= 0.0:
+            extent = [float(x) for x in (rec.get("extent") or [])] or [0.0]
+            soft = min(extent) if extent else 0.0
+        data.shadow_soft_size = max(DEFAULT_RADIUS, soft * scale)
+        # ⭐ NO SHADOWS. These are ambient fill volumes, not shadow casters, and
+        # 216 of them in arena is what put the viewport at 7477 shadow buffers
+        # against a limit of 2048 ("Shadow buffer full, may result in missing
+        # shadows"). A volume light casting a hard point shadow is also just
+        # wrong -- the engine's own term is an unshadowed additive wash.
+        for _attr in ("use_shadow", "use_shadows"):
+            if hasattr(data, _attr):
+                setattr(data, _attr, False)
+                break
+
+        # The authored reach. `falloff_far` scales with the volume; `fade_far`
+        # is a view-distance cull (500 == never) and must NOT be used here.
+        #
+        # ⭐ 80 of arena's 216 volumes author NO falloff at all (near = far = 0)
+        # and carry no cached radius either. Left alone they become unbounded
+        # point lights, and since their magnitude runs HIGHER than the rest
+        # (median 4.89 against 2.00) they wash the level out. They are also a
+        # single uniform set -- max half-extent is exactly 1.59 on all 80 -- so
+        # a size-derived default is well behaved. The ratio is measured off the
+        # 136 volumes that DO author one: falloff_far / max half-extent has a
+        # median of 3.251.
+        reach = float(rec.get("falloff_far") or 0.0)
+        derived = False
+        if reach <= 0.0:
+            extent = [float(x) for x in (rec.get("extent") or [])]
+            if extent and max(extent) > 0.0:
+                reach = max(extent) * FALLOFF_FAR_PER_EXTENT
+                derived = True
+        if reach > 0.0:
+            data.use_custom_distance = True
+            data.cutoff_distance = reach * scale
+
+        corners = rec.get("corners") or []
+        if len(corners) == 8:
+            centre = [sum(c[i] for c in corners) / 8.0 for i in range(3)]
+        else:
+            centre = rec.get("position") or (0, 0, 0)
+
+        obj = bpy.data.objects.new(data.name, data)
+        obj.location = _to_blender(centre, y_up_to_z_up) * scale
+        obj["evr_light_table"] = "SGVolumetricLightParams"
+        obj["evr_volume_magnitude"] = magnitude
+        obj["evr_volume_extent"] = list(rec.get("extent") or ())
+        obj["evr_falloff_near"] = rec.get("falloff_near")
+        obj["evr_falloff_far"] = rec.get("falloff_far")
+        obj["evr_reach_derived"] = derived
+        obj["evr_falloff_exponent"] = rec.get("falloff_exponent")
+        obj["evr_fade"] = [rec.get("fade_near"), rec.get("fade_far")]
+        obj["evr_volume_flags"] = list(rec.get("flags") or ())
+        obj["evr_volume_note"] = (
+            "hexahedron volume light approximated as a POINT at the centroid; "
+            "Blender has no volume light. Falloff/fade are authored values.")
+        if rec.get("level"):
+            obj["evr_level"] = rec["level"]
+        target.objects.link(obj)
+        created += 1
+    return {"created": created}
 
 
 #: A surface this far past every authored light's range receives nothing.

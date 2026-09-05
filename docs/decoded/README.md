@@ -29,12 +29,16 @@ that false positive was caught and why it matters.
 |---|---|
 | **ALL_TYPES.md** | every measured type — hash, shape, stride, confirmation, entry counts |
 | **POOLED.md** | inline-table layouts of pooled records, and how the ambiguity was removed |
+| **REFLECTION_PROBES.md** | the biggest thing in a level -- 379 baked HDR cubemaps, 189.6 MB: the metadata grammar, the cube byte order, and which probe a mesh uses |
+| **TERMINAL_UI.md** | where the EQUIPMENT STATION terminals live, and why they were never visible |
+| **COMBAT.md** | all 17 combat-related levels, the parent family tree, and per-level gameplay records |
+| **FISSION.md** | complete dossier on the reference payload map, and what links to it |
 | **FIELDS.md** | a field map for every offset of all 181 record types — value domains, actor cross-references |
 | **RESOURCES.md** | the standalone resources: `CGameLevelResource`'s parent field, `CPhysicsResource`'s zone block, `CGFSEffectsResource`'s float table |
 | **OPEN.md** | what still needs decoding, measured and prioritised |
 | **COMPOUND.md** | the 27 that only look like records — the leading array is real, the tail is not decoded, five models ruled out |
 | **IDENTICAL.md** | the 17 byte-for-byte template records, sha1-verified |
-| `_all.json`, `_pools.json` | raw measurements |
+| `_all.json`, `_pools.json`, `_probes.json` | raw measurements |
 
 For the container format, the component-space laws, scripts and the combat
 gameplay records, see [../combat/](../combat/README.md).

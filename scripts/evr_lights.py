@@ -243,6 +243,60 @@ V_CORNER_COUNT = 8
 HEXAHEDRON_FACES = ((0, 1, 2, 3), (7, 6, 5, 4), (0, 1, 5, 4),
                     (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
 
+# ---------------------------------------------------------------------------
+# THE TAIL: falloff, fade and flags.  `+0xB0..+0x128` was left undecoded, and
+# the note that these records carry "no radius and no falloff" was WRONG --
+# 120 bytes of the record are exactly that.  Measured over 5,853 records in
+# 23 levels.
+#
+# Two of the four distance fields are DERIVED, not authored.  Against the
+# largest half-extent of the 3x3 (`V_TRANSFORM` row norms) they sit at a fixed
+# ratio with an interquartile range of ZERO -- the same number on 5,182 and
+# 5,350 records respectively -- so the engine caches them off the volume:
+#
+#     V_RADIUS_INNER = 0.617 * max_half_extent
+#     V_RADIUS_OUTER = 0.797 * max_half_extent
+#
+# The other two pairs ARE authored, and both are ordered `near <= far` on
+# 100% of records:
+#
+#     V_FALLOFF_NEAR / _FAR  distance falloff, tied to volume size
+#                            (median 1.69x / 2.73x the half-extent, wide IQR)
+#     V_FADE_NEAR / _FAR     view-distance fade.  Round authored numbers and
+#                            NO correlation with the volume (r = +0.08), so it
+#                            is a cull range, not a light radius.  `500/500`
+#                            is the "never fade" idiom, on 597 records.
+#
+# Most of the corpus is a handful of presets: 3,950 of 5,853 records are
+# exactly (exponent 1.2, falloff 2.5..3.5, fade 10..15).
+V_RADIUS_INNER = 0x0BC
+V_RADIUS_OUTER = 0x0C0
+#: Falloff exponent. 1.2 on 4,503 records; the spread is 1.0 .. 4.0.
+V_FALLOFF_EXP = 0x0C8
+V_FALLOFF_NEAR = 0x0D4
+V_FALLOFF_FAR = 0x0D8
+V_FADE_NEAR = 0x0E0
+V_FADE_FAR = 0x0E4
+#: u32 flags. Read these as INTEGERS -- as floats they are denormals that all
+#: round to 0.0, which is how they were missed. `V_FLAGS_B` is a bitmask
+#: (2 / 512 / 1024 / 2048 / 4096); the other two are booleans, set on 162 and
+#: 204 records.
+V_FLAG_A = 0x0EC
+V_FLAGS_B = 0x0F8
+V_FLAGS_C = 0x0FC
+V_FLAG_D = 0x118
+#: Two identifiers, near-unique per record (4,566 and 5,419 distinct of 5,853).
+V_ID0 = 0x00
+V_ID1 = 0x08
+#: Constant across every record measured -- listed so a reader can assert them
+#: rather than rediscover them: +0xB8 = 1.0, +0xC4 = 4.0, +0xD0/+0xE8/+0x100..
+#: +0x114 = 0, +0xF4/+0x120/+0x124 = 0xFFFFFFFF.
+V_CONSTANTS = {0x0B8: 1.0, 0x0C4: 4.0}
+
+#: ⚠ There is still no point/spot/directional TYPE field, and that is not an
+#: omission: every record in this table is a hexahedron volume, and its shape
+#: is the eight corners.  What was missing was the FALLOFF, and that is above.
+
 
 def parse_scene_volume_lights(data: bytes) -> list:
     """The scene resource's SECOND `lead` table -- coloured light VOLUMES.
@@ -312,10 +366,28 @@ def parse_scene_volume_lights(data: bytes) -> list:
     approximate them can take `position` + `color` + `magnitude`; one that wants
     to be faithful needs the volume semantics decoded first.
     """
+    # ⛔ This import used to fail SILENTLY and return [], which is why the
+    # sidecar shipped zero volume lights and Blender never saw the second light
+    # table at all: `cgsceneresource` lives in quest_combat_port's resource_io,
+    # not beside this file, so on any path but that project's it was simply
+    # absent. Look for it before giving up, and say so when it is really gone.
     try:
         import cgsceneresource as scene_reader
     except ImportError:
-        return []
+        import sys as _sys
+        for _cand in (Path(r"J:\EchoVR-Tools-Launcher\quest_combat_port\tools\resource_io"),
+                      Path(__file__).resolve().parents[2] /
+                      "quest_combat_port" / "tools" / "resource_io"):
+            if _cand.is_dir() and str(_cand) not in _sys.path:
+                _sys.path.append(str(_cand))
+        try:
+            import cgsceneresource as scene_reader
+        except ImportError:
+            _sys.stderr.write(
+                "evr_lights: cgsceneresource not importable -- the volume-light "
+                "table (SGVolumetricLightParams) cannot be read. Put "
+                "quest_combat_port/tools/resource_io on sys.path.\n")
+            return []
     try:
         obj = scene_reader.read(data)
     except Exception:                                       # noqa: BLE001
@@ -356,6 +428,23 @@ def parse_scene_volume_lights(data: bytes) -> list:
             "translation": [round(v, 5) for v in
                             struct.unpack_from("<3f", raw,
                                                base + V_TRANSLATION)],
+            # the decoded tail -- falloff, fade and flags. See V_RADIUS_INNER.
+            "radius_inner": round(struct.unpack_from(
+                "<f", raw, base + V_RADIUS_INNER)[0], 5),
+            "radius_outer": round(struct.unpack_from(
+                "<f", raw, base + V_RADIUS_OUTER)[0], 5),
+            "falloff_exponent": round(struct.unpack_from(
+                "<f", raw, base + V_FALLOFF_EXP)[0], 5),
+            "falloff_near": round(struct.unpack_from(
+                "<f", raw, base + V_FALLOFF_NEAR)[0], 5),
+            "falloff_far": round(struct.unpack_from(
+                "<f", raw, base + V_FALLOFF_FAR)[0], 5),
+            "fade_near": round(struct.unpack_from(
+                "<f", raw, base + V_FADE_NEAR)[0], 5),
+            "fade_far": round(struct.unpack_from(
+                "<f", raw, base + V_FADE_FAR)[0], 5),
+            "flags": [struct.unpack_from("<I", raw, base + o)[0]
+                      for o in (V_FLAG_A, V_FLAGS_B, V_FLAGS_C, V_FLAG_D)],
         })
     return out
 

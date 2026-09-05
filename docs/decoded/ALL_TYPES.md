@@ -42,7 +42,7 @@ Columns:
 | `CEventCRWin10` | 0x547B31427E1CBD8C | pooled-cr | 24 | no | 26 | 0 | ? |  |
 | `CFrustumCullCRWin10` | 0xCA5A03D5A497238C | flat-cr | 32 | no | 27 | 11139 |  |  |
 | `CGFSEffectsResourceWin10` | 0x7D687BA03866061E | resource | - | n/a | 31 | 0 |  |  |
-| `CGReflectionProbeResourceWin10` | 0x2829C885034AFCDE | pooled-cr+resource | 56 | no | 31 | 0 | ? |  |
+| `CGReflectionProbeResourceWin10` | 0x2829C885034AFCDE | **resource (SOLVED)** | n/a | n/a | 31 | 0 | **decoded** | NOT a pooled record -- the "count 31 / stride 56" reading is `boxes.iused` and the `CTableA` size. See [REFLECTION_PROBES.md](REFLECTION_PROBES.md). |
 | `CGVisibilityResourceWin10` | 0x73D312A620DA3824 | resource | - | n/a | 31 | 0 |  |  |
 | `CGameLevelInfoResourceWin10` | 0x858055BBD5655F64 | tiny | - | n/a | 31 | 0 |  |  |
 | `CGameLevelResourceWin10` | 0xE8E38D7781A338A6 | resource | - | n/a | 31 | 0 |  |  |

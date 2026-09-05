@@ -98,6 +98,6 @@ decoding is possible.
 1. **Controlled-input experiments through the editor** — turns section A from
    80% unknown into measured fact, one authored field at a time.
 2. **The script header signature** — unblocks carrying scripts, which is the
-   current hard stop on the Pebbles port.
+   current hard stop on the combat port.
 3. **The compound tiling** with a prefix-aware parser — 27 types, and the record
    format is already in hand.

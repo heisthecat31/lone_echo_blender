@@ -802,9 +802,19 @@ def _stamp_flipbooks(pkg) -> None:
                                 dtype=_np.float32).reshape(-1, 2)
         except (OSError, ValueError):
             continue
+        # ⛔ 896 meshes across the extracted packages carry a uv0 V channel of
+        # pure garbage -- values up to 3e38, i.e. float32 max, not a UV. Taking
+        # `max - min` on those OVERFLOWS ("RuntimeWarning: overflow encountered
+        # in float_scalars") and yields an inf span, which then decides
+        # `flipbook_v_scale` for that material. The median over meshes hid it
+        # here (the sky's spans came out right), but a package where the
+        # garbage dominates would silently get the wrong slicing.
         if len(uv):
-            spans.setdefault(mesh.get("matidx"), []).append(
-                float(uv[:, 1].max() - uv[:, 1].min()))
+            v = uv[:, 1]
+            v = v[_np.isfinite(v) & (_np.abs(v) < 1e4)]
+            if len(v):
+                spans.setdefault(mesh.get("matidx"), []).append(
+                    float(v.max() - v.min()))
     found = 0
     for entry in mats.get("materials") or ():
         spec = entry.get("spec") or {}

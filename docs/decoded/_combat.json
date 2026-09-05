@@ -1,0 +1,400 @@
+{
+ "mpl_combat_celebration_room_blue": {
+  "hash": "0xE1A3AE700140D9D5",
+  "index_records": 179,
+  "index_types": 33,
+  "index_mb": 5.6,
+  "extracted_resources": 33,
+  "extracted_bytes": 5953824,
+  "actors": 58,
+  "component_systems": 12,
+  "script_entries": 1,
+  "distinct_scripts": 1,
+  "parent": "r14_glb_global_mp",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_celebration_room_orange": {
+  "hash": "0x61B0162ADBD446FF",
+  "index_records": 173,
+  "index_types": 33,
+  "index_mb": 6.2,
+  "extracted_resources": 33,
+  "extracted_bytes": 6409792,
+  "actors": 100,
+  "component_systems": 12,
+  "script_entries": 1,
+  "distinct_scripts": 1,
+  "parent": "r14_glb_global_mp",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_combustion": {
+  "hash": "0x42670F2BED45703C",
+  "index_records": 4039,
+  "index_types": 101,
+  "index_mb": 124.5,
+  "extracted_resources": 91,
+  "extracted_bytes": 67027868,
+  "actors": 2306,
+  "component_systems": 70,
+  "script_entries": 428,
+  "distinct_scripts": 81,
+  "parent": "mpl_combat_war_room",
+  "sub_levels": [
+   "0xA01FD494E8EECF7D",
+   "0xBB4700FC7F02D52D",
+   "0xCD4D1B83E1F513B1",
+   "0xF946144F555E0692",
+   "0x007485B2CF86708E",
+   "0x332241821D394EDC",
+   "0x44FF640480396839",
+   "0x6F083FB6D41F45B4"
+  ],
+  "payload": 0,
+  "capture_volume": 1,
+  "track_points": 0,
+  "spawns": 5
+ },
+ "mpl_combat_dyson": {
+  "hash": "0x43E2DA7914642604",
+  "index_records": 3423,
+  "index_types": 100,
+  "index_mb": 126.2,
+  "extracted_resources": 91,
+  "extracted_bytes": 72369044,
+  "actors": 2692,
+  "component_systems": 70,
+  "script_entries": 451,
+  "distinct_scripts": 82,
+  "parent": "mpl_combat_war_room",
+  "sub_levels": [
+   "0x832F006C141FE3E4",
+   "0x8A2A8C7D6A3FD6A8",
+   "0x8EDB3EAE1BE4589E",
+   "0xA01E7C964B634C73",
+   "0xB245FC7084A19FF5",
+   "0xCCE519206C761DB1",
+   "0xE5F259C00CF73F6F",
+   "0xE78865A028564B0D",
+   "0xEA20D8D726A369DF",
+   "0xED4D318237FBC13B",
+   "0xF1E81BE420E320C9",
+   "0xFB2D4FC63F4EAAFF",
+   "0xFC40A6932E16021B",
+   "0x1005F8207E6E2D98",
+   "0x1C64A784EB7E958E",
+   "0x328A432190BA40DC",
+   "0x4A2176246784D4A1",
+   "0x4DFD98887B9A22E1"
+  ],
+  "payload": 0,
+  "capture_volume": 1,
+  "track_points": 0,
+  "spawns": 5
+ },
+ "mpl_combat_fission": {
+  "hash": "0xDF5CA7B7DFA383D4",
+  "index_records": 2055,
+  "index_types": 107,
+  "index_mb": 60.7,
+  "extracted_resources": 97,
+  "extracted_bytes": 8962024,
+  "actors": 1539,
+  "component_systems": 76,
+  "script_entries": 418,
+  "distinct_scripts": 81,
+  "parent": "mpl_combat_war_room",
+  "sub_levels": [
+   "0xB490BB722958C1A8",
+   "0xF1F1734847D74B28",
+   "0xFF2EBE34FE81CDDA",
+   "0x0F9E2949BB1B1645",
+   "0x32D7D56E27A93157",
+   "0x7244FD32CBE25A07"
+  ],
+  "payload": 1,
+  "capture_volume": 0,
+  "track_points": 69,
+  "spawns": 5
+ },
+ "mpl_combat_fission_cargobay": {
+  "hash": "0x836C5B14CCC58201",
+  "index_records": 1129,
+  "index_types": 40,
+  "index_mb": 44.9,
+  "extracted_resources": 38,
+  "extracted_bytes": 50292752,
+  "actors": 949,
+  "component_systems": 17,
+  "script_entries": 9,
+  "distinct_scripts": 5,
+  "parent": "mpl_combat_fission",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_fission_climax": {
+  "hash": "0xF919F210BBDA872C",
+  "index_records": 1017,
+  "index_types": 49,
+  "index_mb": 31.1,
+  "extracted_resources": 47,
+  "extracted_bytes": 37935688,
+  "actors": 611,
+  "component_systems": 26,
+  "script_entries": 17,
+  "distinct_scripts": 6,
+  "parent": "mpl_combat_fission",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_fission_pantheon": {
+  "hash": "0x906C4707CBC28C16",
+  "index_records": 761,
+  "index_types": 40,
+  "index_mb": 24.0,
+  "extracted_resources": 38,
+  "extracted_bytes": 24517522,
+  "actors": 291,
+  "component_systems": 17,
+  "script_entries": 10,
+  "distinct_scripts": 5,
+  "parent": "mpl_combat_fission",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_fission_prologue": {
+  "hash": "0x907F461FCCC0961D",
+  "index_records": 528,
+  "index_types": 39,
+  "index_mb": 13.5,
+  "extracted_resources": 37,
+  "extracted_bytes": 10729704,
+  "actors": 165,
+  "component_systems": 16,
+  "script_entries": 7,
+  "distinct_scripts": 4,
+  "parent": "mpl_combat_fission",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_gauss": {
+  "hash": "0x43E2DA7A0C623A19",
+  "index_records": 2455,
+  "index_types": 109,
+  "index_mb": 67.9,
+  "extracted_resources": 100,
+  "extracted_bytes": 7396232,
+  "actors": 1717,
+  "component_systems": 79,
+  "script_entries": 471,
+  "distinct_scripts": 85,
+  "parent": "mpl_combat_war_room",
+  "sub_levels": [
+   "0x8CEB004A9FA99F0B",
+   "0x91B7169D4ADFBAAD",
+   "0xC160F9592132153D",
+   "0xD2A9C765E744FDFC",
+   "0xDA3BF4A5AE622A76",
+   "0x5B7FFE49EE798364",
+   "0x6E0FC12DEF505656",
+   "0x703117CA40F3E697"
+  ],
+  "payload": 1,
+  "capture_volume": 0,
+  "track_points": 181,
+  "spawns": 5
+ },
+ "mpl_combat_gauss_section01a": {
+  "hash": "0xBE0FF249E3C43783",
+  "index_records": 764,
+  "index_types": 36,
+  "index_mb": 23.0,
+  "extracted_resources": 36,
+  "extracted_bytes": 22179552,
+  "actors": 431,
+  "component_systems": 15,
+  "script_entries": 1,
+  "distinct_scripts": 1,
+  "parent": "mpl_combat_gauss",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_gauss_section01b": {
+  "hash": "0xBE0FF249E3C43780",
+  "index_records": 1296,
+  "index_types": 35,
+  "index_mb": 39.2,
+  "extracted_resources": 35,
+  "extracted_bytes": 35993724,
+  "actors": 709,
+  "component_systems": 14,
+  "script_entries": 1,
+  "distinct_scripts": 1,
+  "parent": "mpl_combat_gauss",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_gauss_section02": {
+  "hash": "0x555BE9BCB4759006",
+  "index_records": 949,
+  "index_types": 34,
+  "index_mb": 35.8,
+  "extracted_resources": 34,
+  "extracted_bytes": 35089428,
+  "actors": 428,
+  "component_systems": 13,
+  "script_entries": 1,
+  "distinct_scripts": 1,
+  "parent": "mpl_combat_gauss",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_gauss_section03": {
+  "hash": "0x555BE9BCB4759007",
+  "index_records": 1096,
+  "index_types": 35,
+  "index_mb": 34.5,
+  "extracted_resources": 35,
+  "extracted_bytes": 29589280,
+  "actors": 639,
+  "component_systems": 14,
+  "script_entries": 2,
+  "distinct_scripts": 2,
+  "parent": "mpl_combat_gauss",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_combat_war_room": {
+  "hash": "0x08A1AF9E108DEF0B",
+  "index_records": 675,
+  "index_types": 60,
+  "index_mb": 39.7,
+  "extracted_resources": 0,
+  "extracted_bytes": 0,
+  "actors": null,
+  "component_systems": null,
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "mpl_lobby_b_combat": {
+  "hash": "0xCB9977F7FC2B4526",
+  "index_records": 3662,
+  "index_types": 95,
+  "index_mb": 114.1,
+  "extracted_resources": 86,
+  "extracted_bytes": 106510076,
+  "actors": 2339,
+  "component_systems": 65,
+  "script_entries": 375,
+  "distinct_scripts": 55,
+  "parent": "r14_glb_global_mp",
+  "sub_levels": [
+   "0x84669F8E122011CE",
+   "0x8D299E64CEB8DE53",
+   "0xC01E6A81BBFFFDEB",
+   "0xF8B51CA0D8615DCE"
+  ],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "r14_glb_global_mp": {
+  "hash": "0x3F9915D3001DC28E",
+  "index_records": 1875,
+  "index_types": 133,
+  "index_mb": 58.7,
+  "extracted_resources": 120,
+  "extracted_bytes": 409264,
+  "actors": 69,
+  "component_systems": 99,
+  "script_entries": 166,
+  "distinct_scripts": 91,
+  "parent": "r14_glb_global_root",
+  "sub_levels": [],
+  "payload": 0,
+  "capture_volume": 0,
+  "track_points": 0,
+  "spawns": 0
+ },
+ "_links": {
+  "mpl_combat_celebration_room_blue": [
+   "r14_glb_global_mp"
+  ],
+  "mpl_combat_celebration_room_orange": [
+   "r14_glb_global_mp"
+  ],
+  "mpl_combat_combustion": [
+   "mpl_combat_war_room"
+  ],
+  "mpl_combat_dyson": [
+   "mpl_combat_war_room"
+  ],
+  "mpl_combat_fission": [
+   "mpl_combat_war_room"
+  ],
+  "mpl_combat_fission_cargobay": [
+   "mpl_combat_fission"
+  ],
+  "mpl_combat_fission_climax": [
+   "mpl_combat_fission"
+  ],
+  "mpl_combat_fission_pantheon": [
+   "mpl_combat_fission"
+  ],
+  "mpl_combat_fission_prologue": [
+   "mpl_combat_fission"
+  ],
+  "mpl_combat_gauss": [
+   "mpl_combat_war_room"
+  ],
+  "mpl_combat_gauss_section01a": [
+   "mpl_combat_gauss"
+  ],
+  "mpl_combat_gauss_section01b": [
+   "mpl_combat_gauss"
+  ],
+  "mpl_combat_gauss_section02": [
+   "mpl_combat_gauss"
+  ],
+  "mpl_combat_gauss_section03": [
+   "mpl_combat_gauss"
+  ],
+  "mpl_lobby_b_combat": [
+   "r14_glb_global_mp"
+  ]
+ }
+}

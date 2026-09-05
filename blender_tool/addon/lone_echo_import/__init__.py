@@ -37,7 +37,7 @@ from bpy_extras.io_utils import ImportHelper          # type: ignore  # noqa: E4
 
 from . import (package_reader, mesh_builder, material_builder, scene_reader,   # noqa: E402
                scatter_reader, scatter_import, light_import, lightmap_builder,
-               evr_effects)
+               evr_effects, evr_level_edit)
 
 # Re-export the scatter import entry point so headless callers can use
 # `lone_echo_import.import_lescatter(pkg, context, opts)` alongside import_lemesh.
@@ -721,9 +721,12 @@ def register():
     bpy.types.TOPBAR_MT_file_import.append(_menu)
     bpy.types.TOPBAR_MT_file_import.append(scatter_import.menu_func)
     bpy.types.TOPBAR_MT_file_import.append(light_import.menu_func)
+    # the level editor owns its own classes, properties and handler
+    evr_level_edit.register()
 
 
 def unregister():
+    evr_level_edit.unregister()
     bpy.types.TOPBAR_MT_file_import.remove(light_import.menu_func)
     bpy.types.TOPBAR_MT_file_import.remove(scatter_import.menu_func)
     bpy.types.TOPBAR_MT_file_import.remove(_menu)

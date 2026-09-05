@@ -1,0 +1,561 @@
+{
+ "format": "evr_arena_layout",
+ "version": 2,
+ "design": "helix -- the obstacle ring rotates as z increases, so the fast line down the map is a slalom that changes height instead of a straight side lane",
+ "symmetry": "the z>0 half is authored; the other half is the 180 degree turn about y (x,z -> -x,-z), the stock map's own symmetry",
+ "scale_budget": "0.80 - 1.20",
+ "ring": {
+  "rx": 12.6,
+  "ry": 6.9,
+  "twist_deg_per_m": 5.4,
+  "theta0_deg": 18.0
+ },
+ "clearance_m": 0.25,
+ "moves": [
+  {
+   "object": "devil",
+   "from": [
+    -3.33,
+    4.17,
+    7.5
+   ],
+   "to": [
+    -6.18,
+    5.53,
+    6.2
+   ],
+   "scale": 1.12,
+   "spin_z_deg": 25,
+   "solver_adjust": {
+    "phase_deg": 70,
+    "radius_frac": 0.16,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "double_diamond",
+   "from": [
+    0.0,
+    -0.0,
+    6.67
+   ],
+   "to": [
+    0.0,
+    0.0,
+    8.5
+   ],
+   "scale": 1.18,
+   "spin_z_deg": 40
+  },
+  {
+   "object": "station",
+   "from": [
+    -5.83,
+    0.0,
+    10.83
+   ],
+   "to": [
+    -11.29,
+    2.18,
+    9.0
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 15,
+   "solver_adjust": {
+    "phase_deg": 24,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "angel",
+   "from": [
+    3.33,
+    5.0,
+    11.67
+   ],
+   "to": [
+    7.05,
+    3.75,
+    10.4
+   ],
+   "scale": 1.12,
+   "spin_z_deg": 25,
+   "solver_adjust": {
+    "phase_deg": 150,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "kernal",
+   "from": [
+    -11.77,
+    -4.17,
+    9.17
+   ],
+   "to": [
+    -7.1,
+    -3.09,
+    11.2
+   ],
+   "scale": 1.15,
+   "spin_z_deg": 55
+  },
+  {
+   "object": "popcorn",
+   "from": [
+    -11.77,
+    3.46,
+    9.37
+   ],
+   "to": [
+    5.54,
+    -5.26,
+    12.4
+   ],
+   "scale": 0.88,
+   "spin_z_deg": 30
+  },
+  {
+   "object": "station",
+   "from": [
+    6.67,
+    0.0,
+    8.33
+   ],
+   "to": [
+    11.54,
+    1.74,
+    13.4
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 15
+  },
+  {
+   "object": "kernal",
+   "from": [
+    11.77,
+    -4.17,
+    9.17
+   ],
+   "to": [
+    1.44,
+    4.9,
+    14.6
+   ],
+   "scale": 1.15,
+   "spin_z_deg": 55,
+   "solver_adjust": {
+    "phase_deg": 24,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "popcorn",
+   "from": [
+    11.77,
+    3.46,
+    9.37
+   ],
+   "to": [
+    -10.5,
+    1.95,
+    15.6
+   ],
+   "scale": 0.88,
+   "spin_z_deg": 30,
+   "solver_adjust": {
+    "phase_deg": 24,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "bowtie",
+   "from": [
+    -0.0,
+    0.0,
+    17.47
+   ],
+   "to": [
+    -0.0,
+    0.0,
+    19.0
+   ],
+   "scale": 1.2,
+   "spin_z_deg": 30
+  },
+  {
+   "object": "crystal",
+   "from": [
+    -5.83,
+    -5.0,
+    20.21
+   ],
+   "to": [
+    -7.76,
+    -4.14,
+    20.6
+   ],
+   "scale": 1.14,
+   "spin_z_deg": 60
+  },
+  {
+   "object": "pacman",
+   "from": [
+    -11.89,
+    0.0,
+    22.23
+   ],
+   "to": [
+    8.23,
+    -0.64,
+    22.4
+   ],
+   "scale": 0.86,
+   "spin_z_deg": 45,
+   "solver_adjust": {
+    "phase_deg": 48,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "pacman",
+   "from": [
+    11.9,
+    0.0,
+    22.24
+   ],
+   "to": [
+    -5.98,
+    3.17,
+    22.4
+   ],
+   "scale": 0.86,
+   "spin_z_deg": 45,
+   "solver_adjust": {
+    "phase_deg": 12,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "diamond",
+   "from": [
+    0.0,
+    -3.33,
+    23.09
+   ],
+   "to": [
+    -0.0,
+    0.0,
+    24.2
+   ],
+   "scale": 1.2
+  },
+  {
+   "object": "nugget",
+   "from": [
+    -5.05,
+    -0.78,
+    23.65
+   ],
+   "to": [
+    8.29,
+    4.24,
+    25.0
+   ],
+   "scale": 1.18,
+   "spin_z_deg": 20
+  },
+  {
+   "object": "nugget",
+   "from": [
+    5.02,
+    -0.78,
+    23.65
+   ],
+   "to": [
+    -8.29,
+    -4.24,
+    25.0
+   ],
+   "scale": 1.18,
+   "spin_z_deg": 20
+  },
+  {
+   "object": "nest",
+   "from": [
+    -0.0,
+    2.73,
+    27.4
+   ],
+   "to": [
+    -0.0,
+    0.0,
+    26.6
+   ],
+   "scale": 1.15,
+   "solver_adjust": {
+    "phase_deg": 0,
+    "radius_frac": 0.0,
+    "z": -2.4
+   }
+  },
+  {
+   "object": "ghost",
+   "from": [
+    -9.92,
+    0.04,
+    27.26
+   ],
+   "to": [
+    -10.0,
+    -0.68,
+    27.6
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 35
+  },
+  {
+   "object": "ghost",
+   "from": [
+    9.92,
+    0.04,
+    27.26
+   ],
+   "to": [
+    10.0,
+    0.68,
+    27.6
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 35
+  },
+  {
+   "object": "shield",
+   "from": [
+    -0.0,
+    -0.21,
+    28.94
+   ],
+   "to": [
+    -0.0,
+    -0.208,
+    28.945
+   ],
+   "scale": [
+    1.2,
+    0.82,
+    1.0
+   ]
+  },
+  {
+   "object": "boot",
+   "from": [
+    -4.3,
+    -5.0,
+    28.78
+   ],
+   "to": [
+    3.52,
+    -4.73,
+    30.4
+   ],
+   "scale": 1.12,
+   "spin_z_deg": 50
+  },
+  {
+   "object": "boot",
+   "from": [
+    4.3,
+    -5.0,
+    28.78
+   ],
+   "to": [
+    0.3,
+    5.1,
+    30.4
+   ],
+   "scale": 1.12,
+   "spin_z_deg": 50,
+   "solver_adjust": {
+    "phase_deg": -24,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "pole",
+   "from": [
+    -6.31,
+    -0.4,
+    31.9
+   ],
+   "to": [
+    -6.312,
+    -0.402,
+    31.903
+   ],
+   "scale": [
+    1.0,
+    1.18,
+    1.0
+   ]
+  },
+  {
+   "object": "pole",
+   "from": [
+    6.31,
+    -0.4,
+    31.9
+   ],
+   "to": [
+    6.312,
+    -0.402,
+    31.903
+   ],
+   "scale": [
+    1.0,
+    1.18,
+    1.0
+   ]
+  },
+  {
+   "object": "shoulder",
+   "from": [
+    5.95,
+    3.29,
+    32.42
+   ],
+   "to": [
+    5.948,
+    3.29,
+    32.425
+   ],
+   "scale": 1.16
+  },
+  {
+   "object": "shoulder",
+   "from": [
+    -5.98,
+    3.31,
+    32.45
+   ],
+   "to": [
+    -5.975,
+    3.313,
+    32.449
+   ],
+   "scale": 1.16
+  },
+  {
+   "object": "spawn_c",
+   "from": [
+    -2.0,
+    0.0,
+    64.0
+   ],
+   "to": [
+    -4.2,
+    2.6,
+    61.0
+   ],
+   "scale": 1.15,
+   "spin_z_deg": 30,
+   "solver_adjust": {
+    "phase_deg": 0.0,
+    "radius_frac": 0.0,
+    "z": -3.0
+   }
+  },
+  {
+   "object": "spawn_b",
+   "from": [
+    -3.0,
+    -4.0,
+    64.0
+   ],
+   "to": [
+    -4.6,
+    -0.4,
+    64.0
+   ],
+   "scale": 1.15,
+   "spin_z_deg": 30
+  },
+  {
+   "object": "spawn_b",
+   "from": [
+    3.0,
+    -4.0,
+    64.0
+   ],
+   "to": [
+    6.2,
+    -0.4,
+    64.0
+   ],
+   "scale": 1.15,
+   "spin_z_deg": 30,
+   "solver_adjust": {
+    "phase_deg": 1.6,
+    "radius_frac": 0.0,
+    "z": 0.0
+   }
+  },
+  {
+   "object": "spawn_tri",
+   "from": [
+    -5.31,
+    -3.0,
+    67.0
+   ],
+   "to": [
+    -5.311,
+    0.196,
+    67.0
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 20
+  },
+  {
+   "object": "spawn_tri",
+   "from": [
+    5.31,
+    -3.0,
+    67.0
+   ],
+   "to": [
+    5.313,
+    0.196,
+    67.0
+   ],
+   "scale": 1.1,
+   "spin_z_deg": 20
+  },
+  {
+   "object": "spawn_d",
+   "from": [
+    0.0,
+    -5.0,
+    70.0
+   ],
+   "to": [
+    0.0,
+    -2.0,
+    71.5
+   ],
+   "scale": 1.12,
+   "spin_z_deg": 45,
+   "solver_adjust": {
+    "phase_deg": 0.0,
+    "radius_frac": -1.2,
+    "z": 1.5
+   }
+  }
+ ]
+}

@@ -802,6 +802,13 @@ def import_lescatter(pkg_path, context, opts: dict) -> dict:
     # nothing, and the operator said "loaded but NOT wired -- no reason
     # recorded" because zero objects matched.
     coll_name = coll.name
+    # Record where this package came from, so the EVR Level panel can map the
+    # objects back to level entities without the user re-picking the folder.
+    try:
+        coll["le_package_dir"] = str(Path(pkg.dir))
+        coll["le_master"] = str(pkg.master or "")
+    except Exception:                                     # noqa: BLE001
+        pass
 
     import_proxy = opts.get("import_proxy", False)
     mesh_datablocks = {}
@@ -950,10 +957,15 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "is what makes the two goal ends blue and orange -- their "
                     "textures are greyscale and carry no colour at all")   # type: ignore
     uv_flipbook_steps: FloatProperty(
-        name="Flipbook Steps/s", default=12.0, min=0.0, soft_max=60.0,
+        name="Flipbook Steps/s", default=0.0, min=0.0, soft_max=60.0,
         description="How fast a material that stacks frames along V flips "
-                    "through them. The frame COUNT is read off the texture; "
-                    "this SPEED is not authored anywhere")   # type: ignore
+                    "through them. DEFAULT 0 = the authored state. The frame "
+                    "COUNT is read off the texture (8 for the sky), but the "
+                    "RATE is in no level data: the flipbook materials carry "
+                    "exactly one property each, layer0_albedo_map_uoffset = "
+                    "0.0, and no rate constant is shared by their shaders. "
+                    "Any non-zero value here is invented, so it makes the "
+                    "import LESS faithful, not more")   # type: ignore
     evr_goal_explosion: BoolProperty(
         name="Goal Explosion", default=True,
         description="Hide the goal-explosion props until their animation "
@@ -1141,6 +1153,29 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                     "surfaces look like they vanish when you switch shading "
                     "mode. Enable this to see every surface from both sides; "
                     "it makes the viewport diverge from the game on purpose")   # type: ignore
+    evr_probes: BoolProperty(
+        name="Reflection Probes (ambient specular)",
+        default=True,
+        description="Wire each object's reflection probe as an ambient "
+                    "SPECULAR term. Needs scripts/evr_apply_probes.py to have "
+                    "written the probe cubes and the manifest section. Mip 0 "
+                    "only -- no roughness prefilter and no box projection, so "
+                    "the reflection is always the sharp one")   # type: ignore
+    evr_probe_intensity: FloatProperty(
+        name="Probe Intensity",
+        default=1.0, min=0.0, soft_max=4.0,
+        description="Multiplier on the ambient specular term. The probes store "
+                    "radiance with no unit, so this is a viewing control")   # type: ignore
+    evr_volume_lights: BoolProperty(
+        name="Volume Lights (2nd table)",
+        default=True,
+        description="Import SGVolumetricLightParams, the SECOND light table in "
+                    "the scene resource. Only the first was ever read, so "
+                    "mpl_arena_a imported 138 of its 354 colour sources and the "
+                    "war room 17 of 780 -- this is where the war room's pink "
+                    "wash lives. They are hexahedron volumes, approximated here "
+                    "as POINT lights at the volume centroid with their authored "
+                    "falloff")   # type: ignore
     evr_dynamic_lights_only: BoolProperty(
         name="Dynamic Lights Only",
         default=False,
@@ -1212,6 +1247,10 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         sub_gx.prop(self, "evr_goal_explosion_fps")
         sub_gx.prop(self, "evr_goal_explosion_beams")
         box.prop(self, "uv_scroll_rate")
+        # The sky is a FLIPBOOK, not a scroll: its frame count is read off
+        # the texture (8 for arena, already in the package spec), but the
+        # RATE is authored nowhere, so it needs to be reachable.
+        box.prop(self, "uv_flipbook_steps")
         box.prop(self, "world_ambient")
         box.prop(self, "evr_effects")
         box.prop(self, "evr_particles")
@@ -1222,6 +1261,9 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         box.prop(self, "show_backfaces")
         sub = box.column()
         sub.enabled = self.evr_lighting
+        sub.prop(self, "evr_probes")
+        sub.prop(self, "evr_probe_intensity")
+        sub.prop(self, "evr_volume_lights")
         sub.prop(self, "evr_dynamic_lights_only")
         sub.prop(self, "evr_lightmaps")
         box = layout.box()
@@ -1894,6 +1936,71 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                 % (result["skeletal_tagged"],
                    len(result.get("skeletal_models") or ())))
 
+    def _wire_probes(self, context):
+        """Wire the ambient SPECULAR term onto every imported object.
+
+        `probe_builder` has been complete for a while and nothing ever called
+        it: the Echo VR path had no writer for the `reflection_probes` manifest
+        section, so there was never anything to wire.
+        `scripts/evr_apply_probes.py` writes it now.
+        """
+        try:
+            from . import probe_builder as _pb
+        except ImportError:
+            return
+        pkg_dir = Path(self.filepath)
+        if pkg_dir.is_file():
+            pkg_dir = pkg_dir.parent
+        try:
+            manifest = json.loads(
+                (pkg_dir / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        opts = {"probe_mode": _pb.MODE_SPECULAR,
+                "probe_intensity": float(self.evr_probe_intensity)}
+        ctx = _pb.resolve_probe_context(pkg_dir, manifest, opts)
+        if not ctx.get("files"):
+            self.report({"WARNING"},
+                        "Echo VR probes: %s -- run scripts/evr_apply_probes.py"
+                        % "; ".join(ctx.get("notes") or ["no cube files"]))
+            return
+        section = ctx.get("section") or {}
+        # Per INSTANCE, not per mesh: 96 of arena's 431 meshes have instances
+        # sitting on different probes, so the mesh's modal value is wrong for
+        # some of them. Fall back to the mesh only when there is no instance.
+        per_instance = section.get("instance_probe_index") or []
+        entries = {int(m["index"]): m for m in (manifest.get("meshes") or [])
+                   if m.get("index") is not None}
+        wired = 0
+        failed = {}
+        for ob in list(context.scene.objects):
+            if ob.type != "MESH":
+                continue
+            probe = None
+            inst = ob.get("le_instance_index")
+            if inst is not None and 0 <= int(inst) < len(per_instance):
+                probe = per_instance[int(inst)]
+            if probe is None:
+                entry = entries.get(int(ob.get("le_mesh_index", -1)))
+                probe = (entry or {}).get("probe_index")
+            if probe is None:
+                continue
+            res = _pb.wire_object(ob, ctx, {"probe_index": probe}, opts)
+            if res.get("wired"):
+                wired += 1
+            elif res.get("reason"):
+                failed[res["reason"]] = failed.get(res["reason"], 0) + 1
+        if wired:
+            self.report({"INFO"},
+                        "Echo VR reflection probes: %d object(s) wired from %d "
+                        "probe cube(s) -- ambient SPECULAR, mip 0 only (no "
+                        "roughness prefilter, no box projection)"
+                        % (wired, len(ctx["files"])))
+        elif failed:
+            self.report({"WARNING"},
+                        "Echo VR reflection probes: nothing wired -- %s"
+                        % "; ".join("%s (x%d)" % kv for kv in failed.items()))
+
     def _import_evr_lighting(self, context, summary):
         """Load the package's `lightmaps.json`, if it has one."""
         if evr_lighting is None:
@@ -1914,6 +2021,36 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                            " -- %d static-bake lights skipped, they are already "
                            "in the lightmap" % lights["skipped_static"]
                            if lights.get("skipped_static") else ""))
+
+        # ⭐ THE SECOND LIGHT TABLE. A scene resource carries two, and only the
+        # first was ever imported -- arena built 138 of its 354 colour sources
+        # and the war room 17 of 780.
+        if self.evr_volume_lights:
+            vol = evr_lighting.import_volume_lights(
+                doc, context, y_up_to_z_up=self.y_up_to_z_up)
+            if vol.get("created"):
+                self.report({"INFO"},
+                            "Echo VR volume lights: %d built from "
+                            "SGVolumetricLightParams (approximated as POINTs "
+                            "at the volume centroid)" % vol["created"])
+            elif vol.get("reason"):
+                self.report({"WARNING"},
+                            "Echo VR volume lights: none -- %s. Re-run "
+                            "scripts/evr_apply_lighting.py to write them into "
+                            "lightmaps.json" % vol["reason"])
+
+        # ⭐ AMBIENT SPECULAR. `probe_builder` has existed and been complete for
+        # a while, and nothing ever called it -- the Echo VR path had no writer
+        # for the `reflection_probes` manifest section, so there was nothing to
+        # wire. `scripts/evr_apply_probes.py` writes it now.
+        #
+        # Bound per INSTANCE, not per mesh. The section carries
+        # `instance_probe_index` (one entry per instance), and a mesh's own
+        # `probe_index` is only the modal probe of its instances -- 96 of
+        # arena's 431 meshes have instances that legitimately sit on different
+        # probes, so the per-mesh value would put some of them on the wrong one.
+        if self.evr_probes:
+            self._wire_probes(context)
 
         # ⭐ Then black out what no authored light can reach. A Blender SUN is
         # infinite, so the level's two directional lights -- authored with a

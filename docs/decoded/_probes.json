@@ -1,0 +1,3470 @@
+[
+ {
+  "level": "21f2f1c7f92158b6",
+  "name": "mpl_tutorial_movement",
+  "meta_bytes": 872,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 48,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 456,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 1573344,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 3,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 1573344,
+  "gpu_matches": true
+ },
+ {
+  "level": "3c8d74713ced8c3f",
+  "name": "mpl_tutorial_lobby",
+  "meta_bytes": 4848,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 280,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 384,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 96,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3648,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 96,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 12586752,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 24,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408,
+   11537856,
+   12062304
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   6,
+   16,
+   19,
+   20,
+   23
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 12586752,
+  "gpu_matches": true
+ },
+ {
+  "level": "3c8d747532e18a35",
+  "name": "mpl_tutorial_hands",
+  "meta_bytes": 520,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 4,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 152,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 4,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 524448,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 1,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0
+  ],
+  "mipcounts": [
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 524448,
+  "gpu_matches": true
+ },
+ {
+  "level": "3c8d747c21ea8027",
+  "name": "mpl_tutorial_arena",
+  "meta_bytes": 4384,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 168,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 352,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3344,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 11537856,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 22,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   8,
+   18,
+   19
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 11537856,
+  "gpu_matches": true
+ },
+ {
+  "level": "3c8d747f3ce09d32",
+  "name": "mpl_tutorial_boost",
+  "meta_bytes": 1048,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 64,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 608,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 2097792,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 4,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 2097792,
+  "gpu_matches": true
+ },
+ {
+  "level": "3f9915d3001dc28e",
+  "name": "r14_glb_global_mp",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "42670f2bed45703c",
+  "name": "mpl_combat_combustion",
+  "meta_bytes": 4504,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 112,
+    "ialloc": 32,
+    "iused": 2,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 368,
+    "ialloc": 32,
+    "iused": 23,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 92,
+    "ialloc": 32,
+    "iused": 23,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3496,
+    "ialloc": 32,
+    "iused": 23,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 92,
+    "ialloc": 32,
+    "iused": 23,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 12062304,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 23,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408,
+   11537856
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   6,
+   19
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 12062304,
+  "gpu_matches": true
+ },
+ {
+  "level": "4325ba19dad081b7",
+  "name": "mpl_tutorial_air_brake",
+  "meta_bytes": 696,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 32,
+    "ialloc": 32,
+    "iused": 2,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 8,
+    "ialloc": 32,
+    "iused": 2,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 304,
+    "ialloc": 32,
+    "iused": 2,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 8,
+    "ialloc": 32,
+    "iused": 2,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 1048896,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 2,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448
+  ],
+  "mipcounts": [
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 1048896,
+  "gpu_matches": true
+ },
+ {
+  "level": "43934c379cf1e366",
+  "name": "r14_glb_global_root",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "43e2da7914642604",
+  "name": "mpl_combat_dyson",
+  "meta_bytes": 6400,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 952,
+    "ialloc": 32,
+    "iused": 17,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 464,
+    "ialloc": 32,
+    "iused": 29,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 116,
+    "ialloc": 32,
+    "iused": 29,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 4408,
+    "ialloc": 32,
+    "iused": 29,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 116,
+    "ialloc": 32,
+    "iused": 29,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 15208992,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 29,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408,
+   11537856,
+   12062304,
+   12586752,
+   13111200,
+   13635648,
+   14160096,
+   14684544
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   22,
+   24
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 15208992,
+  "gpu_matches": true
+ },
+ {
+  "level": "43e2da7a0c623a19",
+  "name": "mpl_combat_gauss",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "4d82118c7c91b6bb",
+  "name": "mnu_master_mp_ingame",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "555be9bcb4759006",
+  "name": "mpl_combat_gauss_section02",
+  "meta_bytes": 3336,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 272,
+    "ialloc": 32,
+    "iused": 17,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 68,
+    "ialloc": 32,
+    "iused": 17,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 2584,
+    "ialloc": 32,
+    "iused": 17,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 68,
+    "ialloc": 32,
+    "iused": 17,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 8915616,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 17,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 8915616,
+  "gpu_matches": true
+ },
+ {
+  "level": "555be9bcb4759007",
+  "name": "mpl_combat_gauss_section03",
+  "meta_bytes": 1576,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 112,
+    "ialloc": 32,
+    "iused": 7,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 28,
+    "ialloc": 32,
+    "iused": 7,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 1064,
+    "ialloc": 32,
+    "iused": 7,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 28,
+    "ialloc": 32,
+    "iused": 7,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 3671136,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 7,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 3671136,
+  "gpu_matches": true
+ },
+ {
+  "level": "576ed3f8428ebc4b",
+  "name": "mpl_arena_a",
+  "meta_bytes": 4384,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 168,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 352,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3344,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 11537856,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 22,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   8,
+   18,
+   19
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 11537856,
+  "gpu_matches": true
+ },
+ {
+  "level": "61b0162adbd446ff",
+  "name": "mpl_combat_celebration_room_orange",
+  "meta_bytes": 1096,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 224,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 48,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 456,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 1573344,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 3,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   0,
+   1
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 1573344,
+  "gpu_matches": true
+ },
+ {
+  "level": "6daa00a6d33d44b7",
+  "name": "mpl_lobby_b_arena",
+  "meta_bytes": 4720,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 504,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 352,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3344,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 88,
+    "ialloc": 32,
+    "iused": 22,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 11537856,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 22,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   5,
+   6,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 11537856,
+  "gpu_matches": true
+ },
+ {
+  "level": "836c5b14ccc58201",
+  "name": "mpl_combat_fission_cargobay",
+  "meta_bytes": 3488,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 504,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 240,
+    "ialloc": 32,
+    "iused": 15,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 60,
+    "ialloc": 32,
+    "iused": 15,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 2280,
+    "ialloc": 32,
+    "iused": 15,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 60,
+    "ialloc": 32,
+    "iused": 15,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 7866720,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 15,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   2,
+   3,
+   5,
+   7,
+   10,
+   12,
+   13,
+   14
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 7866720,
+  "gpu_matches": true
+ },
+ {
+  "level": "8a1af9e108def0b",
+  "name": "?",
+  "meta_bytes": 1048,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 64,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 608,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 2097792,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 4,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 2097792,
+  "gpu_matches": true
+ },
+ {
+  "level": "906c4707cbc28c16",
+  "name": "mpl_combat_fission_pantheon",
+  "meta_bytes": 3128,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 672,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 192,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 48,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 1824,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 48,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 6293376,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 12,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 6293376,
+  "gpu_matches": true
+ },
+ {
+  "level": "907f461fccc0961d",
+  "name": "mpl_combat_fission_prologue",
+  "meta_bytes": 1560,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 336,
+    "ialloc": 32,
+    "iused": 6,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 80,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 20,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 760,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 20,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 2622240,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 5,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 2622240,
+  "gpu_matches": true
+ },
+ {
+  "level": "a46f74bbc1f3ae6a",
+  "name": "mpl_tutorial_master",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "ac360e41e4ede056",
+  "name": "mnu_master",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "be0ff249e3c43780",
+  "name": "mpl_combat_gauss_section01b",
+  "meta_bytes": 2632,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 208,
+    "ialloc": 32,
+    "iused": 13,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 52,
+    "ialloc": 32,
+    "iused": 13,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 1976,
+    "ialloc": 32,
+    "iused": 13,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 52,
+    "ialloc": 32,
+    "iused": 13,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 6817824,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 13,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 6817824,
+  "gpu_matches": true
+ },
+ {
+  "level": "be0ff249e3c43783",
+  "name": "mpl_combat_gauss_section01a",
+  "meta_bytes": 1928,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 144,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 36,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 1368,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 36,
+    "ialloc": 32,
+    "iused": 9,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 4720032,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 9,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 4720032,
+  "gpu_matches": true
+ },
+ {
+  "level": "c3f6cc278ebb6827",
+  "name": "mpl_tutorial_micro_thrusters",
+  "meta_bytes": 872,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 48,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 456,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 12,
+    "ialloc": 32,
+    "iused": 3,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 1573344,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 3,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 1573344,
+  "gpu_matches": true
+ },
+ {
+  "level": "cb9977f7fc2b4526",
+  "name": "mpl_lobby_b_combat",
+  "meta_bytes": 16968,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 784,
+    "ialloc": 32,
+    "iused": 14,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 1440,
+    "ialloc": 32,
+    "iused": 90,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 360,
+    "ialloc": 32,
+    "iused": 90,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 13680,
+    "ialloc": 32,
+    "iused": 90,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 360,
+    "ialloc": 32,
+    "iused": 90,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 47200320,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 90,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408,
+   11537856,
+   12062304,
+   12586752,
+   13111200,
+   13635648,
+   14160096,
+   14684544,
+   15208992,
+   15733440,
+   16257888,
+   16782336,
+   17306784,
+   17831232,
+   18355680,
+   18880128,
+   19404576,
+   19929024,
+   20453472,
+   20977920,
+   21502368,
+   22026816,
+   22551264,
+   23075712,
+   23600160,
+   24124608,
+   24649056,
+   25173504,
+   25697952,
+   26222400,
+   26746848,
+   27271296,
+   27795744,
+   28320192,
+   28844640,
+   29369088,
+   29893536,
+   30417984,
+   30942432,
+   31466880,
+   31991328,
+   32515776,
+   33040224,
+   33564672,
+   34089120,
+   34613568,
+   35138016,
+   35662464,
+   36186912,
+   36711360,
+   37235808,
+   37760256,
+   38284704,
+   38809152,
+   39333600,
+   39858048,
+   40382496,
+   40906944,
+   41431392,
+   41955840,
+   42480288,
+   43004736,
+   43529184,
+   44053632,
+   44578080,
+   45102528,
+   45626976,
+   46151424,
+   46675872
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 47200320,
+  "gpu_matches": true
+ },
+ {
+  "level": "d09afd15b1c75c04",
+  "name": "mpl_lobby_b2",
+  "meta_bytes": 4848,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 280,
+    "ialloc": 32,
+    "iused": 5,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 384,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 96,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3648,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 96,
+    "ialloc": 32,
+    "iused": 24,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 12586752,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 24,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512,
+   10488960,
+   11013408,
+   11537856,
+   12062304
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   6,
+   16,
+   19,
+   20,
+   23
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 12586752,
+  "gpu_matches": true
+ },
+ {
+  "level": "df5ca7b7dfa383d4",
+  "name": "mpl_combat_fission",
+  "meta_bytes": 1192,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 672,
+    "ialloc": 32,
+    "iused": 12,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 4,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 152,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 4,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 524448,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 1,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0
+  ],
+  "mipcounts": [
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256
+  ],
+  "box_probeidx": [
+   0
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 524448,
+  "gpu_matches": true
+ },
+ {
+  "level": "e1a3ae700140d9d5",
+  "name": "mpl_combat_celebration_room_blue",
+  "meta_bytes": 1832,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 784,
+    "ialloc": 32,
+    "iused": 14,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 64,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 608,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 16,
+    "ialloc": 32,
+    "iused": 4,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 2097792,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 4,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   0,
+   1,
+   3
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 2097792,
+  "gpu_matches": true
+ },
+ {
+  "level": "e24c89df8235dd7a",
+  "name": "r14_glb_global_tutorial",
+  "meta_bytes": 344,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 0,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 0,
+  "counts_agree": true,
+  "gpu_offsets": [],
+  "mipcounts": [],
+  "gpu_present": true,
+  "gpu_bytes": 0,
+  "gpu_matches": true
+ },
+ {
+  "level": "f919f210bbda872c",
+  "name": "mpl_combat_fission_climax",
+  "meta_bytes": 3920,
+  "tables": {
+   "boxes": {
+    "ptr": 0,
+    "nbytes": 56,
+    "ialloc": 32,
+    "iused": 1,
+    "stride": 56
+   },
+   "spheres": {
+    "ptr": 0,
+    "nbytes": 0,
+    "ialloc": 32,
+    "iused": 0,
+    "stride": null
+   },
+   "points": {
+    "ptr": 0,
+    "nbytes": 320,
+    "ialloc": 32,
+    "iused": 20,
+    "stride": 16
+   },
+   "mipcounts": {
+    "ptr": 0,
+    "nbytes": 80,
+    "ialloc": 32,
+    "iused": 20,
+    "stride": 4
+   },
+   "boundingboxes": {
+    "ptr": 0,
+    "nbytes": 3040,
+    "ialloc": 32,
+    "iused": 20,
+    "stride": 152
+   },
+   "gpuoffsets": {
+    "ptr": 0,
+    "nbytes": 80,
+    "ialloc": 32,
+    "iused": 20,
+    "stride": 4
+   }
+  },
+  "residual": 0,
+  "gpumemsize": 10488960,
+  "textureformat": 59,
+  "format_name": "eBC6UeFLOAT",
+  "n_probes": 20,
+  "counts_agree": true,
+  "gpu_offsets": [
+   0,
+   524448,
+   1048896,
+   1573344,
+   2097792,
+   2622240,
+   3146688,
+   3671136,
+   4195584,
+   4720032,
+   5244480,
+   5768928,
+   6293376,
+   6817824,
+   7342272,
+   7866720,
+   8391168,
+   8915616,
+   9440064,
+   9964512
+  ],
+  "mipcounts": [
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9
+  ],
+  "point_idx_is_row": true,
+  "gpu_monotonic": true,
+  "gpu_starts_zero": true,
+  "cube_bytes": [
+   524448
+  ],
+  "gpu_closes": true,
+  "cube_dims": [
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256,
+   256
+  ],
+  "box_probeidx": [
+   0
+  ],
+  "box_idx_in_range": true,
+  "gpu_present": true,
+  "gpu_bytes": 10488960,
+  "gpu_matches": true
+ }
+]

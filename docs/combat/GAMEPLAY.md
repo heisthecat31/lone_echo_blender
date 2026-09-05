@@ -125,19 +125,28 @@ stream.** They supply the world OFFSET the engine applies to a sub-level that is
 loaded by other means — the log line `Level 'H' offset by (x, y, z)` reads from
 here. Which level streams is compiled into the StreamingScript (see SCRIPTS.md).
 
-## The war room is not a level
+## The war room and its parent chain
 
-`mpl_combat_war_room` (`0x08A1AF9E108DEF0B`) ships **zero resources** and has no
-spawn CR. It is an empty parent gamespace. The room you actually stand in is
-`0x4D82118C7C91B6BB` / `0xAC360E41E4EDE056`, with `0x3F9915D3001DC28E` as the
-terminal panel prefab.
-
-Naming it as the parent still matters: a combat map's parent is set in two
-places — `CGameLevelInfoResource` at `+0` and `CGameLevelResource` at `+16` —
-and the shipped rule is absolute:
+A combat map's parent is set in two places — `CGameLevelInfoResource` at `+0`
+and `CGameLevelResource` at `+16` — and the shipped rule is absolute:
 
     mpl_combat_combustion / dyson / fission / gauss  ->  mpl_combat_war_room
     mpl_arena_a, the lobbies, the tutorials          ->  r14_glb_global_mp
+
+⚠ **Correction.** An earlier version of this file said `mpl_combat_war_room`
+"ships zero resources and is an empty parent gamespace", and identified the room
+you stand in as `0x4D82118C7C91B6BB` / `0xAC360E41E4EDE056` with
+`0x3F9915D3001DC28E` as a terminal panel prefab. All of that was wrong:
+
+| Hash | What it actually is |
+|---|---|
+| `0x08A1AF9E108DEF0B` | `mpl_combat_war_room` — **675 records** in the level index |
+| `0x3F9915D3001DC28E` | `r14_glb_global_mp` — the global multiplayer gamespace |
+| `0x4D82118C7C91B6BB` | `mnu_master_mp_ingame` — a menu level |
+| `0xAC360E41E4EDE056` | `mnu_master` — a menu level |
+
+The war room is a real level with real content; this extract simply does not
+contain its resources, which is what the "zero resources" reading came from.
 
 ### CGameLevelInfoResource — fully decoded
 
@@ -156,22 +165,21 @@ combat map: the parent gamespace is what loads the gun, ordnance and tac-mod.
 `count = 0`, sentinel `1`. Present so its component system has a file to find
 (see COMPONENT_SPACE.md), carrying no entries.
 
-## The war-room UI levels
+## The levels a match streams
 
-Stock combat streams six further levels once a match starts:
+Stock combat streams six further levels once a match starts. Named, they are:
 
-    0x61B0162ADBD446FF  0x836C5B14CCC58201  0x906C4707CBC28C16
-    0x907F461FCCC0961D  0xE1A3AE700140D9D5  0xF919F210BBDA872C
+| Hash | Level |
+|---|---|
+| `0x836C5B14CCC58201` | `mpl_combat_fission_cargobay` |
+| `0x906C4707CBC28C16` | `mpl_combat_fission_pantheon` |
+| `0x907F461FCCC0961D` | `mpl_combat_fission_prologue` |
+| `0xF919F210BBDA872C` | `mpl_combat_fission_climax` |
+| `0x61B0162ADBD446FF` | `mpl_combat_celebration_room_orange` |
+| `0xE1A3AE700140D9D5` | `mpl_combat_celebration_room_blue` |
 
-They carry the working EQUIPMENT STATION terminal UI and the centre-ring deploy
-hologram. **Nothing in any level references them.** Scanning all 5,760 script
-DLLs found their hashes in exactly one file — `ec45140bac45242c.dll` — and
-fission binds that script to actor `0xBF9943D1717CF9B9`, whose components there
-are `CActorData + CGSceneResource + CR15NetIdCR + CScriptCR` (no transform).
-
-Two routes to loading them have been tried and both fail:
-
-* reproducing that actor and binding — the level loads clean and the netgame
-  then refuses the map, with the script never named in the log;
-* calling the engine's level load directly — `RVA_LevelLoad` is a level
-  **switch**: it logged `Unloading level '<our map>'` and then `Deadlock detected!`.
+⚠ **These are not "war-room UI levels" and they carry no terminal UI or deploy
+hologram** — an earlier claim here, now withdrawn. Four are regions of fission
+itself (each names fission as its parent in both parent fields), and two are the
+end-of-match celebration rooms. Streaming them into another map can only drag
+fission in with them. See [../decoded/FISSION.md](../decoded/FISSION.md).

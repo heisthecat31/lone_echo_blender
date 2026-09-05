@@ -86,10 +86,17 @@ the module does not break lookup.
 
 ### What this unblocked, and what it did not
 
-Cloned streaming scripts **do** bring in the war-room levels carrying the
-terminal UI and deploy hologram — five of them reach "Finished loading" with our
-map loaded alongside. But streaming them starts the real combat flow, and that
-flow deploys into a combat map of its own choosing: it loads
-`mpl_combat_fission`, not ours, and the duplicate `CR15NetBalanceSettings` hangs
-the load (`cr15netbalancesettingscs.cpp:316`). Making the flow deploy into our
-map is the open problem; the streaming itself is solved.
+Cloned streaming scripts work: they load, and they stream their target level
+with our map loaded alongside.
+
+**But the targets were misidentified.** The six levels a stock match streams are
+four regions of fission (`cargobay`, `pantheon`, `prologue`, `climax`) and the
+two celebration rooms — not terminal UI or a hologram. Each fission region names
+fission as its parent, so streaming one pulls fission in, and the duplicate
+`CR15NetBalanceSettings` hangs the load
+(`cr15netbalancesettingscs.cpp:316`).
+
+So the clone mechanism is solved and reusable; what it was pointed at was wrong.
+Where the terminal UI actually lives is still open — `mpl_combat_war_room`
+(675 records) and `mpl_lobby_b_combat` (3,662 records) are the candidates, and
+neither is fully present in this extract.

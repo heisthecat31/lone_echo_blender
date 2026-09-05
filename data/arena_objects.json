@@ -1,0 +1,29 @@
+{
+ "format": "evr_arena_objects",
+ "version": 2,
+ "note": "The arena's floating obstacle field, named against the Blender import. `seed` lists lescatter_576ed3f8428ebc4b_i<N> indices; every mirror copy is found from those automatically. `extra` lists copies the mirror search cannot reach because the stock placement is not an exact reflection -- station's left pair sits at (6.67, 0, 8.33) against the right pair's (5.83, 0, 10.83), so it has to be named explicitly.",
+ "objects": {
+  "spawn_tri":      {"seed": [2020, 2024, 2026], "pieces": 3},
+  "spawn_b":        {"seed": [2030], "pieces": 1},
+  "spawn_c":        {"seed": [2012], "pieces": 1},
+  "spawn_d":        {"seed": [2028], "pieces": 1},
+  "shoulder":       {"seed": [1910], "pieces": 1},
+  "pole":           {"seed": [1830], "pieces": 1},
+  "ghost":          {"seed": [1870], "pieces": 1},
+  "pacman":         {"seed": [1844, 1890], "pieces": 2},
+  "nugget":         {"seed": [1858], "pieces": 1},
+  "nest":           {"seed": [1860, 1900], "pieces": 2},
+  "boot":           {"seed": [1846, 1878], "pieces": 2},
+  "diamond":        {"seed": [1854], "pieces": 1},
+  "crystal":        {"seed": [1876], "pieces": 1},
+  "bowtie":         {"seed": [1914, 1886], "pieces": 2},
+  "station":        {"seed": [1842], "extra": [1892, 1988], "pieces": 1},
+  "kernal":         {"seed": [1868], "pieces": 1},
+  "popcorn":        {"seed": [1908, 1894, 1872, 1884], "pieces": 4},
+  "double_diamond": {"seed": [1912, 1852], "pieces": 2},
+  "angel":          {"seed": [1896], "pieces": 1},
+  "devil":          {"seed": [1916], "pieces": 1},
+  "shield":         {"seed": [1829], "pieces": 1,
+                     "note": "the flat panel at (0, -0.21, +-28.85); 4 submeshes on one entity, plus a second non-static visual (i1119) and a physics actor at the same spot"}
+ }
+}

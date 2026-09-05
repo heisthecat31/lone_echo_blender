@@ -759,8 +759,16 @@ def cube_dds_bytes(payload: bytes, dim: int, mips: int, *,
 
 
 def cube_strip_bytes(payload: bytes, dim: int, mips: int, *,
-                     engine_format: int = ETEXTUREFORMAT_BC6H_UF16) -> bytes:
-    """The six faces' MIP-0 blocks, concatenated: a `dim` x `6*dim` block image.
+                     engine_format: int = ETEXTUREFORMAT_BC6H_UF16,
+                     mip: int = 0) -> bytes:
+    """The six faces' blocks for one MIP, concatenated: a `d` x `6*d` image.
+
+    `mip` selects the level (`d = dim >> mip`).  Mip 0 is the default and was
+    the only level this ever produced, which is exactly why the wired reflection
+    was always the sharp one: the engine samples the whole chain by roughness
+    and Blender only ever saw the top.  Every level is on disk -- `mipcounts`
+    is 9 on all 379 shipped Echo VR probes -- so a caller can export the chain
+    and pick a level per material.
 
     Why this exists: **Blender has no cube-texture image type**, so a DX10
     cubemap DDS is not loadable in the shader graph.  A block-compressed image
@@ -774,12 +782,14 @@ def cube_strip_bytes(payload: bytes, dim: int, mips: int, *,
     """
     bpb = block_bytes(engine_format)
     fb = face_bytes(dim, mips, bpb)
-    mip0 = face_mip_offsets(dim, mips, bpb)[0][1]
     if len(payload) != fb * 6:
         raise ValueError(f"cube payload is {len(payload)} B, expected {fb * 6}")
-    out = b"".join(payload[f * fb: f * fb + mip0] for f in range(6))
+    if not 0 <= mip < mips:
+        raise ValueError(f"mip {mip} out of range 0..{mips - 1}")
+    off, size, d = face_mip_offsets(dim, mips, bpb)[mip]
+    out = b"".join(payload[f * fb + off: f * fb + off + size] for f in range(6))
     dxgi = ETEXTUREFORMAT_TO_DXGI.get(engine_format, DXGI_BC6H_UF16)
-    hdr = _dds_header(dim, dim * 6, 1, dxgi, linear_size=mip0 * 6)
+    hdr = _dds_header(d, d * 6, 1, dxgi, linear_size=size * 6)
     return hdr + out
 
 
@@ -1010,6 +1020,9 @@ def build_probe_spec(resource, probe: int, files: dict | None = None) -> dict:
         "gpu_bytes": end - start,
         "cube_file": f.get("cube", ""),
         "strip_file": f.get("strip", ""),
+        # One strip per mip level, coarsest last. Empty when the caller only
+        # exported mip 0, which is what every earlier extraction did.
+        "mip_files": list(f.get("mips") or ()),
         "mip_normalizations": bb.mip_normalizations(mip) if bb else [],
         "obb_min_world": list(bb.world_obb_corner("min")) if bb else [],
         "obb_max_world": list(bb.world_obb_corner("max")) if bb else [],

@@ -1,0 +1,1012 @@
+{
+ "level": "mpl_combat_fission",
+ "hash": "0xDF5CA7B7DFA383D4",
+ "resources": [
+  {
+   "type": "CR15LinearConstraintTouchInteractCRWin10",
+   "type_hash": "0x10E2D7FF635E6162",
+   "bytes": 2648,
+   "sha1": "dc07189ba2",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 288
+  },
+  {
+   "type": "12b9cc38a29755a",
+   "type_hash": "0x12B9CC38A29755A",
+   "bytes": 48984,
+   "sha1": "7bec88d33c",
+   "count": 556,
+   "shape": "flat-cr",
+   "stride": 88
+  },
+  {
+   "type": "COcclusionCullCRWin10",
+   "type_hash": "0x142026F469321D54",
+   "bytes": 1496,
+   "sha1": "b8e7193d09",
+   "count": 45,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15CollisionCRWin10",
+   "type_hash": "0x17FAF18DA79D0E78",
+   "bytes": 448,
+   "sha1": "36ea207cd7",
+   "count": 7,
+   "shape": "flat-cr",
+   "stride": 56
+  },
+  {
+   "type": "CR15FrisbeeCRWin10",
+   "type_hash": "0x1875FEBBEAB23F44",
+   "bytes": 184,
+   "sha1": "f021cae4c4",
+   "count": 4,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CTagCRWin10",
+   "type_hash": "0x1C718652028E0984",
+   "bytes": 424,
+   "sha1": "3e5ddf7c26",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 344
+  },
+  {
+   "type": "CParticleEffectCRWin10",
+   "type_hash": "0x21A09C2016D8F3E6",
+   "bytes": 1728,
+   "sha1": "b5b6a5b52d",
+   "count": 11,
+   "shape": "flat-cr",
+   "stride": 152
+  },
+  {
+   "type": "CComponentRegionLODCRWin10",
+   "type_hash": "0x22CCEC2D7D8B0FFA",
+   "bytes": 240,
+   "sha1": "7c995143de",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 88,
+   "pool": 96
+  },
+  {
+   "type": "CBoundingSphereCRWin10",
+   "type_hash": "0x22F9FCB2D5E52E3C",
+   "bytes": 30248,
+   "sha1": "8d460ea05e",
+   "count": 629,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CGLightMapResourceWin10",
+   "type_hash": "0x230554BC3BECA38C",
+   "bytes": 588,
+   "sha1": "79a42a73ab",
+   "count": 18446744073709551615,
+   "shape": "resource"
+  },
+  {
+   "type": "CInstanceModelCRWin10",
+   "type_hash": "0x2464C4ED290F3268",
+   "bytes": 7680,
+   "sha1": "7bc674d93a",
+   "count": 54,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 6328
+  },
+  {
+   "type": "CR15NetActorCRWin10",
+   "type_hash": "0x24C73CB2EBE38BFC",
+   "bytes": 600,
+   "sha1": "f7797a5943",
+   "count": 17,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CGReflectionProbeResourceWin10",
+   "type_hash": "0x2829C885034AFCDE",
+   "bytes": 1192,
+   "sha1": "599ad62ca6",
+   "count": 12,
+   "shape": "pooled-cr",
+   "stride": 56,
+   "pool": 464
+  },
+  {
+   "type": "carchiveresourceWin10",
+   "type_hash": "0x2A41CF1C1D9E5D32",
+   "bytes": 34608,
+   "sha1": "1bb79b5575",
+   "count": 10057083141392679454,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15DampenerCRWin10",
+   "type_hash": "0x2B292830E51C4FD2",
+   "bytes": 248,
+   "sha1": "571b600839",
+   "count": 3,
+   "shape": "flat-cr",
+   "stride": 64
+  },
+  {
+   "type": "2d2be13ea8fb8ae",
+   "type_hash": "0x2D2BE13EA8FB8AE",
+   "bytes": 280,
+   "sha1": "24d4d14f19",
+   "count": 7,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CActorDataResourceWin10",
+   "type_hash": "0x347869CE492DC7DA",
+   "bytes": 165608,
+   "sha1": "7f7d0124ad",
+   "count": 1593,
+   "shape": "pooled-cr",
+   "stride": 16,
+   "pool": 140064
+  },
+  {
+   "type": "CBVHResourceWin10",
+   "type_hash": "0x358B53C17825D154",
+   "bytes": 2097680,
+   "sha1": "68b1ec5bd8",
+   "count": 262592,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15NetPayloadCRWin10",
+   "type_hash": "0x3850C0283892236E",
+   "bytes": 128,
+   "sha1": "8effba514e",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 72
+  },
+  {
+   "type": "CLegacyCameraDataCRWin10",
+   "type_hash": "0x38F8036A376F5F64",
+   "bytes": 2312,
+   "sha1": "48128b836e",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 192,
+   "pool": 2064
+  },
+  {
+   "type": "CR15TriggerCRWin10",
+   "type_hash": "0x39284E7992BEFC92",
+   "bytes": 128,
+   "sha1": "6be1deab22",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 72
+  },
+  {
+   "type": "CComponentLODZoneCRWin10",
+   "type_hash": "0x39C0EE986726DFD2",
+   "bytes": 240,
+   "sha1": "bfa36d38a6",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 144,
+   "pool": 40
+  },
+  {
+   "type": "CDecalCRWin10",
+   "type_hash": "0x3B5DB8AF43546D40",
+   "bytes": 3312,
+   "sha1": "92a8fe3484",
+   "count": 11,
+   "shape": "flat-cr",
+   "stride": 296
+  },
+  {
+   "type": "CMaterialTypeCRWin10",
+   "type_hash": "0x3B87EF2FC94A9B14",
+   "bytes": 88,
+   "sha1": "a8eac1f8e7",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CActorRegionLODCRWin10",
+   "type_hash": "0x409758926E4728C4",
+   "bytes": 248,
+   "sha1": "78370fc254",
+   "count": 6,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CTextureOverrideCRWin10",
+   "type_hash": "0x4127FF2FFE6BE26A",
+   "bytes": 11512,
+   "sha1": "4897dd032c",
+   "count": 358,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CMaterialTypesBVHResourceWin10",
+   "type_hash": "0x4230B4E0957B5462",
+   "bytes": 304368,
+   "sha1": "e82628ceff",
+   "count": 19019,
+   "shape": "pooled-cr",
+   "stride": 16,
+   "pool": 8
+  },
+  {
+   "type": "CActorLODCRWin10",
+   "type_hash": "0x424FB75EFEE13BA6",
+   "bytes": 248,
+   "sha1": "4f0d5d3d43",
+   "count": 4,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CR15NetDynamicCoverCRWin10",
+   "type_hash": "0x42D101B2307BBC16",
+   "bytes": 88,
+   "sha1": "c2da113bdb",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15TrackPointCRWin10",
+   "type_hash": "0x451830F92DDC5CC6",
+   "bytes": 3920,
+   "sha1": "3940ad9235",
+   "count": 69,
+   "shape": "flat-cr",
+   "stride": 56
+  },
+  {
+   "type": "CR15NetExplosionCRWin10",
+   "type_hash": "0x4AF215B19B297C34",
+   "bytes": 920,
+   "sha1": "4d449caff0",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 96
+  },
+  {
+   "type": "CR15InteractOutputCRWin10",
+   "type_hash": "0x4E0D508C8911AB6A",
+   "bytes": 344,
+   "sha1": "d6162859b4",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15OrientationConstraintCRWin10",
+   "type_hash": "0x4E285CA5CA255902",
+   "bytes": 1064,
+   "sha1": "cf0491eb71",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 112
+  },
+  {
+   "type": "CGMeshListResourceWin10",
+   "type_hash": "0x4E426F88C1B5D7AC",
+   "bytes": 18656,
+   "sha1": "4f514a1f84",
+   "count": 4294967295,
+   "shape": "resource"
+  },
+  {
+   "type": "4e7c2e6a7ebd80e",
+   "type_hash": "0x4E7C2E6A7EBD80E",
+   "bytes": 24936,
+   "sha1": "a453a05095",
+   "count": 311,
+   "shape": "flat-cr",
+   "stride": 80
+  },
+  {
+   "type": "CR15NetBulletCRWin10",
+   "type_hash": "0x4FD65C8D2B63D470",
+   "bytes": 1280,
+   "sha1": "50b8444cfa",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 136
+  },
+  {
+   "type": "5004f0b9f6645271",
+   "type_hash": "0x5004F0B9F6645271",
+   "bytes": 524448,
+   "sha1": "6e1630ea78",
+   "count": 5270498306774269952,
+   "shape": "resource"
+  },
+  {
+   "type": "CEventCRWin10",
+   "type_hash": "0x547B31427E1CBD8C",
+   "bytes": 15864,
+   "sha1": "cea472533d",
+   "count": 29,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 15112
+  },
+  {
+   "type": "CR15NetMagazineCRWin10",
+   "type_hash": "0x5B723F040A3778EE",
+   "bytes": 336,
+   "sha1": "3644b085f4",
+   "count": 7,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CBillboardCRWin10",
+   "type_hash": "0x615E262159C487E0",
+   "bytes": 1896,
+   "sha1": "47444886bf",
+   "count": 23,
+   "shape": "flat-cr",
+   "stride": 80
+  },
+  {
+   "type": "CR15LinearPositionConstraintCRWin10",
+   "type_hash": "0x68C32C04284FB022",
+   "bytes": 1280,
+   "sha1": "528f3bbc00",
+   "count": 9,
+   "shape": "flat-cr",
+   "stride": 136
+  },
+  {
+   "type": "CComponentSpaceResourceWin10",
+   "type_hash": "0x6901365C8BB8BF50",
+   "bytes": 1280,
+   "sha1": "514c1bdbca",
+   "count": 32,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15PlatformCRWin10",
+   "type_hash": "0x6DCACF3BE89109A0",
+   "bytes": 4952,
+   "sha1": "d5ba510162",
+   "count": 6,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 4752
+  },
+  {
+   "type": "CR15NetPhysicsCRWin10",
+   "type_hash": "0x71131E0E3B8AA17C",
+   "bytes": 536,
+   "sha1": "d932402c47",
+   "count": 12,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CGVisibilityResourceWin10",
+   "type_hash": "0x73D312A620DA3824",
+   "bytes": 4380,
+   "sha1": "66e6c93c76",
+   "count": 17179604975,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15BounceCRWin10",
+   "type_hash": "0x74EDE05B09640CEA",
+   "bytes": 392,
+   "sha1": "ea52fa3dac",
+   "count": 7,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CGStaticInstanceResourceWin10",
+   "type_hash": "0x77C0BF257CA92AA0",
+   "bytes": 376,
+   "sha1": "68f83eb456",
+   "count": 0,
+   "shape": "resource"
+  },
+  {
+   "type": "79586e19869a090",
+   "type_hash": "0x79586E19869A090",
+   "bytes": 4184,
+   "sha1": "ccc57de54d",
+   "count": 129,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15ImpulseToHandTouchTypeCRWin10",
+   "type_hash": "0x7A7E782B928652BC",
+   "bytes": 312,
+   "sha1": "2d3e8c3cde",
+   "count": 8,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "7b9a4c9fd03f37eb",
+   "type_hash": "0x7B9A4C9FD03F37EB",
+   "bytes": 0,
+   "sha1": "da39a3ee5e"
+  },
+  {
+   "type": "CGFSEffectsResourceWin10",
+   "type_hash": "0x7D687BA03866061E",
+   "bytes": 1416,
+   "sha1": "e375ad043f",
+   "count": 4575657222473777152,
+   "shape": "resource"
+  },
+  {
+   "type": "CComponentLODCRWin10",
+   "type_hash": "0x7F49ABAE39AAF2AA",
+   "bytes": 78200,
+   "sha1": "f3375e0d3e",
+   "count": 339,
+   "shape": "pooled-cr",
+   "stride": 96,
+   "pool": 45600
+  },
+  {
+   "type": "CCanvasUICRWin10",
+   "type_hash": "0x822FD4CCB42E8A3C",
+   "bytes": 36136,
+   "sha1": "09abaa41da",
+   "count": 410,
+   "shape": "flat-cr",
+   "stride": 88
+  },
+  {
+   "type": "CGameLevelInfoResourceWin10",
+   "type_hash": "0x858055BBD5655F64",
+   "bytes": 16,
+   "sha1": "0be38f138e"
+  },
+  {
+   "type": "CR15UILayoutCRWin10",
+   "type_hash": "0x8B91EFD51747C21E",
+   "bytes": 200,
+   "sha1": "ebabd7160b",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 96,
+   "pool": 48
+  },
+  {
+   "type": "CTransformCRWin10",
+   "type_hash": "0x92ABD3E1432BF5E8",
+   "bytes": 726584,
+   "sha1": "2f0420ca3a",
+   "count": 4128,
+   "shape": "flat-cr",
+   "stride": 176
+  },
+  {
+   "type": "CTextureStreamingCRWin10",
+   "type_hash": "0x96832B652460ECDE",
+   "bytes": 29096,
+   "sha1": "f1801bcf3a",
+   "count": 726,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CR15NetAutoTargetCRWin10",
+   "type_hash": "0x975113E786B2C0A4",
+   "bytes": 160,
+   "sha1": "2cda5cd43e",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 104
+  },
+  {
+   "type": "CR15TeamCRWin10",
+   "type_hash": "0x991DF4582160DDC0",
+   "bytes": 1072,
+   "sha1": "9d349aece0",
+   "count": 8,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 824
+  },
+  {
+   "type": "CGSceneResourceWin10",
+   "type_hash": "0xA388EA69E5108F4C",
+   "bytes": 489324,
+   "sha1": "04d44bed64",
+   "count": 4764808406823337984,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15NetFollowPlayerCRWin10",
+   "type_hash": "0xA7BCBF4B204A8916",
+   "bytes": 96,
+   "sha1": "4e4e9c0b78",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CR15NetVarCRWin10",
+   "type_hash": "0xAC05E44816844A00",
+   "bytes": 88,
+   "sha1": "3ee65badf4",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "COccluderMeshResourceWin10",
+   "type_hash": "0xB5CBB950CB55A92C",
+   "bytes": 56,
+   "sha1": "7ff381ceaa",
+   "count": 0,
+   "shape": "empty-cr"
+  },
+  {
+   "type": "CPhysicsResourceWin10",
+   "type_hash": "0xB7D338793FA37832",
+   "bytes": 72,
+   "sha1": "9eff6d3d9c",
+   "count": 0,
+   "shape": "resource"
+  },
+  {
+   "type": "CTeamCRWin10",
+   "type_hash": "0xB9A46F348CBF3BC6",
+   "bytes": 1176,
+   "sha1": "046b9dba7b",
+   "count": 9,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 904
+  },
+  {
+   "type": "CR15NetDamageableCRWin10",
+   "type_hash": "0xBD1868F576836696",
+   "bytes": 504,
+   "sha1": "33c4112584",
+   "count": 8,
+   "shape": "flat-cr",
+   "stride": 56
+  },
+  {
+   "type": "CR15NetAimAssistCRWin10",
+   "type_hash": "0xBD8575CC9885E590",
+   "bytes": 776,
+   "sha1": "3ec4fe8c9a",
+   "count": 15,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CGTextureStreamingResourceWin10",
+   "type_hash": "0xC2434C5A99E139CE",
+   "bytes": 2168,
+   "sha1": "5e7950c881",
+   "count": 15150362026338664807,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15NetPooledActorCRWin10",
+   "type_hash": "0xC28A49E8E5639D32",
+   "bytes": 96,
+   "sha1": "f5a400d4aa",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CR15NetIdCRWin10",
+   "type_hash": "0xC29715D62E039402",
+   "bytes": 7384,
+   "sha1": "e25c4e5447",
+   "count": 229,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15TouchInteractCRWin10",
+   "type_hash": "0xC2BF1B5284855E4A",
+   "bytes": 2040,
+   "sha1": "87a6df859f",
+   "count": 31,
+   "shape": "flat-cr",
+   "stride": 64
+  },
+  {
+   "type": "CR15SyncGrabCRWin10",
+   "type_hash": "0xC8EDC00BF1D93EFE",
+   "bytes": 24320,
+   "sha1": "8e2e18e43a",
+   "count": 7,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 24096
+  },
+  {
+   "type": "CFrustumCullCRWin10",
+   "type_hash": "0xCA5A03D5A497238C",
+   "bytes": 1496,
+   "sha1": "d68a1d0339",
+   "count": 45,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15SpawnPointCRWin10",
+   "type_hash": "0xCB75EEE100D282A8",
+   "bytes": 296,
+   "sha1": "c3bc5a539c",
+   "count": 5,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CR15UIPageCRWin10",
+   "type_hash": "0xD282D4778B4EDDB2",
+   "bytes": 336,
+   "sha1": "367008fffd",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 264,
+   "pool": 16
+  },
+  {
+   "type": "CStaticRaycastCRWin10",
+   "type_hash": "0xD649A90FFF322C12",
+   "bytes": 88,
+   "sha1": "1766f1cb46",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CScriptCRWin10",
+   "type_hash": "0xD99F6BBD8009C92C",
+   "bytes": 383848,
+   "sha1": "bcaa6ac673",
+   "count": 418,
+   "shape": "pooled-cr",
+   "stride": 720,
+   "pool": 82832
+  },
+  {
+   "type": "CSharedCanvasUICRWin10",
+   "type_hash": "0xDAB7DCE1DF894EF6",
+   "bytes": 416,
+   "sha1": "7be8a97229",
+   "count": 5,
+   "shape": "flat-cr",
+   "stride": 72
+  },
+  {
+   "type": "CAnimationCRWin10",
+   "type_hash": "0xDB098C12AD9B9844",
+   "bytes": 151280,
+   "sha1": "29af229b31",
+   "count": 313,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 143712
+  },
+  {
+   "type": "CR15NetGunCRWin10",
+   "type_hash": "0xDBAED509C67B8884",
+   "bytes": 19256,
+   "sha1": "9d6d5cbc6d",
+   "count": 120,
+   "shape": "flat-cr",
+   "stride": 160
+  },
+  {
+   "type": "dbc9c94837220ee",
+   "type_hash": "0xDBC9C94837220EE",
+   "bytes": 3720,
+   "sha1": "1f8e2074d1",
+   "count": 1,
+   "shape": "pooled-cr",
+   "stride": 200,
+   "pool": 3464
+  },
+  {
+   "type": "dd3ff9850e4eed35",
+   "type_hash": "0xDD3FF9850E4EED35",
+   "bytes": 0,
+   "sha1": "da39a3ee5e"
+  },
+  {
+   "type": "CR15RigidAttachConstraintCRWin10",
+   "type_hash": "0xDDE8FFFC5B4D7AD4",
+   "bytes": 136,
+   "sha1": "780b3bbf7b",
+   "count": 2,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "CR15NetSensorTargetCRWin10",
+   "type_hash": "0xE51718C1E4669474",
+   "bytes": 280,
+   "sha1": "feccd2f1c2",
+   "count": 7,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "e642bfb1abcf76df",
+   "type_hash": "0xE642BFB1ABCF76DF",
+   "bytes": 2972740,
+   "sha1": "af4eff5406",
+   "count": 44326893869977600,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15NetTrackMoverCRWin10",
+   "type_hash": "0xE826937E7F7D0994",
+   "bytes": 104,
+   "sha1": "e0540450c0",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "CGameLevelResourceWin10",
+   "type_hash": "0xE8E38D7781A338A6",
+   "bytes": 82528,
+   "sha1": "14011df77d",
+   "count": 4,
+   "shape": "resource"
+  },
+  {
+   "type": "CR15ButtonInteractCRWin10",
+   "type_hash": "0xE9B24EA816DECE48",
+   "bytes": 153088,
+   "sha1": "8df81f2eb0",
+   "count": 517,
+   "shape": "flat-cr",
+   "stride": 296
+  },
+  {
+   "type": "CModelCRWin10",
+   "type_hash": "0xEA51A0D76EB90142",
+   "bytes": 426024,
+   "sha1": "b4106338ec",
+   "count": 726,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 408544
+  },
+  {
+   "type": "CInputCRWin10",
+   "type_hash": "0xEEC3FCAE33F68500",
+   "bytes": 88,
+   "sha1": "44de797672",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15NetTouchInteractCRWin10",
+   "type_hash": "0xEEC5CC16EA02F8FC",
+   "bytes": 496,
+   "sha1": "cb2acb6c23",
+   "count": 11,
+   "shape": "flat-cr",
+   "stride": 40
+  },
+  {
+   "type": "f0fb3116ec3f644",
+   "type_hash": "0xF0FB3116EC3F644",
+   "bytes": 2864,
+   "sha1": "d810ddf8d8",
+   "count": 6,
+   "shape": "pooled-cr",
+   "stride": 440,
+   "pool": 168
+  },
+  {
+   "type": "CR15ParentedConstraintCRWin10",
+   "type_hash": "0xF2676C58C07BAB0C",
+   "bytes": 408,
+   "sha1": "9563aab04d",
+   "count": 11,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15NetKillTickerCRWin10",
+   "type_hash": "0xF289249001A4BED6",
+   "bytes": 88,
+   "sha1": "d339719769",
+   "count": 1,
+   "shape": "flat-cr",
+   "stride": 32
+  },
+  {
+   "type": "CR15NetBitFieldCRWin10",
+   "type_hash": "0xF460DAE1C4C8071C",
+   "bytes": 30008,
+   "sha1": "cedbde4a81",
+   "count": 120,
+   "shape": "pooled-cr",
+   "stride": 24,
+   "pool": 27072
+  },
+  {
+   "type": "CPhysicsCRWin10",
+   "type_hash": "0xF6BAB7207D923478",
+   "bytes": 2072,
+   "sha1": "6cc926d5de",
+   "count": 42,
+   "shape": "flat-cr",
+   "stride": 48
+  },
+  {
+   "type": "fb620e994d00128",
+   "type_hash": "0xFB620E994D00128",
+   "bytes": 472,
+   "sha1": "278ca837ac",
+   "count": 4,
+   "shape": "pooled-cr",
+   "stride": 88,
+   "pool": 64
+  }
+ ],
+ "resource_count": 97,
+ "total_bytes": 8962024,
+ "actors": 1539,
+ "component_systems": 76,
+ "cs_without_cr": 76,
+ "script_entries": 418,
+ "distinct_scripts": 81,
+ "top_scripts": [
+  {
+   "script": "0x31791321CEB2B274",
+   "actors": 120
+  },
+  {
+   "script": "0xD56C95E9F5C64131",
+   "actors": 21
+  },
+  {
+   "script": "0x10A27372E2E5C944",
+   "actors": 20
+  },
+  {
+   "script": "0xCFF4557B7D2CE426",
+   "actors": 15
+  },
+  {
+   "script": "0xCFF74A696F2DED20",
+   "actors": 15
+  },
+  {
+   "script": "0xA9DB8988989BB09E",
+   "actors": 15
+  },
+  {
+   "script": "0x6DAE7E9A52BE5F0E",
+   "actors": 15
+  },
+  {
+   "script": "0x6DAE619456BB4F17",
+   "actors": 15
+  }
+ ],
+ "sub_levels": [
+  {
+   "level": "0xB490BB722958C1A8",
+   "at": [
+    25.91,
+    -10.43,
+    7.36
+   ]
+  },
+  {
+   "level": "0xF1F1734847D74B28",
+   "at": [
+    -27.43,
+    -3.97,
+    12.18
+   ]
+  },
+  {
+   "level": "0xFF2EBE34FE81CDDA",
+   "at": [
+    49.14,
+    -10.44,
+    18.89
+   ]
+  },
+  {
+   "level": "0x0F9E2949BB1B1645",
+   "at": [
+    51.63,
+    -10.43,
+    23.23
+   ]
+  },
+  {
+   "level": "0x32D7D56E27A93157",
+   "at": [
+    22.33,
+    -10.42,
+    10.91
+   ]
+  },
+  {
+   "level": "0x7244FD32CBE25A07",
+   "at": [
+    -30.98,
+    -3.96,
+    15.7
+   ]
+  }
+ ],
+ "parent": "0x08A1AF9E108DEF0B",
+ "linked_from": [
+  {
+   "level": "mpl_combat_fission_cargobay",
+   "hash": "0x836C5B14CCC58201",
+   "in": [
+    "CGameLevelInfoResourceWin10",
+    "CGameLevelResourceWin10"
+   ],
+   "parent": "0xDF5CA7B7DFA383D4",
+   "parented_to_fission": true
+  },
+  {
+   "level": "mpl_combat_fission_pantheon",
+   "hash": "0x906C4707CBC28C16",
+   "in": [
+    "CGameLevelInfoResourceWin10",
+    "CGameLevelResourceWin10"
+   ],
+   "parent": "0xDF5CA7B7DFA383D4",
+   "parented_to_fission": true
+  },
+  {
+   "level": "mpl_combat_fission_prologue",
+   "hash": "0x907F461FCCC0961D",
+   "in": [
+    "CGameLevelInfoResourceWin10",
+    "CGameLevelResourceWin10"
+   ],
+   "parent": "0xDF5CA7B7DFA383D4",
+   "parented_to_fission": true
+  },
+  {
+   "level": "mpl_combat_fission_climax",
+   "hash": "0xF919F210BBDA872C",
+   "in": [
+    "CGameLevelInfoResourceWin10",
+    "CGameLevelResourceWin10"
+   ],
+   "parent": "0xDF5CA7B7DFA383D4",
+   "parented_to_fission": true
+  }
+ ]
+}
