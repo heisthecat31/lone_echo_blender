@@ -109,7 +109,18 @@ def parse_header(data: bytes, off: int) -> Header:
     )
 
 
+#: The repo's own name table, used when the caller's path does not resolve.
+#: `DEFAULT_HASH_LOOKUP` is the bare relative name, so every tool run from
+#: anywhere but a directory holding that file silently loaded ZERO names --
+#: which is why Lone Echo 1 extractions all logged `hash_lookup: 0 entries`
+#: while data/hash_lookup.json held 13,033 of them, 35 of which name archives.
+REPO_HASH_LOOKUP = Path(__file__).resolve().parents[1] / "data" / "hash_lookup.json"
+
+
 def load_hash_lookup(path: Path) -> dict[int, str]:
+    if path is None or not Path(path).exists():
+        path = REPO_HASH_LOOKUP
+    path = Path(path)
     if not path.exists():
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))

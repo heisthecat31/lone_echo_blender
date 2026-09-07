@@ -1320,18 +1320,48 @@ class EchoExtractor(tk.Tk):
                     "--data-root", self.game_data.get(),
                     "--out", str(LE1_INDEX_FILE)])
 
+    def _le1_names(self) -> dict:
+        """`{archive hash: authored name}` for Lone Echo 1.
+
+        An archive hash IS the CSymbol64 of its authored name -- verified 8/8
+        against the names already in `data/hash_lookup.json` -- so these are
+        recovered preimages, not labels invented here. Two sources, merged:
+        the shared 13k `hash_lookup` table and `level_names_loneecho1.json`,
+        which holds what the generator cracked on top of it.
+
+        Note this is a DIFFERENT namespace from `data/le1_scene_names.json`.
+        Those 171 sourcedb identifiers bind to nothing and that is settled;
+        archive names are their own thing and do crack.
+        """
+        if getattr(self, "_le1_name_cache", None) is not None:
+            return self._le1_name_cache
+        out = {}
+        for path, key in ((DATA / "hash_lookup.json", None),
+                          (DATA / "level_names_loneecho1.json", "levels")):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            table = (raw.get(key) or {}) if key else raw
+            for h, name in table.items():
+                if isinstance(name, str) and name:
+                    out[norm_hash(h.replace("0x", ""))] = name
+        self._le1_name_cache = out
+        return out
+
     def _le1_levels(self, idx):
         """`(entries, stubs)` for the current Lone Echo 1 mode."""
         scenes = sorted(idx.get("scenes") or {})
         meshes = sorted(idx.get("meshes") or [])
         stubs = set(idx.get("stubs") or [])
+        names = self._le1_names()
         if self.le1_mode.get() == "scenes":
             # A scene archive is never a stub, so nothing is hidden here.
-            return [(h, None) for h in scenes], set()
+            return [(h, names.get(h)) for h in scenes], set()
         # Mesh mode offers every archive `le_extract` can open -- scene
         # archives carry meshlists too -- and the stubs behind the checkbox.
         openable = sorted(set(scenes) | set(meshes))
-        return ([(h, None) for h in openable + sorted(stubs)], stubs)
+        return ([(h, names.get(h)) for h in openable + sorted(stubs)], stubs)
 
     def _toggle_le1_mode(self):
         idx = self._le1_index()
