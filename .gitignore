@@ -36,15 +36,35 @@ game_data/
 
 # Machine-local remembered paths (never commit)
 app/settings.json
+# Lone Echo 1's archive classification -- describes YOUR install, and is
+# rebuilt in about a minute by scripts/le_scene_index.py
+app/le1_scene_index.json
 
 # Vendored dependencies under app/extract/ ARE published -- they are MIT under
 # the same copyright as this project, and a clone is non-functional without
-# them. Only genuinely unshippable material is excluded:
-#   * evrFileTools/ - no LICENSE file, credits third parties. Its readers are
-#     reimplemented in scripts/evr_actor_data.py + scripts/evr_component_cr.py.
-#   * bin/          - proprietary DLLs (libsquish, texconv, Oodle).
-app/extract/evrFileTools/
-app/extract/**/bin/
+# them. `pyoodle/` is published in full: the Lone Echo 1 path puts it on
+# PYTHONPATH, so a clone without it cannot decompress anything.
+#
+# evrFileTools is NOT vendored wholesale (no LICENSE file, credits third
+# parties; its readers are reimplemented in scripts/evr_actor_data.py +
+# scripts/evr_component_cr.py) -- but the app SHELLS OUT to its executables, so
+# a clone without them cannot extract Echo VR or Lone Echo 2 at all. Ship those
+# two binaries and nothing else.
+app/extract/evrFileTools/*
+!app/extract/evrFileTools/bin/
+app/extract/evrFileTools/bin/*
+!app/extract/evrFileTools/bin/evrfiletools.exe
+!app/extract/evrFileTools/cmd/
+app/extract/evrFileTools/cmd/*
+!app/extract/evrFileTools/cmd/evrtools/
+app/extract/evrFileTools/cmd/evrtools/*
+!app/extract/evrFileTools/cmd/evrtools/evrtools.exe
+
+# Every other bin/ under app/extract/ stays out: proprietary DLLs and
+# third-party redistributables (libsquish, texconv, Oodle).
+app/extract/evr_mesh_importer/bin/
+app/extract/resource_io/bin/
+app/extract/pyoodle/**/bin/
 *.pyc
 /Dev
 /blender_tool/tests

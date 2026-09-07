@@ -1131,6 +1131,14 @@ def main() -> int:
 
     targets = all_hashes if args.all else [h.lower() for h in args.mesh]
     if not targets:
+        if args.all:
+            # `--all` over an archive that pairs no meshlists is a legitimate
+            # no-op, not a usage error. Telling the caller to "pass --all" when
+            # they just did is misleading, and exiting 2 makes a batch run look
+            # like it failed -- roughly one archive in ten holds no meshes.
+            print(f"  archive {args.archive} pairs no CGMeshListResource "
+                  f"— nothing to extract")
+            return 0
         ap.error("nothing to do: pass --mesh <hash> (repeatable), --all, or --list")
 
     ok = fail = skip = 0

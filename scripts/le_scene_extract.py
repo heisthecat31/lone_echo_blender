@@ -488,6 +488,115 @@ def resolve_master_lightmap(archive_hash: str, master_name_hash: int) -> dict:
     return out
 
 
+#: package-relative directory the baked atlas lands in. Same name the mesh
+#: path uses (`le_extract.LIGHTMAP_DIR`) because the add-on already searches it.
+LIGHTMAP_DIR = "lightmap"
+
+
+def extract_master_lightmap_textures(archive_hash: str, lm_binding: dict,
+                                     meshes, out_dir: Path,
+                                     progress=print, verbose: bool = False) -> dict:
+    """Fetch the baked atlas the master's lightmap binding names.
+
+    `resolve_master_lightmap` only LOCATES the `CGLightMapResourceWin7` record —
+    the 364-byte slice it reports is the binding table, not pixels. This decodes
+    that table, resolves the row the scatter's meshes actually reference, and
+    pulls the DDS the row names.
+
+    Kept on ranged reads (`decompress_range` over the recorded slice) rather than
+    routed through `le_extract.resolve_lightmap_section`, which needs a fully
+    decompressed `Archive`. That would undo the OOM-safety this extractor is
+    built around: the master primary is 130 MB compressed here, and the whole
+    point of the scene path is never to hold it.
+
+    Textures usually live in a PARENT archive, so the home for each hash comes
+    from the global texture index, falling back to this archive.
+    """
+    from le_oodle import chunk_table, decompress_range
+    from le_archive_decode import ARCHIVE_PRIMARY
+    from le_mesh import lightmap as lmp
+
+    out = {"textures": {}, "textures_copied": False}
+    sl = lm_binding.get("slice")
+    if not lm_binding.get("present") or not sl:
+        out["reason"] = "no lightmap resource in this archive"
+        return out
+
+    rows = sorted({int(m.lightmap_index) for m in meshes
+                   if lmp.is_lightmapped(m.lightmap_index)})
+    if not rows:
+        out["reason"] = "no lightmapped meshes"
+        return out
+
+    try:
+        raw = (ARCHIVE_PRIMARY / archive_hash).read_bytes()
+        uncomp_total, _ = chunk_table(raw)
+        prelude = decompress_range(raw, 0, 64)
+        extra_skip = struct.unpack_from("<Q", prelude, 24)[0]
+        data_off = 32 + extra_skip
+        start = data_off + int(sl["pos"])
+        blob = decompress_range(raw, start, start + int(sl["size"]))
+        del raw
+        table = lmp.parse_lightmap_table(blob)
+    except Exception as exc:                                   # noqa: BLE001
+        out["reason"] = "lightmap table unreadable: %s" % exc
+        return out
+    if not table:
+        out["reason"] = "lightmap table is empty"
+        return out
+
+    slices = sorted({int(m.lm_slice_index) for m in meshes
+                     if lmp.is_lightmapped(m.lightmap_index)})
+    binding = None
+    for r in rows:
+        for si in (slices or [lmp.LM_SLICE_NONE]):
+            binding = lmp.resolve(table, r, si)
+            if binding:
+                break
+        if binding:
+            break
+    if binding is None:
+        out["reason"] = "no row of the table resolves for rows=%s" % rows
+        return out
+
+    hashes = list(binding.texture_set.textures.values())
+    if not hashes:
+        out["reason"] = "binding names no textures"
+        return out
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]
+                           / "blender_tool" / "extractor"))
+    import le_textures
+    try:
+        from le_extract import load_global_texture_index
+        index = load_global_texture_index()
+    except Exception:                                          # noqa: BLE001
+        index = {}
+
+    by_home: dict = {}
+    for h in hashes:
+        by_home.setdefault(index.get(int(h, 16), archive_hash), set()).add(h)
+    dest = Path(out_dir) / LIGHTMAP_DIR
+    files = {}
+    for home, hs in sorted(by_home.items()):
+        try:
+            got = le_textures.extract_by_hashes(home, hs, dest, verbose=verbose)
+        except Exception as exc:                               # noqa: BLE001
+            progress(f"    WARN atlas from {home}: {exc}")
+            continue
+        for th in got:
+            files[th] = f"{LIGHTMAP_DIR}/{th}.dds"
+    out["textures"] = files
+    out["textures_copied"] = bool(files)
+    out["rows_referenced"] = rows
+    if not files:
+        out["reason"] = ("named %d texture(s) but none resolved in %d home(s)"
+                         % (len(hashes), len(by_home)))
+    progress(f"lightmap textures: {len(files)}/{len(hashes)} atlas DDS -> "
+             f"{dest}" if files else f"lightmap textures: none ({out['reason']})")
+    return out
+
+
 def _find_meshlist(blob: bytes, gpudatasize: int, num_meshes: int, hint: int = 369032):
     """Locate the inline CGMeshListData stream; return its parse_candidate dict."""
     import le_meshlist_decode as ml
@@ -503,7 +612,8 @@ def _find_meshlist(blob: bytes, gpudatasize: int, num_meshes: int, hint: int = 3
 
 def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
                   hash_lookup: Path = Path("hash_lookup.json"),
-                  progress=print, instance_lightmap: bool = False) -> ExtractStats:
+                  progress=print, instance_lightmap: bool = False,
+                  lightmap_textures: bool = False) -> ExtractStats:
     """Decode the static-scatter master + inline meshlist and write a `.lescatter`.
 
     `subset`: if set, keep only the top-`subset` mesh-types by instance count (ALL
@@ -825,6 +935,9 @@ def extract_scene(archive_hash: str, out_dir: Path, subset: int | None = None,
     lm_binding = resolve_master_lightmap(archive_hash, name_hash)
     stats.lightmap_resource = (lm_binding["resource_name"]
                                if lm_binding.get("present") else None)
+    if lightmap_textures:
+        lm_binding.update(extract_master_lightmap_textures(
+            archive_hash, lm_binding, scene_meshes, out_dir, progress=progress))
     progress(f"lightmap: resource {lm_binding['resource_name']} "
              f"present={lm_binding['present']}; "
              f"{stats.lightmapped_meshes}/{len(scene_meshes)} meshes lightmapped, "
@@ -845,6 +958,9 @@ def main() -> None:
     ap.add_argument("--subset", type=int, default=None,
                     help="cap to the top-N mesh-types by instance count")
     ap.add_argument("--hash-lookup", type=Path, default=Path("hash_lookup.json"))
+    ap.add_argument("--lightmap-textures", action="store_true",
+                    help="also copy the baked atlas DDS into <out>/lightmap/. "
+                         "The binding is always recorded; this fetches pixels")
     ap.add_argument("--instance-lightmap", action="store_true",
                     help="emit the v5 per-instance baked lightmap stream (page + "
                          "per-vertex UVs). ~52 MB on station_front; default OFF")
@@ -852,7 +968,8 @@ def main() -> None:
 
     stats = extract_scene(args.hash, args.out, subset=args.subset,
                           hash_lookup=args.hash_lookup,
-                          instance_lightmap=args.instance_lightmap)
+                          instance_lightmap=args.instance_lightmap,
+                          lightmap_textures=args.lightmap_textures)
     print("\n=== extract summary ===")
     print(f"  meshes total={stats.num_meshes_total} emitted={stats.meshes_emitted} "
           f"decoded={stats.meshes_decoded} proxied={stats.meshes_proxied}"

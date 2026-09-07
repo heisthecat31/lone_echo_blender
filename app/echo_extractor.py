@@ -92,6 +92,11 @@ TOOL_SOURCES = {
 #: Remembered paths and options, so nothing has to be re-typed between runs.
 SETTINGS_FILE = APP_ROOT / "settings.json"
 
+#: Lone Echo 1's archive classification, built once per install by
+#: `scripts/le_scene_index.py`. Machine-derived (it describes YOUR game folder),
+#: so it sits beside settings.json rather than in the repo's data/.
+LE1_INDEX_FILE = APP_ROOT / "le1_scene_index.json"
+
 
 def load_settings() -> dict:
     try:
@@ -156,6 +161,104 @@ def find_oodle_dll(game_root):
     return hits[0] if hits else None
 
 
+def find_le1_archive_dir(data_dir):
+    """Lone Echo 1's archive directory: `primary/<id>/<version>` under win7.
+
+    An install ships SEVERAL primary holders -- eight on 3.17.4 -- and most are
+    not archive sets. The content set is the one whose file names appear
+    identically under `GPU/<id>/<version>`: an archive is split across a primary
+    and a GPU stream, and both halves carry the same name. On 3.17.4 exactly
+    four holders pair up and the largest is `e5bd8207135b8887` with 1,244
+    archives, which is the set `le_archive_decode` pins as its constant.
+
+    Taking the biggest folder instead lands on `51e6cb2d64c65e4f` -- 2,888
+    files, no GPU counterpart, not what the extractor opens.
+
+    Discovered rather than hard-coded so a different build still works, but it
+    agrees with the pinned constants on this one.
+    """
+    root = Path(data_dir)
+    primary, gpu = root / "primary", root / "GPU"
+    if not primary.is_dir():
+        return None
+
+    def sets(base):
+        out = []
+        if not base.is_dir():
+            return out
+        for holder in sorted(p for p in base.iterdir() if p.is_dir()):
+            for version in sorted(p for p in holder.iterdir() if p.is_dir()):
+                names = frozenset(p.name for p in version.iterdir() if p.is_file())
+                if names:
+                    out.append((version, names))
+        return out
+
+    gpu_sets = [names for _d, names in sets(gpu)]
+    best = None
+    for version, names in sets(primary):
+        if any(names == g for g in gpu_sets):
+            if best is None or len(names) > len(best[1]):
+                best = (version, names)
+    if best:
+        return best[0]
+    # No GPU tree to pair against: fall back to the largest primary set rather
+    # than finding nothing at all.
+    allsets = sets(primary)
+    return max(allsets, key=lambda kv: len(kv[1]))[0] if allsets else None
+
+
+def stub_levels(root, levels) -> set:
+    """Levels with nothing to extract -- an empty or missing scene/actor stream.
+
+    The Echo VR and Lone Echo 2 analogue of a Lone Echo 1 compressed stub. It
+    matches nothing in either extract checked (0 of 32, 0 of 36), which is the
+    honest answer for those trees rather than a reason to leave the control off
+    them: the same checkbox should mean the same thing on every title.
+    """
+    out = set()
+    actors, scenes = _find_level_dirs(Path(root or ""))
+    if actors is None:
+        return out
+    for h, _name in levels:
+        for d in (actors, scenes):
+            # extracts drop a leading zero on some names, so try both spellings
+            for cand in (h, h.lstrip("0")):
+                p = d / cand
+                if p.is_file():
+                    if p.stat().st_size == 0:
+                        out.add(h)
+                    break
+    return out
+
+
+def looks_like_game_install(game_root):
+    """Validate a Lone Echo 1 install. `(ok, message, data_dir, dll, archives)`.
+
+    Everything the pyoodle path needs lives inside the one folder the user
+    picks, so all three are resolved here rather than asked for separately.
+    """
+    root = Path(game_root or "")
+    if not root.is_dir():
+        return False, "That folder does not exist.", None, None, None
+    data = find_data_dir(root)
+    if data is None:
+        return (False, "No _data/<build>/win7 directory here. Pick the game's "
+                "install folder \u2014 the one containing _data.",
+                None, None, None)
+    archives = find_le1_archive_dir(data)
+    if archives is None:
+        return (False, f"Found {data} but no primary/<id>/<version> archives "
+                "under it.", data, None, None)
+    dll = find_oodle_dll(root)
+    n = sum(1 for p in archives.iterdir() if p.is_file())
+    if dll is None:
+        return (False, f"Found {n} archive(s), but the game's own "
+                "bin\\win7\\oodle_11_win64.dll is missing \u2014 the archives are "
+                "Oodle-compressed and cannot be read without it.",
+                data, None, archives)
+    return True, f"Lone Echo install \u2014 {n} archive(s) found.", data, dll, archives
+
+
 def install_tools() -> list:
     """Copy any missing extractor into `app/extract/`. Returns what it did.
 
@@ -197,6 +300,15 @@ GOOD = "#4ade80"
 WARN = "#fbbf24"
 BAD = "#f87171"
 
+#: Fixed row heights, in pixels. The level list is VIRTUALISED -- only the
+#: rows on screen exist as widgets -- and that needs a height it can compute
+#: without building anything, so each row is given its height rather than
+#: measured. Lone Echo 1 lists 1,244 archives; at ~6 widgets and 12 bindings
+#: per row, building them all was ~7,500 widgets in one pass, which froze the
+#: window and left the canvas drawing rows over each other.
+ROW_GROUP = 46
+ROW_MEMBER = 30
+
 #: One hue per group box, cycled. Chosen to stay legible on the dark panel and
 #: to read as distinct at a glance rather than as a gradient.
 GROUP_HUES = ["#5aa9ff", "#a78bfa", "#4ade80", "#fbbf24",
@@ -218,8 +330,15 @@ class Game:
     #:               the game's own Oodle DLL -- it reads the shipped archives
     #:               directly, so there is no flat-tree step at all
     mode: str = "packages"
-    #: Where packages/archives live under the chosen data directory.
+    #: Where packages/archives live under the chosen data directory. A fallback
+    #: only -- `find_le1_archive_dir` discovers the real one, so a different
+    #: build of the game still works.
     archive_glob: str = ""
+    #: True when the game is read IN PLACE and there is no flat extract at all.
+    #: Lone Echo 1 is the only one: `le_extract.py` opens the shipped archives
+    #: through pyoodle and the game's own Oodle DLL, so the install folder IS
+    #: the source and there is nothing to pre-extract or browse to afterwards.
+    install_only: bool = False
 
 
 GAMES = [
@@ -236,10 +355,10 @@ GAMES = [
          "evrtools -mode extract, run once per package in the game's _data "
          "folder (\u2026/_data/<id>/rad16/win10).", "packages"),
     Game("loneecho1", "Lone Echo", "The original \u00b7 archive pipeline",
-         "level_names.json", "pyoodle",
+         "level_names_loneecho1.json", "pyoodle",
          "Reads the shipped archives directly through pyoodle and the game's "
          "own oodle_11_win64.dll \u2014 no flat-tree step.", "pyoodle",
-         "primary/e5bd8207135b8887/v13363680368"),
+         "primary/e5bd8207135b8887/v13363680368", install_only=True),
 ]
 
 #: Lone Echo 1 needs these three on the environment, exactly as the reference
@@ -321,6 +440,17 @@ def looks_like_extract(path) -> tuple:
                    "16-character hex directories.")
 
 
+def norm_hash(name) -> str:
+    """`4d82118c7c91b6bb` from any spelling of it.
+
+    Extracts drop a leading zero on some resource names, so `8a1af9e108def0b`
+    and `08a1af9e108def0b` are the same level. Comparing them unpadded is how
+    `mpl_combat_war_room` used to read as an unnamed hash.
+    """
+    stem = str(name or "").split(".")[0].lower()
+    return stem.rjust(16, "0") if len(stem) <= 16 else stem
+
+
 def discover_levels(root, names_file) -> list:
     """`[(hash, name_or_None), ...]` for every level present, named first.
 
@@ -339,9 +469,7 @@ def discover_levels(root, names_file) -> list:
     # Zero-pad to 16: some extracts drop a hash's leading zero, and an unpadded
     # key misses the name table entirely -- which is how `mpl_combat_war_room`
     # (08a1...) showed up as an unnamed hash.
-    def norm(name):
-        stem = name.split(".")[0].lower()
-        return stem.rjust(16, "0") if len(stem) <= 16 else stem
+    norm = norm_hash
 
     present = ({norm(q.name) for q in actors.iterdir()}
                & {norm(q.name) for q in scenes.iterdir()})
@@ -533,6 +661,11 @@ class EchoExtractor(tk.Tk):
         self.texture = tk.IntVar(value=1024)
         self.levels: list = []
         self.groups: list = []
+        #: the unfiltered discovery result, and the entries the stub filter
+        #: removes from it -- kept apart so the checkbox can toggle without
+        #: re-reading the disk.
+        self.all_levels: list = []
+        self.stubs: set = set()
         self.sel_groups: set = set()      # stems selected whole -> merged
         self.sel_levels: set = set()      # individual level hashes
         self.want_models = tk.BooleanVar(value=False)
@@ -541,6 +674,23 @@ class EchoExtractor(tk.Tk):
         self.rigged_only = tk.BooleanVar(value=True)
         self.game_data = tk.StringVar()
         self.oodle_dll = tk.StringVar()
+        #: Hide entries that cannot be extracted at all. On by default: 1,046
+        #: of Lone Echo 1's 1,244 archives are compressed stubs, so leaving
+        #: them in means a list that is 84% guaranteed failures. The remembered
+        #: value is applied once `settings` is loaded, below.
+        self.hide_stubs = tk.BooleanVar(value=True)
+        #: Lone Echo 1 only. "scenes" lists the archives holding a populated
+        #: static-scatter master -- the levels, extracted to `.lescatter` by
+        #: `le_scene_extract`, which is what the add-on consumes. "meshes"
+        #: lists every openable archive for `le_extract`, which pulls out
+        #: individual models instead. They are different products, not two
+        #: views of one.
+        self.le1_mode = tk.StringVar(value="scenes")
+        #: The per-instance baked lightmap stream (page + per-vertex UVs).
+        #: OFF by default and deliberately so: it is tens of MB per scene and
+        #: forces per-instance mesh copies downstream, which has to be the
+        #: user's choice rather than a default they discover from disk usage.
+        self.le1_instance_lm = tk.BooleanVar(value=False)
 
         self._queue: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
@@ -551,6 +701,7 @@ class EchoExtractor(tk.Tk):
         self.settings = load_settings()
         self.texture.set(int(self.settings.get("texture") or 1024))
         self.oodle_dll.set(self.settings.get("oodle_dll") or "")
+        self.hide_stubs.set(bool(self.settings.get("hide_stubs", True)))
 
         self._style()
         self._build()
@@ -589,6 +740,14 @@ class EchoExtractor(tk.Tk):
         s.configure("Panel.TCheckbutton", background=BG_PANEL, foreground=FG,
                     font=("Segoe UI", 10))
         s.map("Panel.TCheckbutton", background=[("active", BG_PANEL)])
+        s.configure("Bar.TCheckbutton", background=BG, foreground=FG_MID,
+                    font=("Segoe UI", 9))
+        s.map("Bar.TCheckbutton", background=[("active", BG)],
+              foreground=[("active", FG)])
+        s.configure("Bar.TRadiobutton", background=BG, foreground=FG_MID,
+                    font=("Segoe UI", 9))
+        s.map("Bar.TRadiobutton", background=[("active", BG)],
+              foreground=[("active", FG)])
         s.configure("TEntry", fieldbackground=BG_CARD, foreground=FG,
                     insertcolor=FG, padding=9)
         s.configure("Horizontal.TProgressbar", background=ACCENT,
@@ -721,6 +880,7 @@ class EchoExtractor(tk.Tk):
         self.sel_groups.clear()
         self.sel_levels.clear()
         self.levels, self.groups = [], []
+        self.all_levels, self.stubs = [], set()
         remembered = (self.settings.get("paths") or {}).get(game.key) or {}
         self.source.set(remembered.get("source") or "")
         saved_out = remembered.get("out")
@@ -739,6 +899,7 @@ class EchoExtractor(tk.Tk):
                             else self.outdir.get())
             self.settings["last_game"] = self.game.key
         self.settings["texture"] = int(self.texture.get())
+        self.settings["hide_stubs"] = bool(self.hide_stubs.get())
         if self.oodle_dll.get():
             self.settings["oodle_dll"] = self.oodle_dll.get()
         save_settings(self.settings)
@@ -762,6 +923,9 @@ class EchoExtractor(tk.Tk):
     # ------------------------------------------------------ page: source
     def _page_source(self):
         self._clear()
+        if self.game.install_only:
+            self._page_install()
+            return
         self.h_title.configure(text=self.game.title)
         self.h_sub.configure(text="Where are the extracted game assets?")
 
@@ -812,6 +976,97 @@ class EchoExtractor(tk.Tk):
         self.btn_next.state(["disabled"])
         if self.source.get():
             self._validate_source()
+
+    def _page_install(self):
+        """Lone Echo 1: point at the GAME, not at an extract.
+
+        There is no "already extracted?" step here and no tool to run first.
+        `le_extract.py` opens the shipped archives in place through pyoodle and
+        the game's own Oodle DLL, so the install folder is the only thing to
+        ask for -- `_data/<build>/win7`, the archive directory and the DLL are
+        all found inside it. Asking for a flat extract that this pipeline never
+        produces is what made this page a dead end.
+        """
+        self.h_title.configure(text=self.game.title)
+        self.h_sub.configure(text="Where is the game installed?")
+
+        card = tk.Frame(self.body, bg=BG_PANEL)
+        card.pack(fill="x")
+        tk.Label(card, text="Lone Echo install folder", bg=BG_PANEL, fg=FG,
+                 font=("Segoe UI Semibold", 12)).pack(anchor="w", padx=24,
+                                                      pady=(22, 2))
+        tk.Label(card, bg=BG_PANEL, fg=FG_DIM, font=("Segoe UI", 9),
+                 justify="left", wraplength=940,
+                 text="The folder that contains _data. Lone Echo 1 is read "
+                      "straight out of its own archives \u2014 there is no "
+                      "extract step and nothing to run first."
+                 ).pack(anchor="w", padx=24)
+
+        pick = ttk.Frame(card, style="Panel.TFrame")
+        pick.pack(fill="x", padx=24, pady=(16, 4))
+        ttk.Entry(pick, textvariable=self.source).pack(side="left", fill="x",
+                                                       expand=True)
+        ttk.Button(pick, text="Browse", style="Ghost.TButton",
+                   command=self._browse_install).pack(side="left", padx=(10, 0))
+        ttk.Button(pick, text="Check", style="Ghost.TButton",
+                   command=self._validate_source).pack(side="left", padx=(8, 0))
+
+        self.src_note = tk.Label(card, text="", bg=BG_PANEL, fg=FG_DIM,
+                                 font=("Segoe UI", 9), justify="left",
+                                 wraplength=940)
+        self.src_note.pack(anchor="w", padx=24, pady=(8, 22))
+
+        found = tk.Frame(self.body, bg=BG_PANEL)
+        found.pack(fill="x", pady=(16, 0))
+        tk.Label(found, text="Found inside it", bg=BG_PANEL, fg=FG,
+                 font=("Segoe UI Semibold", 12)).pack(anchor="w", padx=24,
+                                                      pady=(22, 6))
+        self.install_note = tk.Label(
+            found, text="", bg=BG_PANEL, fg=FG_DIM, font=("Consolas", 9),
+            justify="left", wraplength=940)
+        self.install_note.pack(anchor="w", padx=24, pady=(0, 22))
+
+        self._nav(back=self._page_games, forward=self._page_pick)
+        self.btn_next = [w for w in self.body.winfo_children()[-1].winfo_children()
+                         if isinstance(w, ttk.Button)][-1]
+        self.btn_next.state(["disabled"])
+        if self.source.get():
+            self._validate_source()
+
+    def _browse_install(self):
+        chosen = filedialog.askdirectory(
+            title=f"{self.game.title} game folder (the one containing _data)")
+        if chosen:
+            self.source.set(chosen)
+            self._validate_source()
+
+    def _validate_install(self) -> bool:
+        """Resolve and report _data, the archives and the Oodle DLL."""
+        ok, message, data, dll, archives = looks_like_game_install(
+            self.source.get() or "")
+        if ok:
+            self.game_data.set(str(data))
+            self.oodle_dll.set(str(dll))
+            self._tool_environ = self._tool_env(data)
+            self._archive_dir = str(archives)
+            self._remember()
+        else:
+            self._archive_dir = str(archives) if archives else ""
+        note = getattr(self, "src_note", None)
+        if note is not None and note.winfo_exists():
+            note.configure(text=message, fg=GOOD if ok else BAD)
+        detail = getattr(self, "install_note", None)
+        if detail is not None and detail.winfo_exists():
+            rows = [("game data", data), ("archives", archives),
+                    ("oodle dll", dll)]
+            detail.configure(
+                text="\n".join("%-10s %s" % (k, v if v else "\u2014 not found")
+                                for k, v in rows),
+                fg=FG_DIM if ok else WARN)
+        btn = getattr(self, "btn_next", None)
+        if btn is not None and btn.winfo_exists():
+            btn.state(["!disabled"] if ok else ["disabled"])
+        return ok
 
     def _tool_path(self):
         if self.game.mode == "pyoodle":
@@ -867,7 +1122,8 @@ class EchoExtractor(tk.Tk):
         # Lone Echo 1: one le_extract.py call per archive, mirroring the
         # reference script. Archives are the file names under the versioned
         # primary directory, not the data root itself.
-        archive_dir = Path(data_dir) / self.game.archive_glob
+        archive_dir = (find_le1_archive_dir(data_dir)
+                       or Path(data_dir) / self.game.archive_glob)
         archives = sorted(p.name for p in archive_dir.iterdir()
                           if p.is_file()) if archive_dir.is_dir() else []
         extractor = str(REPO / "blender_tool" / "extractor" / "le_extract.py")
@@ -902,6 +1158,8 @@ class EchoExtractor(tk.Tk):
         The note widget belongs to the source page; touching it after that page
         was destroyed is what used to make Back look like it did nothing.
         """
+        if self.game.install_only:
+            return self._validate_install()
         ok, message = looks_like_extract(self.source.get() or ".")
         if ok:
             self._remember()
@@ -963,18 +1221,41 @@ class EchoExtractor(tk.Tk):
 
     # -------------------------------------------------------- page: pick
     def _page_pick(self):
-        if not looks_like_extract(self.source.get() or ".")[0]:
+        if self.game.install_only:
+            if not looks_like_game_install(self.source.get() or "")[0]:
+                self._page_source()
+                return
+        elif not looks_like_extract(self.source.get() or ".")[0]:
             self._validate_source()
             return
+        if self.game.install_only and self._le1_index() is None:
+            # Lone Echo 1 ships no level list, so what each archive IS has to be
+            # read out of the archives themselves. Done once per install.
+            if not messagebox.askyesno(
+                    "Index the archives",
+                    "Lone Echo 1 has no level list, so the app has to look "
+                    "inside the archives once to find which of them are "
+                    "scenes.\n\nThis takes about a minute and is saved, so it "
+                    "only happens again if you point at a different install."
+                    "\n\nRun it now?"):
+                return
+            self._tool_environ = self._tool_env(self.game_data.get())
+            self._start([self._le1_scan_job()], raw_tool=True)
+            return
         if not self.groups or not self.levels:
-            self.levels = discover_levels(self.source.get(), self.game.names_file)
-            self.groups = group_levels(self.levels)
+            if self.game.install_only:
+                self.all_levels, self.stubs = self._le1_levels(self._le1_index())
+            else:
+                self.all_levels = discover_levels(self.source.get(),
+                                                  self.game.names_file)
+                self.stubs = stub_levels(self.source.get(), self.all_levels)
+            self._apply_stub_filter()
         self._clear()
         self.h_title.configure(text="Choose levels")
-        bundles = sum(1 for g in self.groups if len(g["members"]) > 1)
-        self.h_sub.configure(
-            text=f"{len(self.levels)} level(s) \u00b7 {bundles} bundle(s). "
-                 f"Click a bundle to take it merged, or pick levels inside it.")
+        # Archive hashes cannot be named from anything Lone Echo 1 ships, so
+        # the header says that once rather than leaving 1,200 bare hashes
+        # unexplained; it also reports how many stubs are being hidden.
+        self._pick_header()
 
         bar = ttk.Frame(self.body)
         bar.pack(fill="x", pady=(0, 10))
@@ -985,30 +1266,147 @@ class EchoExtractor(tk.Tk):
                    command=self._select_all).pack(side="left", padx=(10, 0))
         ttk.Button(bar, text="Clear", style="Ghost.TButton",
                    command=self._clear_sel).pack(side="left", padx=(8, 0))
+        ttk.Checkbutton(bar, style="Bar.TCheckbutton", variable=self.hide_stubs,
+                        command=self._toggle_stub_filter,
+                        text="  Hide compressed stubs").pack(side="left",
+                                                             padx=(14, 0))
+        if self.game.install_only:
+            for value, label in (("scenes", "Scenes"), ("meshes", "Meshes")):
+                ttk.Radiobutton(bar, style="Bar.TRadiobutton", value=value,
+                                variable=self.le1_mode, text="  " + label,
+                                command=self._toggle_le1_mode).pack(
+                                    side="left", padx=(10, 0))
 
         wrap = tk.Frame(self.body, bg=BG_PANEL)
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg=BG_PANEL, highlightthickness=0)
-        sb = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
-        self.list_frame = tk.Frame(self.canvas, bg=BG_PANEL)
-        self.list_frame.bind(
-            "<Configure>",
-            lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.list_frame, anchor="nw",
-                                  tags="inner")
-        self.canvas.bind(
-            "<Configure>",
-            lambda e: self.canvas.itemconfigure("inner", width=e.width))
+        sb = ttk.Scrollbar(wrap, orient="vertical", command=self._yview)
+        self.vbar = sb
         self.canvas.configure(yscrollcommand=sb.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        self.canvas.bind_all(
-            "<MouseWheel>",
-            lambda e: self.canvas.yview_scroll(int(-e.delta / 120), "units"))
+        self.canvas.bind("<Configure>", lambda _e: self._render_window(force=True))
+        self.canvas.bind_all("<MouseWheel>", self._on_wheel)
 
+        #: index -> (canvas item, widget) for the rows currently materialised
+        self._placed = {}
+        self._rows = []
         self.search.trace_add("write", lambda *_a: self._paint())
         self._paint()
+        self._page_pick_footer()
 
+    def _le1_index(self):
+        """The archive classification for the CURRENT install, or None.
+
+        Rejected when it describes a different archive directory, so pointing
+        the app at another copy of the game re-scans instead of showing the
+        previous one's contents.
+        """
+        try:
+            idx = json.loads(LE1_INDEX_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if idx.get("format") != "le1_scene_index":
+            return None
+        want = str(getattr(self, "_archive_dir", "") or "")
+        if want and Path(idx.get("archive_dir", "")) != Path(want):
+            return None
+        return idx
+
+    def _le1_scan_job(self):
+        """The one-off indexing pass, as a job the normal runner can drive."""
+        return Job("tool", "index", "classifying archives",
+                   [sys.executable, str(SCRIPTS / "le_scene_index.py"),
+                    "--data-root", self.game_data.get(),
+                    "--out", str(LE1_INDEX_FILE)])
+
+    def _le1_levels(self, idx):
+        """`(entries, stubs)` for the current Lone Echo 1 mode."""
+        scenes = sorted(idx.get("scenes") or {})
+        meshes = sorted(idx.get("meshes") or [])
+        stubs = set(idx.get("stubs") or [])
+        if self.le1_mode.get() == "scenes":
+            # A scene archive is never a stub, so nothing is hidden here.
+            return [(h, None) for h in scenes], set()
+        # Mesh mode offers every archive `le_extract` can open -- scene
+        # archives carry meshlists too -- and the stubs behind the checkbox.
+        openable = sorted(set(scenes) | set(meshes))
+        return ([(h, None) for h in openable + sorted(stubs)], stubs)
+
+    def _toggle_le1_mode(self):
+        idx = self._le1_index()
+        if idx is None:
+            return
+        self.all_levels, self.stubs = self._le1_levels(idx)
+        self.sel_groups.clear()
+        self.sel_levels.clear()
+        self._apply_stub_filter()
+        self._pick_header()
+        self._paint()
+        self._update_count()
+
+    def _apply_stub_filter(self):
+        """Derive `levels`/`groups` from the full list and the stub set.
+
+        Filtering BEFORE grouping, rather than hiding rows at paint time, is
+        what keeps everything else honest: `Select all`, the job plan and the
+        selection counter all read `groups`, so a hidden stub can never be
+        queued for an extraction that is certain to fail.
+        """
+        stubs = getattr(self, "stubs", set()) or set()
+        full = getattr(self, "all_levels", []) or []
+        self.levels = ([lv for lv in full if lv[0] not in stubs]
+                       if self.hide_stubs.get() else list(full))
+        keep = {h for h, _n in self.levels}
+        self.sel_levels &= keep
+        self.groups = group_levels(self.levels)
+        self.sel_groups &= {g["stem"] for g in self.groups}
+
+    def _toggle_stub_filter(self):
+        """Re-plan the list when the checkbox moves."""
+        self._apply_stub_filter()
+        self._pick_header()
+        self._paint()
+        self._update_count()
+
+    def _pick_header(self):
+        """The line under the title -- it has to restate the counts."""
+        hidden = len(getattr(self, "all_levels", [])) - len(self.levels)
+        note = (" \u00b7 %d hidden" % hidden) if hidden else ""
+        if self.game.install_only:
+            what = ("scene(s) \u2014 archives holding a static-scatter master"
+                    if self.le1_mode.get() == "scenes"
+                    else "archive(s) with meshes to pull out")
+            text = ("%d %s%s. Lone Echo 1's hashes have no shipped names "
+                    "\u2014 search by hash, or take them all."
+                    % (len(self.levels), what, note))
+        else:
+            bundles = sum(1 for g in self.groups if len(g["members"]) > 1)
+            text = ("%d level(s) \u00b7 %d bundle(s)%s. Click a bundle to take it "
+                    "merged, or pick levels inside it."
+                    % (len(self.levels), bundles, note))
+        if getattr(self, "h_sub", None) is not None and self.h_sub.winfo_exists():
+            self.h_sub.configure(text=text)
+
+    # -- virtual list ------------------------------------------------------
+    def _yview(self, *args):
+        self.canvas.yview(*args)
+        self._render_window()
+
+    def _on_wheel(self, e):
+        if not getattr(self, "canvas", None) or not self.canvas.winfo_exists():
+            return
+        self.canvas.yview_scroll(int(-e.delta / 120), "units")
+        self._render_window()
+
+    def _page_pick_footer(self):
+        """The options strip below the list.
+
+        Its own method so it cannot drift back into a scroll handler: it once
+        did, which meant the footer was never built on page load and was packed
+        again on EVERY wheel event -- the duplicated "Also extract standalone
+        models" blocks piling up under the nav bar.
+        """
         models = tk.Frame(self.body, bg=BG_PANEL)
         models.pack(fill="x", pady=(12, 0))
         ttk.Checkbutton(models, style="Panel.TCheckbutton",
@@ -1018,6 +1416,13 @@ class EchoExtractor(tk.Tk):
 
         ttk.Button(models, text="Single models\u2026", style="Ghost.TButton",
                    command=self._page_models).pack(side="right", padx=20, pady=8)
+        if self.game.install_only:
+            ttk.Checkbutton(
+                models, style="Panel.TCheckbutton",
+                variable=self.le1_instance_lm,
+                text="  Per-instance baked lightmap UVs \u2014 tens of MB per "
+                     "scene, and each instance gets its own mesh copy"
+            ).pack(anchor="w", padx=20, pady=(0, 12))
 
         self.count_label = ttk.Label(self.body, style="Dim.TLabel")
         self.count_label.pack(anchor="w", pady=(10, 0))
@@ -1026,17 +1431,22 @@ class EchoExtractor(tk.Tk):
                   forward_text="Options \u2192")
 
     def _paint(self):
-        """Rebuild the list. Only for a filter change -- NOT for selection.
+        """Re-plan the list. Only for a filter change -- NOT for selection.
 
         Selecting used to call this, which destroyed and recreated every row:
         the whole list visibly flashed and the scroll position jumped. Toggles
-        now restyle the existing widgets instead, so nothing is rebuilt.
+        restyle the existing widgets instead, so nothing is rebuilt.
+
+        This builds a PLAN -- one entry per visible row, with its height -- and
+        leaves the widgets to `_render_window`, which makes only the rows on
+        screen. Building all of them is what made Lone Echo 1's 1,244 archives
+        freeze the window and draw over themselves.
         """
-        for w in self.list_frame.winfo_children():
-            w.destroy()
+        self._clear_rows()
         self._gw = {}          # stem -> the group's header widgets
         self._mw = {}          # level hash -> that member's row widgets
         needle = self.search.get().strip().lower()
+        rows, y = [], 0
         for i, group in enumerate(self.groups):
             hue = GROUP_HUES[i % len(GROUP_HUES)]
             members = group["members"]
@@ -1045,27 +1455,89 @@ class EchoExtractor(tk.Tk):
                        or any(needle in (n or h).lower() for h, n in members))
                 if not hit:
                     continue
-            self._paint_group(group, hue)
+            rows.append({"kind": "group", "group": group, "hue": hue,
+                         "y": y, "h": ROW_GROUP})
+            y += ROW_GROUP
+            if len(members) > 1:
+                for h, name in members:
+                    rows.append({"kind": "member", "hash": h, "name": name,
+                                 "hue": hue, "group": group,
+                                 "y": y, "h": ROW_MEMBER})
+                    y += ROW_MEMBER
+        self._rows = rows
+        self.canvas.configure(scrollregion=(0, 0, 1, max(y, 1)))
+        self.canvas.yview_moveto(0.0)
+        self._render_window(force=True)
 
-    def _paint_group(self, group, hue):
-        members = group["members"]
-        multi = len(members) > 1
+    def _clear_rows(self):
+        for item, widget in getattr(self, "_placed", {}).values():
+            self.canvas.delete(item)
+            widget.destroy()
+        self._placed = {}
 
-        box = tk.Frame(self.list_frame, bg=BG_PANEL)
-        box.pack(fill="x", padx=14, pady=(8, 0))
+    def _render_window(self, force=False):
+        """Materialise only the rows inside the viewport (plus a little slack).
 
+        Rows leaving the window are destroyed and their entries dropped from
+        `_gw` / `_mw`, so the restyle maps only ever hold live widgets.
+        """
+        if not getattr(self, "_rows", None) or not self.canvas.winfo_exists():
+            if force and getattr(self, "_placed", None):
+                self._clear_rows()
+            return
+        top = self.canvas.canvasy(0)
+        height = self.canvas.winfo_height() or 600
+        width = self.canvas.winfo_width() or 900
+        pad = ROW_GROUP * 3                       # a little either side
+        lo, hi = top - pad, top + height + pad
+
+        want = {i for i, r in enumerate(self._rows)
+                if r["y"] + r["h"] >= lo and r["y"] <= hi}
+        for i in [i for i in self._placed if i not in want]:
+            item, widget = self._placed.pop(i)
+            self.canvas.delete(item)
+            row = self._rows[i]
+            if row["kind"] == "group":
+                self._gw.pop(row["group"]["stem"], None)
+            else:
+                self._mw.pop(row["hash"], None)
+            widget.destroy()
+        for i in sorted(want):
+            row = self._rows[i]
+            if i in self._placed:
+                if force:
+                    self.canvas.itemconfigure(self._placed[i][0], width=width)
+                continue
+            widget = (self._make_group_row(row) if row["kind"] == "group"
+                      else self._make_member_row(row))
+            item = self.canvas.create_window(0, row["y"], anchor="nw",
+                                             window=widget, width=width,
+                                             height=row["h"])
+            self._placed[i] = (item, widget)
+
+    def _make_group_row(self, row):
+        """One group header, parented to the canvas rather than packed.
+
+        Positioning is the canvas's job (`_render_window` places it at the row's
+        own `y`), so nothing here packs into a shared column -- which is what
+        let thousands of rows fight over the same geometry and overlap.
+        """
+        group, hue = row["group"], row["hue"]
+        multi = len(group["members"]) > 1
+
+        box = tk.Frame(self.canvas, bg=BG_PANEL)
         head = tk.Frame(box, bg=BG_CARD, highlightthickness=1,
                         highlightbackground=LINE)
-        head.pack(fill="x")
+        head.pack(fill="both", expand=True, padx=14, pady=(8, 0))
         tk.Frame(head, bg=hue, width=4).pack(side="left", fill="y")
 
         title = tk.Label(head, text=group["label"], bg=BG_CARD,
                          font=("Segoe UI Semibold", 11) if multi
                          else ("Segoe UI", 10))
-        title.pack(side="left", padx=(14, 0), pady=10)
+        title.pack(side="left", padx=(14, 0))
         badge = tk.Label(head, bg=BG_CARD, fg=hue, font=("Segoe UI", 9),
-                         text=(f"bundle \u00b7 {len(members)} levels" if multi
-                               else "single level"))
+                         text=(f"bundle \u00b7 {len(group['members'])} levels"
+                               if multi else "single level"))
         badge.pack(side="left", padx=(12, 0))
         mark = tk.Label(head, bg=BG_CARD, fg=hue,
                         font=("Segoe UI Semibold", 11), text="")
@@ -1077,32 +1549,32 @@ class EchoExtractor(tk.Tk):
         for w in (head, title, badge, mark):
             w.configure(cursor="hand2")
             w.bind("<Button-1>", lambda _e, g=group: self._toggle_group(g))
-            w.bind("<Enter>", lambda _e, s=group["stem"]: self._hover_group(s, True))
-            w.bind("<Leave>", lambda _e, s=group["stem"]: self._hover_group(s, False))
+            w.bind("<Enter>", lambda _e, st=group["stem"]: self._hover_group(st, True))
+            w.bind("<Leave>", lambda _e, st=group["stem"]: self._hover_group(st, False))
         self._style_group(group["stem"])
+        return box
 
-        if multi:
-            for h, name in members:
-                self._paint_member(box, h, name, hue, group)
-
-    def _paint_member(self, box, h, name, hue, group):
-        row = tk.Frame(box, bg=BG_PANEL)
-        row.pack(fill="x", padx=(22, 0))
-        edge = tk.Frame(row, bg=LINE, width=2)
+    def _make_member_row(self, row):
+        h, name, hue, group = row["hash"], row["name"], row["hue"], row["group"]
+        outer = tk.Frame(self.canvas, bg=BG_PANEL)
+        inner = tk.Frame(outer, bg=BG_PANEL)
+        inner.pack(fill="both", expand=True, padx=(36, 14))
+        edge = tk.Frame(inner, bg=LINE, width=2)
         edge.pack(side="left", fill="y")
-        label = tk.Label(row, text=name or f"{h}  (unnamed)", bg=BG_PANEL,
+        label = tk.Label(inner, text=name or f"{h}  (unnamed)", bg=BG_PANEL,
                          font=("Segoe UI", 10) if name else ("Consolas", 9),
                          anchor="w")
-        label.pack(side="left", fill="x", expand=True, padx=(12, 0), pady=6)
+        label.pack(side="left", fill="both", expand=True, padx=(12, 0))
 
-        self._mw[h] = {"row": row, "edge": edge, "label": label, "hue": hue,
+        self._mw[h] = {"row": inner, "edge": edge, "label": label, "hue": hue,
                        "stem": group["stem"]}
-        for w in (row, label):
+        for w in (inner, label):
             w.configure(cursor="hand2")
             w.bind("<Button-1>", lambda _e, hh=h: self._toggle_level(hh))
             w.bind("<Enter>", lambda _e, hh=h: self._hover_member(hh, True))
             w.bind("<Leave>", lambda _e, hh=h: self._hover_member(hh, False))
         self._style_member(h)
+        return outer
 
     # -- restyling: touches colours only, never the widget tree ------------
     def _style_group(self, stem, hover=False):
@@ -1377,7 +1849,11 @@ class EchoExtractor(tk.Tk):
 
     def _sync_out(self):
         if self.use_default_out.get():
-            self.outdir.set(str(Path(self.source.get()).parent / self.game.key))
+            # For Lone Echo 1 `source` is the GAME folder, so the default must
+            # not land beside a game install -- put it next to the app instead.
+            base = (APP_ROOT if self.game.install_only
+                    else Path(self.source.get()).parent)
+            self.outdir.set(str(Path(base) / self.game.key))
             self.out_entry.state(["disabled"])
         else:
             self.out_entry.state(["!disabled"])
@@ -1497,8 +1973,11 @@ class EchoExtractor(tk.Tk):
                     cmd, cwd=str(REPO), stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                     errors="replace", bufsize=1,
-                    env=(getattr(self, "_tool_environ", None) if raw_tool
-                         else None),
+                    # Lone Echo 1 needs PYTHONPATH/pyoodle and the Oodle DLL
+                    # on every job, not only the bulk tool run -- its per-archive
+                    # extraction is the same le_extract.py call.
+                    env=(getattr(self, "_tool_environ", None)
+                         if (raw_tool or self.game.install_only) else None),
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             except OSError as exc:
                 put(("log", f"  failed to start: {exc}\n"))
@@ -1520,13 +1999,34 @@ class EchoExtractor(tk.Tk):
             elif not raw_tool:
                 self._light(job, put)
                 self._ui(job, put)
+                self._le1_post(job, put)
             done += 1
             put(("tick", done))
         if raw_tool:
             self.levels, self.groups = [], []
+        self.all_levels, self.stubs = [], set()
         put(("finish", done))
 
     def _command(self, job) -> list:
+        if self.game.install_only:
+            # Lone Echo 1 has no flat tree for `evr_scene_extract` to read, and
+            # its two products come from DIFFERENT tools: a scene is a
+            # `.lescatter` package built from the static-scatter master, a mesh
+            # extraction is individual models out of an archive. Both run with
+            # pyoodle and the game DLL on the environment.
+            out = Path(self.outdir.get())
+            if self.le1_mode.get() == "scenes":
+                cmd = [sys.executable, str(SCRIPTS / "le_scene_extract.py"),
+                       job.level, "--out", str(out / "scenes" / job.level),
+                       "--lightmap-textures"]
+                if self.le1_instance_lm.get():
+                    cmd.append("--instance-lightmap")
+                return cmd
+            return [sys.executable,
+                    str(REPO / "blender_tool" / "extractor" / "le_extract.py"),
+                    "--archive", job.level, "--all",
+                    "--out", str(out / "meshes"),
+                    "--textures", "--direct-materials"]
         if job.kind == "model":
             # A standalone model is its own extractor: same package format,
             # plus the skeleton sidecar when the model carries an armature.
@@ -1548,6 +2048,47 @@ class EchoExtractor(tk.Tk):
             cmd += ["--max-texture", str(cap)]
         return cmd
 
+    def _package_for(self, job):
+        """The package THIS job just wrote, or None.
+
+        `evr_scene_extract` writes `<out>/Scenes_Full/<label>` when a level
+        merges sublevels and `<out>/scenes/<label>` otherwise, naming the folder
+        from its OWN table -- so the app cannot just assume one path.
+
+        Taking the first candidate that merely EXISTS is what went wrong before:
+        once both trees hold a package for the same level, a single-level job
+        would light the MERGED package and leave its own unlit. Candidates are
+        therefore ordered by what this job asked for, kept only when their
+        `manifest.json` names this level as `master`, and the most recently
+        written of those wins -- the extractor finished seconds ago.
+        """
+        out = Path(self.outdir.get())
+        # The tree this job asked for decides, and only falls through when it
+        # holds nothing: `--full` on a level that turns out to have no
+        # sublevels still lands in `scenes/`. mtime breaks ties WITHIN a tree
+        # (name vs hash), never across them -- letting it decide across trees
+        # would send a group job to the single-level package.
+        trees = (["Scenes_Full", "scenes"] if job.kind == "group"
+                 else ["scenes", "Scenes_Full"])
+        for tree in trees:
+            best = None
+            for leaf in (job.label, job.level):
+                man = out / tree / leaf / "manifest.json"
+                if not man.is_file():
+                    continue
+                try:
+                    master = json.loads(man.read_text(encoding="utf-8")).get("master")
+                except (OSError, ValueError):
+                    continue
+                if norm_hash(master) != norm_hash(job.level):
+                    continue
+                stamp = man.stat().st_mtime
+                if best is None or stamp > best[0]:
+                    best = (stamp, man.parent)
+            if best:
+                return best[1]
+        return None
+
     def _ui(self, job, put):
         """Extract the level's UI canvases into the package.
 
@@ -1560,13 +2101,12 @@ class EchoExtractor(tk.Tk):
         Written INTO the package next to `manifest.json`, so the add-on finds it
         beside everything else rather than in a second location.
         """
+        if self.game.install_only:
+            return                    # Echo VR resource types; Lone Echo 1 has none
         if job.kind == "model":
             return                    # UI canvases are a level concept
-        pkg = Path(self.outdir.get())
-        for cand in (pkg / "Scenes_Full" / job.label, pkg / "scenes" / job.label,
-                     pkg / "scenes" / job.level):
-            if not (cand / "manifest.json").is_file():
-                continue
+        cand = self._package_for(job)
+        if cand is not None:
             put(("log", f"  ui \u2192 {cand.name}\n"))
             cmd = [sys.executable, str(SCRIPTS / "evr_ui_extract.py"),
                    job.level, "--dir", self.source.get(),
@@ -1591,35 +2131,94 @@ class EchoExtractor(tk.Tk):
                 put(("log", f"  ui could not start: {exc}\n"))
             return
 
+    def _le1_post(self, job, put):
+        """Textures for a Lone Echo 1 scene -- the stage after the geometry.
+
+        `le_scene_extract` writes geometry and the lightmap binding only. The
+        per-material base-colour and normal DDS come from `le_scene_materials`,
+        which resolves the scatter's `matidx`/`shdidx` pairs against the
+        binding table and pulls the textures out of the master's PARENT
+        archives -- 87 of them on the scene checked, because a scatter's
+        textures almost never live in its own archive.
+
+        Without this the package renders untextured, which is what "the
+        textures did not extract" was: not a decode failure, a stage that was
+        never run.
+        """
+        if not self.game.install_only or self.le1_mode.get() != "scenes":
+            return
+        pkg = Path(self.outdir.get()) / "scenes" / job.level
+        if not (pkg / "manifest.json").is_file():
+            put(("log", "  materials SKIPPED: no package at %s\n" % pkg))
+            return
+        put(("log", "  materials \u2192 %s\n" % pkg.name))
+        cmd = [sys.executable, str(SCRIPTS / "le_scene_materials.py"), job.level,
+               "--manifest", str(pkg / "manifest.json"),
+               "--out-textures", str(pkg / "textures"),
+               "--out-json", str(pkg / "materials.json")]
+        try:
+            proc = subprocess.run(
+                cmd, cwd=str(REPO), capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                env=getattr(self, "_tool_environ", None),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            put(("log", f"  materials could not start: {exc}\n"))
+            return
+        for ln in [x.strip() for x in (proc.stdout or "").splitlines()
+                   if "extracted" in x or "pairs:" in x][-2:]:
+            put(("log", f"  {ln}\n"))
+        if proc.returncode != 0:
+            tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
+            put(("log", "  materials FAILED: %s\n"
+                 % (tail[-1].strip() if tail else "exit %d" % proc.returncode)))
+
     def _light(self, job, put):
+        """Baked lightmaps + placed lights, on EVERY level extraction.
+
+        Runs for every scene and group job, not as a separate pass -- the
+        package is only complete once its lighting is in it.
+        """
+        if self.game.install_only:
+            return                    # Echo VR resource types; Lone Echo 1 has none
         if job.kind == "model":
             return                    # lighting is a level concept
-        pkg = Path(self.outdir.get())
-        for cand in (pkg / "Scenes_Full" / job.label, pkg / "scenes" / job.label,
-                     pkg / "scenes" / job.level):
-            if (cand / "manifest.json").is_file():
-                put(("log", f"  lighting \u2192 {cand.name}\n"))
-                try:
-                    proc = subprocess.run(
-                        [sys.executable, str(SCRIPTS / "evr_apply_lighting.py"),
-                         str(cand), job.level, "--dir", self.source.get()],
-                        cwd=str(REPO), capture_output=True, text=True,
-                        encoding="utf-8", errors="replace",
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                    for ln in [x for x in (proc.stdout or "").splitlines()
-                               if "atlas" in x or "lights" in x][-2:]:
-                        put(("log", f"  {ln.strip()}\n"))
-                    # Report failures. This step used to fail silently on EVERY
-                    # run (no --dir -> TypeError), so packages shipped unlit and
-                    # nothing in the log said so.
-                    if proc.returncode != 0:
-                        tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
-                        put(("log", "  lighting FAILED: %s\n"
-                             % (tail[-1].strip() if tail else
-                                "exit %d" % proc.returncode)))
-                except OSError as exc:
-                    put(("log", f"  lighting could not start: {exc}\n"))
-                return
+        cand = self._package_for(job)
+        if cand is None:
+            put(("log", "  lighting SKIPPED: no package for %s under %s\n"
+                 % (job.label, self.outdir.get())))
+            return
+        put(("log", "  lighting \u2192 %s/%s\n" % (cand.parent.name, cand.name)))
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPTS / "evr_apply_lighting.py"),
+                 str(cand), job.level, "--dir", self.source.get()],
+                cwd=str(REPO), capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            put(("log", f"  lighting could not start: {exc}\n"))
+            return
+        # The script's last line is its summary; show it whatever it says.
+        lines = [x.strip() for x in (proc.stdout or "").splitlines() if x.strip()]
+        summary = next((x for x in reversed(lines) if "atlas" in x), "")
+        if summary:
+            put(("log", f"  {summary}\n"))
+        # Report failures. This step used to fail silently on EVERY run
+        # (no --dir -> TypeError), so packages shipped unlit and nothing said so.
+        if proc.returncode != 0:
+            tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
+            put(("log", "  lighting FAILED: %s\n"
+                 % (tail[-1].strip() if tail else "exit %d" % proc.returncode)))
+        elif summary.startswith("0 atlas"):
+            # Not a failure: roughly a quarter of Echo VR levels ship an EMPTY
+            # CGStaticInstanceResourceWin10GPU (8 of 32 in pcvr-extracted, 12 of
+            # 36 in Summer, and four of them in BOTH), so there is no bake to
+            # extract. The placed lights in the same line are still real. Say
+            # which it is, because "0 atlas(es)" alone reads like a failure.
+            put(("log", "  (no baked lightmaps for this level -- its "
+                        "static-instance GPU resource is empty in the shipped "
+                        "data; placed lights above are still applied)\n"))
 
     def _drain(self):
         try:
