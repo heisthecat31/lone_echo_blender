@@ -1349,6 +1349,18 @@ class EchoExtractor(tk.Tk):
         self._le1_name_cache = out
         return out
 
+    def _le1_pkg_dir(self, job) -> Path:
+        """Where a Lone Echo 1 scene package goes.
+
+        Named by the level's AUTHORED name, falling back to the hash only when
+        the preimage was never recovered -- the same rule `evr_scene_extract`
+        applies for Echo VR (`LEVEL_NAMES.get(hash) or hash`). Taken from the
+        name table rather than `job.label`, because a singleton group's label
+        carries a "  (unnamed)" suffix that has no business in a path.
+        """
+        name = self._le1_names().get(norm_hash(job.level)) or job.level
+        return Path(self.outdir.get()) / "scenes" / name
+
     def _le1_levels(self, idx):
         """`(entries, stubs)` for the current Lone Echo 1 mode."""
         scenes = sorted(idx.get("scenes") or {})
@@ -2047,7 +2059,7 @@ class EchoExtractor(tk.Tk):
             out = Path(self.outdir.get())
             if self.le1_mode.get() == "scenes":
                 cmd = [sys.executable, str(SCRIPTS / "le_scene_extract.py"),
-                       job.level, "--out", str(out / "scenes" / job.level),
+                       job.level, "--out", str(self._le1_pkg_dir(job)),
                        "--lightmap-textures"]
                 if self.le1_instance_lm.get():
                     cmd.append("--instance-lightmap")
@@ -2177,7 +2189,7 @@ class EchoExtractor(tk.Tk):
         """
         if not self.game.install_only or self.le1_mode.get() != "scenes":
             return
-        pkg = Path(self.outdir.get()) / "scenes" / job.level
+        pkg = self._le1_pkg_dir(job)
         if not (pkg / "manifest.json").is_file():
             put(("log", "  materials SKIPPED: no package at %s\n" % pkg))
             return

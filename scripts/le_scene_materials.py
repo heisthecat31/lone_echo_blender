@@ -59,6 +59,15 @@ import le_scene_binding as sb                          # noqa: E402
 import le_shaderset_scan as sts                      # noqa: E402
 import le_cross_archive_texture as s67                   # noqa: E402
 from le_mesh import materials as mat                                   # noqa: E402
+# THE shared spec builder. `le_extract.build_specs_for_pairs` was factored out of
+# `_resolve_materials` precisely so the `.lemesh` path and this level/scatter
+# sidecar go through ONE call into `le_mesh.materials.build_material_spec` -- its
+# own docstring names the divergence it exists to prevent, which is this sidecar
+# sitting at 11 flat fields while `.lemesh` grew to 35. It was never actually
+# called from here; that is what the add-on's "v1 material sidecar" warning was.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]
+                       / "blender_tool" / "extractor"))
+from le_extract import build_specs_for_pairs, material_key   # noqa: E402
 from le_mesh import material_scalars as msc                            # noqa: E402
 
 # Windows consoles default to cp1252 and argparse echoes this module's docstring
@@ -442,13 +451,26 @@ def main() -> int:
     used_mats = {mat_hashes[mi] for mi, _ in pairs if mi < len(mat_hashes)}
     scalars = decode_all_material_scalars(used_mats, idx)
 
-    # resolve per pair
+    # resolve per pair.  EVERY role the shaderset declares is carried, not just
+    # base-colour and normal: the scan already produced the full set and the old
+    # code discarded the rest, which is the whole of the v1 limitation.
     entries = []
+    spec_pairs: dict[str, tuple] = {}          # key -> (shaderset, material)
+    role_by_key: dict[str, dict] = {}
+    key_of: dict[tuple, str] = {}
+    want: set[str] = set()
     bc_to_extract: set[str] = set()
     nm_to_extract: set[str] = set()
     for matidx, shdidx in pairs:
         mat_hex = mat_hashes[matidx] if matidx < len(mat_hashes) else None
+        shd_hex = shd_hashes[shdidx] if shdidx < len(shd_hashes) else ""
         roles = roles_by_shd.get(shdidx, {})
+        key = material_key(shdidx, shd_hex or "", mat_hex or "")
+        key_of[(matidx, shdidx)] = key
+        spec_pairs[key] = (shd_hex or "", mat_hex or "")
+        role_by_key[key] = dict(roles)
+        want.update(roles.values())
+
         chans = mat.classify_roles(roles, {})
         bc = chans.get("base_color")
         nm = chans.get("normal")
@@ -472,12 +494,14 @@ def main() -> int:
             double_sided=bool(sc.get("double_sided", False)),
         ))
 
-    # extract textures
+    # extract textures -- every role, so emissive/specular/roughness/blend-mask
+    # channels have pixels to point at rather than being dropped on the floor.
     tex_meta: dict[str, dict] = {}
     if not args.no_textures:
-        want = bc_to_extract | nm_to_extract
+        other = len(want - bc_to_extract - nm_to_extract)
         print(f"[6] extracting {len(want)} DDS "
-              f"({len(bc_to_extract)} base-color, {len(nm_to_extract)} normal) ...", flush=True)
+              f"({len(bc_to_extract)} base-color, {len(nm_to_extract)} normal, "
+              f"{other} other role) ...", flush=True)
         ok = 0
         for i, tex_hex in enumerate(sorted(want)):
             meta = extract_texture(tex_hex, idx, args.out_textures)
@@ -495,9 +519,32 @@ def main() -> int:
         if bt and bt in tex_meta:
             e["basecolor_dds"] = f"{tex_dir_name}/{bt}.dds"
 
-    out = dict(master=master, materials=entries)
+    # ---- v2: the FULL spec, built by the same call the `.lemesh` path uses ---
+    # `channels[*]["file"]` is resolved by the add-on against the sidecar's own
+    # directory, so the paths are `<textures dir name>/<hash>.dds`.
+    texture_files = {t: f"{tex_dir_name}/{t}.dds" for t in tex_meta}
+    dxgi_by_tex = {t: int(m["dxgi_format"]) for t, m in tex_meta.items()
+                   if m.get("dxgi_format")}
+    print(f"[7] building v2 material specs for {len(spec_pairs)} pair(s) ...",
+          flush=True)
+    specs = build_specs_for_pairs(
+        spec_pairs, role_by_key=role_by_key, dxgi_by_tex=dxgi_by_tex,
+        scalars_by_hash=scalars, texture_files=texture_files)
+    by_key = {sp.get("key"): sp for sp in specs}
+    n_spec = 0
+    for e in entries:
+        sp = by_key.get(key_of[(e["matidx"], e["shdidx"])])
+        if sp is not None:
+            e["spec"] = sp
+            n_spec += 1
+
+    out = dict(version=2, master=master, textures_subdir=tex_dir_name,
+               materials=entries)
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(out, indent=1))
+    chan = sorted({c for sp in specs for c in (sp.get("channels") or {})})
+    print(f"    {n_spec}/{len(entries)} entries carry a full spec; "
+          f"channels present: {', '.join(chan) if chan else '(none)'}")
 
     n_dds = sum(1 for e in entries if e["basecolor_dds"])
     n_scalar = sum(1 for e in entries if not e["basecolor_texture"])
