@@ -68,3 +68,17 @@ app/extract/pyoodle/**/bin/
 *.pyc
 /Dev
 /blender_tool/tests
+
+# Every SUBFOLDER of docs/ stays local; the top-level notes stay in the repo.
+# `docs/reference/` alone is 226 documents COPIED from three other working
+# trees (map-editor, quest-combat-port, rad-archive-viewer) -- none of it was
+# authored here and none of it is updated when those trees change.
+docs/*/
+# and the archive of that same reference material.
+docs/docs.zip
+
+# Lone Echo 1 extraction output -- 2.0 GB of scene packages written by the
+# extractor's LE1 flow (app/echo_extractor.py -> le_scene_extract). Build
+# output from the game the user owns, never source.
+app/loneecho1/
+/docs/design

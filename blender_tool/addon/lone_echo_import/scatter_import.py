@@ -1110,6 +1110,33 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         default=48, min=1, max=1000,
         description="Frames for one leg of the placeholder there-and-back "
                     "cycle. Not authored data -- see Animate Movers")   # type: ignore
+    le_lights: BoolProperty(
+        name="Lone Echo Lights",
+        default=True,
+        description="Import the package's lights.json as real Blender lamps -- "
+                    "the level's POINT / SPOT / SUN records "
+                    "(scripts .. blender_tool/extractor/le_lights.py, run "
+                    "automatically by the extractor). Unrelated to Echo VR "
+                    "Lighting above, which reads lightmaps.json.\n\n"
+                    "Lone Echo is a HYBRID renderer: the diffuse term of every "
+                    "lit surface is baked, and most shipped lights are "
+                    "specular-only (49 of 118 records set eEnableDiffuse). "
+                    "Importing all of them ON TOP of a baked lightmap "
+                    "double-lights the scene, so the default set is the "
+                    "eEnableDiffuse subset only")   # type: ignore
+    le_light_set: EnumProperty(
+        name="Light Set",
+        description="Which of the level's light records to bring in",
+        items=[
+            ("diffuse", "Diffuse only",
+             "Only lights that set eEnableDiffuse. The safe default: these are "
+             "the ones whose diffuse contribution is NOT already in the bake"),
+            ("all", "All lights",
+             "Every enabled record. The specular-only ones are parked in a "
+             "hidden child collection -- Blender has no specular-only lamp, so "
+             "they WILL double-light if unhidden"),
+        ],
+        default="diffuse")   # type: ignore
     evr_lighting: BoolProperty(
         name="Echo VR Lighting",
         default=True,
@@ -1267,6 +1294,12 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         sub.prop(self, "evr_dynamic_lights_only")
         sub.prop(self, "evr_lightmaps")
         box = layout.box()
+        box.label(text="Lone Echo Lighting")
+        box.prop(self, "le_lights")
+        sub = box.column()
+        sub.enabled = self.le_lights
+        sub.prop(self, "le_light_set")
+        box = layout.box()
         box.label(text="Lightmap (per instance)")
         box.prop(self, "instance_lightmap")
         sub = box.column()
@@ -1325,6 +1358,8 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
         self._apply_tunnel_ring_tint(context, summary)
         if self.evr_goal_explosion:
             self._apply_goal_explosion(context, summary)
+        if self.le_lights:
+            self._import_le_lights(context, summary)
         self._apply_texture_arrays(context, summary)
         self._apply_vertex_tints(context, summary)
         self._apply_flowmaps(context, summary)
@@ -1599,6 +1634,53 @@ class IMPORT_OT_lescatter(bpy.types.Operator, ImportHelper):
                         "%.0f m (inferred)"
                         % (tinted, by_end, tinted - by_end,
                            self.TUNNEL_LIGHT_MAX_DISTANCE))
+
+    def _import_le_lights(self, context, summary):
+        """Bring in the package's `lights.json` as Blender lamps.
+
+        The scatter importer never had a lights option: `light_import` was only
+        reachable as its own File > Import entry, so a level imported through
+        this operator arrived with no POINT / SPOT / SUN at all and the lamps
+        looked like they were missing from the extractor. They were not -- there
+        was simply nothing here to call the importer.
+
+        Defaults to the eEnableDiffuse subset for the reason in
+        `light_import`'s header: Lone Echo bakes its diffuse term and most of
+        its shipped lights are specular-only, so importing everything on top of
+        the lightmap double-lights the scene.
+        """
+        from . import light_import
+        pkg = Path(self.filepath)
+        if pkg.name == "manifest.json":
+            pkg = pkg.parent
+        sidecar = pkg / "lights.json"
+        if not sidecar.is_file():
+            summary["le_lights"] = {"enabled": True, "found": False,
+                                    "reason": "no lights.json in the package"}
+            return
+        try:
+            rep = light_import.import_lights(
+                str(sidecar), context, {"light_set": self.le_light_set})
+        except Exception as exc:                        # noqa: BLE001
+            summary["le_lights"] = {"enabled": True, "found": True,
+                                    "error": str(exc)}
+            self.report({"WARNING"}, "Lone Echo lights failed: %s" % exc)
+            return
+        rep["enabled"] = True
+        rep["found"] = True
+        summary["le_lights"] = rep
+        # `imported` is the key the importer actually returns -- reporting a
+        # guessed one printed "0 lamp(s)" next to seven real lamps.
+        made = int(rep.get("imported") or 0)
+        by_type = ", ".join("%s %d" % (k, v)
+                            for k, v in sorted((rep.get("by_type") or {}).items()))
+        self.report({"INFO"}, "Lone Echo lights: %d of %d lamp(s) from %d scene(s)"
+                              " [%s]%s"
+                    % (made, int(rep.get("total") or 0),
+                       int(rep.get("scenes") or 0), self.le_light_set,
+                       (" - " + by_type) if by_type else ""))
+        for w in (rep.get("warnings") or [])[:2]:
+            self.report({"WARNING"}, w)
 
     def _apply_texture_arrays(self, context, summary):
         """Give each object bound to a texture ARRAY its own slice.

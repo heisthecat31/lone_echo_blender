@@ -322,8 +322,9 @@ across 17,226 files**, 64% of the extract.
 
 Echo VR's UI is not meshes. A screen is a **canvas**: a pixel-sized rectangle
 of elements, each a sub-rectangle of a shared texture atlas, placed on an actor
-node with a pixels-per-metre scale. Nothing UI-shaped appears in a mesh export
-because there is no mesh.
+node. Nothing UI-shaped appears in a mesh export because the canvas itself has
+no mesh — but the surface it is drawn on does, and that surface is what gives
+it its world size (7.3).
 
 ### 7.1 `CCanvasUICR` — placement, 88-byte records
 
@@ -349,8 +350,20 @@ rects fall inside +0x14 on both formats vs 77%/91% for +0x0c). Element count at
 
 | | base | stride | texture | UV | rect |
 |---|---:|---:|---:|---:|---:|
-| Win10 | 568 | 232 | +0x00 | +0x10 | +0x74 |
+| Win10 | 568 | 224 | +0x00 | +0x08 | +0x6c |
 | Win7 | 488 | 144 | +0x00 | +0x08 | +0x30 |
+
+The Win10 row was once `232 / +0x10 / +0x74`, which decoded **zero** elements
+from all 277 canvases — `extract()` skips an empty canvas, so nothing ever
+raised. All three values were 8 bytes high. The stride is not a judgement call:
+scanning a canvas for u64s that are real texture hashes puts every hit at
+`568 + 224k` exactly, and the hit count equals the file's own declared element
+count.
+
+The Win10 record encodes its rectangle **twice** — `(left, top, right, bottom)`
+at +0x6c and again at +0x8c, then `(x, y, w, h)` at +0xa4 — so a decode can be
+checked against the file rather than against a plausibility test. On the arena
+terminal all three read (0, 13, 1600, 126) / (0, 13, 1600, 113).
 
 ⛔ The rect offset is **not** safe to pick by "is it in bounds and correctly
 ordered" — a rect of a few pixels passes trivially. An earlier reading scored
@@ -358,6 +371,41 @@ ordered" — a rect of a few pixels passes trivially. An earlier reading scored
 wide. The offsets above were chosen by **area** (median element covers 4–16% of
 its canvas, max 1.015) and **cross-build agreement** (`win10 = win7 + 0x44`
 across 850 aligned element pairs).
+
+### 7.3 A canvas is fitted to its screen plane — `:pixels` is not a scale
+
+⛔ **`:pixels` is a rasterisation density, not pixels-per-metre.** Sizing a quad
+`canvas_pixels / :pixels` is wrong, and wrong by a different factor on every
+screen.
+
+Every world-space placement in `mpl_arena_a` that draws anything has a small
+flat mesh sitting at *exactly* its actor node — same position to under a
+millimetre, same rotation. Four verts (16 on the tube mouths), UVs running 0..1
+across it, and a material that is either textureless (`channels: {}`, nothing
+to draw but the canvas) or a static backplate the canvas composites over. That
+quad is the screen, and the canvas is stretched onto it:
+
+| screen | canvas px | plane (m) | canvas aspect | plane aspect | implied px/m |
+|---|---|---|---|---|---|
+| team panel | 1024×1024 | 2.000 × 2.000 | 1.000 | 1.000 | 512 |
+| tube mouth | 256×256 | 1.333 × 1.324 | 1.000 | 1.007 | 192 |
+| end wall | 3600×2900 | 4.129 × 3.303 | 1.241 | 1.250 | 872 |
+| end wall 2 | 3567×2892 | 4.187 × 3.346 | 1.233 | 1.251 | 852 |
+| side panel | 2048×4400 | 2.988 × 5.836 | 0.465 | 0.512 | 685 |
+| scoreboard | 2003×1309 | 1.671 × 0.973 | 1.530 | 1.718 | 1199 |
+| terminal | 2048×1024 | 0.433 × 0.277 | 2.000 | 1.561 | 4732 |
+| banner | 2048×512 | 2.829 × 1.053 | 4.000 | 2.686 | 724 |
+
+`:pixels` is **150.0 on all eight**. A field that stays constant while the thing
+it supposedly scales varies 25× is not the scale. The two rows off by more than
+1% are off the same way — the canvas is wider than its artwork, padding on the
+right: the terminal's 2048×1024 holds a 1600 px design (`u1 = 1601/2048`), and
+1600×1024 is 1.5625 against the plane's 1.5608, 0.1% out.
+
+`evr_ui_extract --screens <scene package>` reads those planes back out of the
+`le_scatter` package the UI is written into and fits to them; `--no-screens`
+restores the old behaviour, which put the terminal's header bar on a 10.7 m
+quad through a 0.43 m screen.
 
 ---
 

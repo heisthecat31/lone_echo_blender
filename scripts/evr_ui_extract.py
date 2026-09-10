@@ -34,11 +34,13 @@ the same style as `evr_materials.probe_mesh_field_offset`:
   placements over 36 levels, and **every one of the 410 placements on the
   busiest level resolves to a real actor node -- 410/410**.  A wrong stride
   does not score like that.
-* **Pixels-per-metre at +0x30.**  2850 of 2996 placements say exactly 150.0,
-  the rest are round numbers (512, 200, 300, 192, 50).  Scale at +0x28 is
-  (1.0, 1.0) on 2388 of them.  Sizes that come out of it are sane: the lobby's
-  biggest screen is a 2048x1024 canvas at 150 -> 13.65 m x 6.83 m, the median
-  emitted quad is 1.2 m across, and nothing degenerates.
+* **`:pixels` at +0x30.**  2850 of 2996 placements say exactly 150.0, the
+  rest are round numbers (512, 200, 300, 192, 50).  Scale at +0x28 is
+  (1.0, 1.0) on 2388 of them.  ⛔ It is NOT pixels-per-metre -- see "How a
+  canvas gets its world size".  Dividing by it never degenerates, which is
+  exactly why the error survived this long: a 2048x1024 canvas at 150 comes out
+  13.65 m x 6.83 m, a plausible size for *something* -- just not for the 0.43 m
+  terminal screen it is actually drawn on.
 * **It holds on both formats.**  The Summer (Win7) lobby yields 499 placements
   across the level and its `_summer` sublevel, 1942 quads, and **0 unplaced** --
   every nodeid resolved.  Viewed from above the quads are edge-on lines with
@@ -50,14 +52,56 @@ the same style as `evr_materials.probe_mesh_field_offset`:
   including why the obvious "is the rect in bounds and correctly ordered?"
   probe picks a field that is in bounds, correctly ordered, and wrong.
 
+## How a canvas gets its world size
+
+**It is fitted to the SCREEN PLANE authored on the same actor node.**  Nothing
+computes a size from `:pixels`.
+
+Every world-space canvas placement in `mpl_arena_a` that emits quads has a
+small flat mesh sitting at *exactly* its actor node -- same position to under a
+millimetre, same rotation -- and that quad is the screen.  Four verts, UVs
+running 0..1 across it, and a material that is either textureless (`channels:
+{}` -- there is nothing for it to draw but the canvas) or a static backplate
+the canvas composites over.  Measured:
+
+| screen plane | canvas px | plane (m) | canvas aspect | plane aspect |
+|---|---|---|---|---|
+| team panel   | 1024x1024 | 2.000 x 2.000 | 1.000 | 1.000 |
+| tube mouth   |  256x256  | 1.333 x 1.324 | 1.000 | 1.007 |
+| end wall     | 3600x2900 | 4.129 x 3.303 | 1.241 | 1.250 |
+| end wall 2   | 3567x2892 | 4.187 x 3.346 | 1.233 | 1.251 |
+| side panel   | 2048x4400 | 2.988 x 5.836 | 0.465 | 0.512 |
+| scoreboard   | 2003x1309 | 1.671 x 0.973 | 1.530 | 1.718 |
+| terminal     | 2048x1024 | 0.433 x 0.277 | 2.000 | 1.561 |
+| banner       | 2048x512  | 2.829 x 1.053 | 4.000 | 2.686 |
+
+The aspects agree, and that is the whole argument: **`:pixels` is 150.0 on all
+eight**, so the pixels-per-metre those planes imply runs 192, 512, 685, 724,
+852, 872, 1199, 4732 -- a 25x spread out of a constant.  A field that stays
+constant while the thing it supposedly scales varies 25x is not the scale.  `:pixels` is a
+rasterisation density (its schema default is 150.0, which is why almost every
+placement carries it verbatim), not a world size.
+
+The two rows that miss by more than 1% miss the same way: the canvas is wider
+than its artwork and the padding is on the right.  The terminal's 2048x1024
+canvas holds a 1600 px design (`u1 = 1601/2048` on its one element), and
+1600x1024 is 1.5625 against the plane's 1.5608 -- 0.1%.  The banner's plane
+implies 1375 of its 2048, against a 1350 px element.  So the engine most likely
+fits the DESIGN rect and not the canvas rect, but nothing in the header
+announces the design width, and fitting the full canvas is at worst ~30% out in
+one axis where fitting by `:pixels` was 3150% out.
+
+`screen_planes` reads those planes back out of the sibling `le_scatter` scene
+package -- the UI package is written *into* it as `<scene>/ui/<level>/`, so it
+is already there -- and `--no-screens` restores the old `:pixels` behaviour.
+
 ## What is NOT resolved
 
-⚠ **The canvas PLANE is a convention, not a measurement.**  The quad is built
-in the actor's local X/Y facing +Z, with pixel Y running downward from the top
-left, because that is what UI canvases conventionally are -- but nothing here
-proves Echo VR agrees.  If screens come in edge-on or upside down, that is this
-assumption, and `--plane` / `--flip-v` change it without touching anything that
-was actually measured.
+⚠ **Pixel V direction is still a convention.**  The local X/Y plane facing +Z
+is no longer one: every screen plane found above is flat in local Z with its
+extent in local X and Y, so `--plane xy` is now measured rather than assumed
+(`--plane` stays for other builds).  Pixel Y running DOWN from the top edge is
+still the assumption, and `--flip-v` is still how to change it.
 
 ⚠ **Element `z`/layer ordering is not decoded.**  Overlapping elements are
 coplanar, so a viewer may z-fight.  `--separation` nudges them apart by draw
@@ -324,10 +368,115 @@ def read_canvas(root: Path, canvas_hash, known_textures: set | None = None) -> C
 
 
 # ---------------------------------------------------------------------------
+# Screen planes -- where a canvas actually goes
+# ---------------------------------------------------------------------------
+#: A scene instance counts as this placement's screen when it sits ON the node.
+#: The arena's eight screens sit at 0.000 m and |dot| 1.000, so these windows
+#: are generous only to survive float round-tripping through the package.
+SCREEN_MATCH_DISTANCE = 0.02          # metres
+SCREEN_MATCH_DOT = 0.999              # |quaternion dot|
+#: A screen is authored geometry, not a wall.  Every one measured is 4 or 16
+#: verts; the cap is what keeps a canvas node that also carries a 710-vert tube
+#: ring from claiming the ring as its screen.
+SCREEN_MAX_VERTS = 64
+#: Flat along the plane normal, and not a sliver in either spanned axis.
+SCREEN_FLATNESS = 0.05
+#: `(u_axis, v_axis, normal_axis)` per `--plane`.
+SCREEN_AXES = {"xy": (0, 1, 2), "xz": (0, 2, 1), "zy": (2, 1, 0)}
+
+
+def _plane_rect(pkg: Path, mesh: dict, plane: str):
+    """`(u0, v0, u1, v1, nverts)` if `mesh` is a screen-shaped quad, else None.
+
+    LOCAL and UNSCALED on purpose: the emitted UI instance already carries the
+    actor node's scale, and the scene instance carries the same value
+    (0.5/0.5/0.5 on the side panel, 0.885 on the banner, checked against the
+    actor table), so baking it in here would apply it twice.
+    """
+    nverts = int(mesh.get("nverts") or 0)
+    rel = mesh.get("positions")
+    if not rel or not (0 < nverts <= SCREEN_MAX_VERTS):
+        return None
+    try:
+        raw = (pkg / rel).read_bytes()
+    except OSError:
+        return None
+    count = min(nverts, len(raw) // 12)
+    if count < 3:
+        return None
+    xyz = struct.unpack_from("<%df" % (count * 3), raw, 0)
+    lo = [min(xyz[k::3]) for k in range(3)]
+    hi = [max(xyz[k::3]) for k in range(3)]
+    ext = [hi[k] - lo[k] for k in range(3)]
+    u_axis, v_axis, n_axis = SCREEN_AXES[plane]
+    biggest = max(ext)
+    if biggest <= 0.0 or ext[n_axis] > SCREEN_FLATNESS * biggest:
+        return None
+    if min(ext[u_axis], ext[v_axis]) <= SCREEN_FLATNESS * biggest:
+        return None
+    return (lo[u_axis], lo[v_axis], hi[u_axis], hi[v_axis], count)
+
+
+def screen_planes(scene_pkg, plane: str = "xy") -> list:
+    """`[(translation, rotation, rect, nverts), ...]` from a scene package.
+
+    The UI package is written INTO the scene package (`<scene>/ui/<level>/`),
+    so the geometry the canvases are drawn on has already been extracted next
+    door -- this reads it back rather than re-deriving the model bindings from
+    `CModelCR`, which resolves only 19 of the arena's 90 canvas nodes.
+    """
+    pkg = Path(scene_pkg)
+    try:
+        manifest = json.loads((pkg / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if manifest.get("format") != "le_scatter":
+        return []
+    blob = pkg / (manifest.get("instances_blob") or "blobs/instances.bin")
+    if not blob.is_file():
+        return []
+    meshes = manifest.get("meshes") or []
+    data = blob.read_bytes()
+    count = min(int(manifest.get("num_instances") or 0), len(data) // 44)
+    rects: dict = {}
+    out = []
+    for i in range(count):
+        rec = struct.unpack_from("<I10f", data, i * 44)
+        index = rec[0]
+        if index not in rects:
+            rects[index] = (_plane_rect(pkg, meshes[index], plane)
+                            if index < len(meshes) else None)
+        rect = rects[index]
+        if rect is None:
+            continue
+        out.append((rec[1:4], rec[4:8], rect[:4], rect[4]))
+    return out
+
+
+def screen_for(planes: list, translation, rotation):
+    """The screen rect on this node, or None.
+
+    Fewest vertices wins: a canvas node can carry the screen AND the panel it
+    is set into, and the tube mouths carry fourteen meshes at one transform.
+    """
+    best = None
+    for pos, quat, rect, nverts in planes:
+        if sum((pos[k] - translation[k]) ** 2
+               for k in range(3)) > SCREEN_MATCH_DISTANCE ** 2:
+            continue
+        if abs(sum(quat[k] * rotation[k] for k in range(4))) < SCREEN_MATCH_DOT:
+            continue
+        if best is None or nverts < best[0]:
+            best = (nverts, rect)
+    return None if best is None else best[1]
+
+
+# ---------------------------------------------------------------------------
 # Geometry
 # ---------------------------------------------------------------------------
 #: Which local axes the canvas plane spans.  `xy` puts the screen in the
-#: actor's X/Y plane facing +Z. See the docstring: this is a convention.
+#: actor's X/Y plane facing +Z -- confirmed by the screen planes themselves,
+#: which are flat in local Z.  See `SCREEN_AXES`.
 PLANES = {
     "xy": lambda u, v: (u, v, 0.0),
     "xz": lambda u, v: (u, 0.0, v),
@@ -336,26 +485,43 @@ PLANES = {
 
 
 def element_quad(canvas: Canvas, element: Element, placement: Placement, *,
-                 plane: str = "xy", flip_v: bool = False, depth: float = 0.0):
+                 plane: str = "xy", flip_v: bool = False, depth: float = 0.0,
+                 screen=None):
     """`(positions, indices, uvs)` for one element, in the actor's local frame.
 
-    The canvas is centred on the actor node, pixel Y running DOWN from the top
-    edge, and scaled by `pixels_per_unit` into metres.
+    With a `screen` rect the canvas is stretched onto it -- which is what the
+    engine does, see "How a canvas gets its world size".  Without one there is
+    no measured size to use, so it falls back to centring the canvas on the
+    node and dividing by `:pixels`: wrong by however far the screen it belongs
+    to differs from 150 px/m, but it is what this module did for every canvas
+    before the screen planes were found, and a HUD canvas hung on the origin
+    node has no screen to be fitted to at all.
+
+    Pixel Y runs DOWN from the top edge on both paths.
     """
-    ppu = placement.pixels_per_unit or 1.0
-    # `scalemin`/`scalemax` bound a UNIFORM runtime scale. With no runtime
-    # state to pick from, use scalemin -- the resting size -- for both axes.
-    # Never one per axis: that is what stretched canvases 30:1.
-    uniform = (placement.scale or (1.0,))[0] or 1.0
-    sx = sy = uniform
     x0, y0, x1, y1 = element.rect
     to_local = PLANES[plane]
 
-    # Canvas pixel space -> metres, origin at the canvas centre.
-    def px(x, y):
-        u = (x - canvas.width / 2.0) / ppu * sx
-        v = (canvas.height / 2.0 - y) / ppu * sy
-        return to_local(u, v)
+    if screen is not None:
+        sx0, sy0, sx1, sy1 = screen
+
+        def px(x, y):
+            u = sx0 + (x / canvas.width) * (sx1 - sx0)
+            v = sy1 - (y / canvas.height) * (sy1 - sy0)
+            return to_local(u, v)
+    else:
+        ppu = placement.pixels_per_unit or 1.0
+        # `scalemin`/`scalemax` bound a UNIFORM runtime scale. With no runtime
+        # state to pick from, use scalemin -- the resting size -- for both
+        # axes. Never one per axis: that is what stretched canvases 30:1.
+        uniform = (placement.scale or (1.0,))[0] or 1.0
+        sx = sy = uniform
+
+        # Canvas pixel space -> metres, origin at the canvas centre.
+        def px(x, y):
+            u = (x - canvas.width / 2.0) / ppu * sx
+            v = (canvas.height / 2.0 - y) / ppu * sy
+            return to_local(u, v)
 
     corners = [px(x0, y1), px(x1, y1), px(x1, y0), px(x0, y0)]
     if depth:
@@ -458,8 +624,14 @@ def level_group(root: Path, level_hash) -> list:
 def extract(root: Path, level_hash, out_dir: Path, *, plane: str = "xy",
             flip_v: bool = False, separation: float = 0.0,
             max_texture: int = 0, texture_divisor: int = 1,
-            merge_sublevels: bool = True) -> dict:
-    """Write one level's UI package.  Returns a summary."""
+            merge_sublevels: bool = True, scene_pkg=None) -> dict:
+    """Write one level's UI package.  Returns a summary.
+
+    `scene_pkg` is the `le_scatter` package whose screens these canvases are
+    drawn on; `None` looks for one at `out_dir.parent`, which is where it is
+    when the app runs this step (`--out <scene package>/ui`).  Pass `False` to
+    skip the lookup and size every quad by `:pixels` -- see `element_quad`.
+    """
     from le_scene_extract import SceneInstance, SceneMesh, write_package
     import evr_texture_resource as evr_tex
 
@@ -486,6 +658,12 @@ def extract(root: Path, level_hash, out_dir: Path, *, plane: str = "xy",
     textures = package / "textures"
     textures.mkdir(parents=True, exist_ok=True)
 
+    if scene_pkg is None:
+        scene_pkg = Path(out_dir).parent
+    planes = ([] if scene_pkg is False
+              else screen_planes(scene_pkg, plane))
+    screens_hit = screens_missed = 0
+
     canvases: dict = {}
     meshes, instances, specs = [], [], []
     spec_of_texture: dict = {}
@@ -503,6 +681,11 @@ def extract(root: Path, level_hash, out_dir: Path, *, plane: str = "xy",
         if canvas is None or not canvas.elements:
             continue
         translation, rotation, scale = _trs(transform)
+        screen = screen_for(planes, translation, rotation) if planes else None
+        if screen is None:
+            screens_missed += 1
+        else:
+            screens_hit += 1
 
         for depth_index, element in enumerate(canvas.elements):
             # `:texture` on the PLACEMENT overrides what the canvas element
@@ -519,7 +702,7 @@ def extract(root: Path, level_hash, out_dir: Path, *, plane: str = "xy",
             matidx = spec_of_texture[texture]
             positions, indices, uvs = element_quad(
                 canvas, element, placement, plane=plane, flip_v=flip_v,
-                depth=separation * depth_index)
+                depth=separation * depth_index, screen=screen)
             meshes.append(SceneMesh(
                 index=len(meshes), name_hash=int(placement.canvas, 16),
                 matidx=matidx, shdidx=0,
@@ -566,6 +749,10 @@ def extract(root: Path, level_hash, out_dir: Path, *, plane: str = "xy",
         "package": str(package),
         "plane": plane,
         "flip_v": flip_v,
+        "screen_planes": len(planes),
+        "fitted_to_screen": screens_hit,
+        "sized_by_pixels": screens_missed,
+        "scene_package": ("" if scene_pkg is False else str(scene_pkg)),
     }
     if specs:
         (package / "materials.json").write_text(json.dumps(
@@ -620,6 +807,15 @@ def main(argv=None) -> int:
                          "stop coplanar elements z-fighting (default 0)")
     ap.add_argument("--no-merge-sublevels", action="store_true",
                     help="extract only the named level, not its sublevels")
+    ap.add_argument("--screens", default=None,
+                    help="the le_scatter scene package holding the screen "
+                         "planes these canvases are drawn on (default: the "
+                         "parent of --out, which is where it is when the "
+                         "extractor writes into <scene package>/ui)")
+    ap.add_argument("--no-screens", action="store_true",
+                    help="do not fit canvases to their screen planes; size "
+                         "every quad by :pixels, as before those planes were "
+                         "found. Expect the arena terminal 31x oversized")
     ap.add_argument("--max-texture", type=int, default=0,
                     help="cap texture edge length (0 = uncapped)")
     ap.add_argument("--texture-divisor", type=int, default=1)
@@ -642,7 +838,8 @@ def main(argv=None) -> int:
                       flip_v=args.flip_v, separation=args.separation,
                       max_texture=args.max_texture,
                       texture_divisor=args.texture_divisor,
-                      merge_sublevels=not args.no_merge_sublevels)
+                      merge_sublevels=not args.no_merge_sublevels,
+                      scene_pkg=(False if args.no_screens else args.screens))
     for key, value in summary.items():
         print(f"  {key:12s} {value}")
     if not summary["quads"]:

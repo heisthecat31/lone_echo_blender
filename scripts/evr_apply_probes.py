@@ -41,6 +41,7 @@ for _p in (str(_SCRIPTS), str(_ROOT), str(_ROOT / "blender_tool")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import evr_paths                                     # noqa: E402
 from le_mesh import reflection_probe as RP           # noqa: E402
 
 PROBE_TYPE = "CGReflectionProbeResourceWin10"
@@ -206,9 +207,18 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("package")
     ap.add_argument("level")
-    ap.add_argument("--dir", default=r"H:\pcvr-extracted")
+    # ⛔ NOT a hard-coded default. `evr_paths` forbids an absolute path to a
+    # developer's disk in any module, and a wrong one here is silent: the
+    # level's probe resource is simply "missing" and the package ships unlit
+    # reflections.
+    ap.add_argument("--dir", default=None,
+                    help="flat game extract (or set EVR_EXTRACT_DIR)")
     args = ap.parse_args(argv)
-    out = apply(Path(args.package), args.level, Path(args.dir))
+    root = evr_paths.extract_dir(args.dir)
+    if root is None:
+        ap.error("no game extract given: pass --dir <path> or set "
+                 "EVR_EXTRACT_DIR")
+    out = apply(Path(args.package), args.level, root)
     if not out.get("probes"):
         print("  %s" % out.get("reason", "no probes"))
         return 0

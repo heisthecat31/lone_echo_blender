@@ -1,0 +1,7286 @@
+{
+ "format": "evr_model_names",
+ "version": 1,
+ "_note": "CSymbol64 -> authored Echo VR MODEL name. Every entry is a VERIFIED PREIMAGE: symbol64(name) == the hash, checked at build time. Two sources, both exact. (1) The game install ships the authored strings in sourcedb/rad15/json/r14/multiplayer/customization_models.json -- 524 names over backpacks / bodies (first- and third-person) / bracers (left and right); 249 of them are resources in the PC extract and the remainder are Quest-only builds. (2) Those names follow a regular grammar -- [pty_]cst_(pack|body|bracer)_<theme>[_a][_rift|_quest|_fp][_<variant>][_left|_right][_rig] -- and generating it over the themes and variants the file itself uses, then keeping only candidates whose hash is a resource on disk, adds 114 more: the plain _rift forms and the s11_retro / s11_flamey season kit. `items` is the binding read out of the cosmetics catalogue 43934c379cf1e366 -- which model each rwd_* item wears, and in which slot. ANCHOR ON THE ID STRING, not on a record start: a 664-byte window anchored at id-96 straddles two records and makes every item appear to share the next item's model. NOT NAMED: nine models across three themes (aurum, bee/Bumblebee, arcade_var/Golden Age) that are absent from customization_models.json and do not fall out of the grammar under any spelling tried, including a free-tail search over the authored vocabulary of every shipped binary.",
+ "stats": {
+  "authored_in_json": 521,
+  "authored_present": 249,
+  "generated_present": 114,
+  "named_total": 363,
+  "meshlist_resources": 626,
+  "meshlist_named": 231,
+  "catalogue_items": 713,
+  "catalogue_models": 240,
+  "catalogue_models_named": 231
+ },
+ "names": {
+  "0009a3a858ad643c": "cst_bracer_automaton_a_rift_left",
+  "0035254d06eb205d": "cst_bracer_scuba_a_rift_right_rig",
+  "00924466bed39a46": "cst_bracer_samurai_a_rift",
+  "0560c200eb94ffc5": "cst_body_mako_a",
+  "0560db13e583ffc5": "cst_body_trex_a",
+  "05c0d7fa225d5c0d": "cst_bracer_avian_a_rift_right_rig",
+  "09a3a846a1652074": "cst_bracer_automaton_a_rift_right",
+  "0b5e4ceb28abc108": "cst_body_junkyard_a_rift_fp",
+  "0bc70c64a78bcdcc": "cst_body_s10_a_fp",
+  "0bc70d64a78bcdcc": "cst_body_s11_a_fp",
+  "0bce5e64a78bcdcc": "cst_body_s8b_a_fp",
+  "0c97ea9ecfb747e4": "cst_pack_vroom_a_rift",
+  "0ccbad92d682d602": "cst_bracer_anubis_a_rift",
+  "0d6444189583a4e6": "cst_bracer_lazurlite_a_rift",
+  "0dcc645bacccb044": "cst_body_exo_a_quest_fp",
+  "0e42078d70a2e621": "cst_bracer_funk_a_rift_left_rig",
+  "0ee42e36ec7028ba": "cst_bracer_vroom_a_rift",
+  "0f21b39f5c1ef4a0": "cst_body_ninja_a_rift",
+  "0f2d8beb97bac40e": "cst_bracer_funk_a_rift",
+  "0f70bd7ca32d62a6": "cst_bracer_mako_a_rift",
+  "0f70bd7cbd2162a6": "cst_bracer_mako_a_left",
+  "118216892eb25344": "cst_pack_speedform_a_rift",
+  "1226bad704968da8": "cst_body_funk_a_rift",
+  "127b8c4030012b00": "cst_body_mako_a_rift",
+  "1304ff25862526cc": "cst_body_junkyard_a_quest",
+  "13e795acc48bb8d7": "cst_pack_nuclear_a_rift_rig",
+  "1487bf82303e9e0d": "cst_bracer_speedform_a_rift_right_rig",
+  "159dc10971980901": "cst_body_samurai_a_rift_fp_oni",
+  "1714daa2087600a2": "cst_bracer_trex_a_rift_right",
+  "1856ddb8e829c3bb": "cst_bracer_halloween_a_rift_right_rig",
+  "19514caeaa1fa742": "cst_bracer_scuba_a_rift",
+  "19984959afa7f4dd": "cst_body_anubis_a",
+  "19d21614a15d6eb2": "cst_pack_frost_a_rift",
+  "1ace589134577c2d": "cst_body_spartan_a_rift_hero",
+  "1b079fc134f18416": "cst_body_anubis_a_fp",
+  "1b09188188a533d5": "cst_bracer_streetwear_a_rift_left_rig",
+  "1b22880689d8c81c": "cst_pack_scuba_a_rift",
+  "1b721cf3f65419a6": "cst_body_automaton_a_fp",
+  "1b95fab975a1f4c9": "cst_pack_exo_a_rift_rig",
+  "1ba1d2bc829a01ec": "cst_bracer_frost_a_rift",
+  "1bc7a9edb03c6718": "cst_bracer_halloween_a_rift",
+  "1c52ab7e3d0f828e": "cst_body_s8b_a_rift",
+  "1ceef0acf0a47c30": "cst_body_shark_a_rift_fp_tropical",
+  "1dc7973ac9fe90dc": "cst_bracer_ladybug_a_rift_right",
+  "1f2298ed8257d1c1": "cst_bracer_avian_a_rift_left_rig",
+  "1f33df85fa45b203": "cst_bracer_speedform_a_rift_left_rig",
+  "1f76c81eae23b1b8": "cst_body_s11_retro_a_fp",
+  "20f7257314decb2b": "cst_bracer_mako_a",
+  "20f73c601ac9cb2b": "cst_bracer_trex_a",
+  "23b084a26d862d9f": "cst_bracer_nuclear_a_rift_left_rig",
+  "240d8e3641e4ee20": "cst_body_plagueknight_a_quest_fp",
+  "244a5f111d00ad5b": "cst_bracer_rover_a_rift_right_deco_rig",
+  "24a3a0122d38e988": "cst_bracer_shark_a_rift",
+  "25277dc0904782e1": "cst_bracer_fume_a_rift_left_rig",
+  "2564f2a1ccecce47": "cst_bracer_wasteland_a_rift_left_rig",
+  "25c2e920a773020e": "cst_body_herosuit_a_rift",
+  "25e589e4a003a5ea": "cst_pack_wolf_a_rift",
+  "26d064ba0eff86d6": "cst_pack_shark_a_rift",
+  "27a54efa90b11c58": "cst_body_samurai_a_quest",
+  "288ea2b0572f1877": "cst_pack_anubis_a_rift_horus",
+  "2945ef15d51ad8fa": "cst_body_scuba_a_quest",
+  "2969b9a062029d27": "cst_bracer_ninja_a_rift_right_rig",
+  "29bd4917a0c2aed6": "cst_pack_anubis_a_rift",
+  "2b844ff739d5a711": "cst_bracer_anubis_a_rift_left_horus_rig",
+  "2c8f8d9e9a2e369a": "cst_body_junkyard_a_rift",
+  "2cb918e3f136f172": "cst_body_noble_a_quest_fp",
+  "2d63acc79e92cc24": "cst_bracer_mech_a_rift",
+  "2d7923bb70b531cd": "cst_pack_lazurlite_a_rift_rig",
+  "2f0043219b572010": "cst_bracer_trex_a_rift_skelerex",
+  "2fd3eccaa93ffda3": "cst_pack_rover_a_rift_rig",
+  "2ff055d1473abaf6": "cst_body_herosuit_a_quest",
+  "301777244fe16666": "cst_pack_fragment_a_rift",
+  "35af5238178ec27a": "cst_bracer_noble_a_rift",
+  "35cf738e7728352b": "cst_pack_ranger_a_rift_rig",
+  "3606c4fa8305bb95": "cst_body_spartan_a_rift_fp_hero",
+  "3731e57edff9b9bc": "cst_body_plagueknight_a_quest",
+  "37dc96903449ad24": "cst_pack_noble_a_rift",
+  "386b3f59a85b99b2": "cst_body_frost_a_fp_rift",
+  "393b0b33df877215": "cst_bracer_rover_a_rift_right_rig",
+  "3a4fcafaa4d6e7cb": "cst_pack_frost_a_rift_rig",
+  "3b03eff90cb8afee": "cst_body_wolf_a_rift_fp",
+  "3b1c6c126a0dc0a3": "cst_pack_rover_a_rift_deco_rig",
+  "3b7649fa8d68420c": "cst_pack_overgrown_a_rift",
+  "3c022a4b3391741f": "cst_bracer_samurai_a_rift_right_rig",
+  "3d954ee5e69eac1b": "cst_bracer_covenant_a_rift_right_flame_rig",
+  "3ec2bfb7a1248ab4": "cst_body_s11_a_rift",
+  "3f268b164df9dff4": "cst_body_ranger_a_rift_fp",
+  "3fc2bfb7a1248ab4": "cst_body_s10_a_rift",
+  "40e55338bd0acac4": "cst_bracer_spartan_a_rift",
+  "413ff79895207021": "cst_bracer_frost_a_rift_left_rig",
+  "42d65b4003b2c33b": "cst_bracer_anubis_a_rift_right_horus_rig",
+  "4398b428fa1c272e": "cst_bracer_arcade_a_rift",
+  "43bb13e40e718808": "cst_body_shark_a_quest_fp",
+  "4491dc406ba9fd0f": "cst_pack_samurai_a_rift_oni_rig",
+  "452ed7473af639e6": "cst_pack_baroque_a_rift",
+  "4656b974721c797a": "cst_body_spartan_a_quest_fp",
+  "46f47430767d3cba": "cst_body_shark_a_rift",
+  "4719cff581234e6b": "cst_bracer_vroom_a_rift_right_rig",
+  "48003c3c3dce2024": "cst_body_wasteland_a_rift",
+  "48e819704a23e6e5": "cst_bracer_noble_a_rift_left_rig",
+  "4b18fa23ce939a66": "cst_bracer_exo_a_rift",
+  "4bd21814f06f5b42": "cst_body_noble_a_quest",
+  "4c61432fe2a64e92": "cst_body_shark_a_rift_fp",
+  "4ccd6fad526c3ad2": "cst_body_sporty_a_rift",
+  "4ce6c8ac1018b6d7": "cst_pack_organic_a_rift_rig",
+  "4d390b027b642d29": "cst_pack_herosuit_a_rift_rig",
+  "527b61222dcf8e1f": "cst_bracer_lazurlite_a_rift_left_rig",
+  "53f0d6f95488706c": "cst_pack_herosuit_a_rift",
+  "54bde7ec879d5356": "cst_bracer_anubis_a_rift_left",
+  "5590e661f8422c4b": "cst_pack_ninja_a_rift_rig",
+  "563af679aab0a53b": "cst_bracer_overgrown_a_rift_left_rig",
+  "564de0c22cd1f4e1": "cst_bracer_heartbreak_a_rift_left_rig",
+  "5684010761931d1f": "cst_bracer_lazurlite_a_rift_right_rig",
+  "56c1296e9511bf99": "cst_pack_mech_a_rift_rig",
+  "573ba845d21a2f0b": "cst_bracer_covenant_a_rift_left_flame_rig",
+  "5766144d98c487b7": "cst_bracer_baroque_a_rift_left_rig",
+  "57f8861a4ccb1748": "cst_body_noble_a_rift",
+  "592aaeb4e7867b78": "cst_pack_organic_a_rift",
+  "592c5292329d616c": "cst_bracer_trex_a_fp",
+  "5abdb24769d544f8": "cst_pack_junkyard_a_rift",
+  "5c0df8d2ed46d564": "cst_bracer_trex_a_fp_left",
+  "5cfc66ad5ddee368": "cst_bracer_mako_a_rift_right",
+  "5d30428fff183c06": "cst_bracer_wasteland_a_rift",
+  "5de69ceecadca120": "cst_pack_paladin_a_rift",
+  "5ee32bbea4b725a9": "cst_pack_overgrown_a_rift_rig",
+  "5f3a58e0becbf8c8": "cst_body_funk_a_fp_rift",
+  "610a7da06604db6a": "cst_pack_s11_flamey_a_rift",
+  "619b173ef6c129d5": "cst_bracer_paladin_a_rift_right_rig",
+  "62cc3e6eb9d15e98": "cst_pack_nuclear_a_rift",
+  "635c457daa112e3e": "cst_bracer_vintage_a_rift",
+  "636829b6ac56c3df": "cst_bracer_exo_a_rift_left_rig",
+  "6380d93b9d295bb4": "cst_bracer_snacktime_a_rift",
+  "63ccdd44ca0dc4e0": "cst_bracer_shark_a_rift_tropical",
+  "6514f5fa47d7d08e": "cst_body_noble_a_rift_fp",
+  "655867530fee974c": "cst_bracer_covenant_a_rift",
+  "6596c905bfe364a2": "cst_body_wasteland_a_fp_rift",
+  "66de50824fd7d7b8": "cst_bracer_trex_a_rift",
+  "66de508251dbd7b8": "cst_bracer_trex_a_left",
+  "66ee50ad8c5c5ffa": "cst_pack_arcade_a_rift",
+  "676f867da817838c": "cst_pack_reptile_a_rift",
+  "6815e7e41c41b5bf": "cst_bracer_lava_a_rift_left_rig",
+  "68b4815c4f1fe49a": "cst_body_wolf_a_quest",
+  "6933cabeeb52802e": "cst_pack_flamingo_a_rift",
+  "6ad4faa1ee461acc": "cst_bracer_arcade_a_rift_right",
+  "6d28762d0e718aee": "cst_pack_retro_a_rift",
+  "6d34f482e5756e6b": "cst_bracer_snacktime_a_rift_right_rig",
+  "6d7667bd075b2192": "cst_bracer_ninja_a_rift",
+  "6da260b2ae47d18f": "cst_body_anubis_a_rift_fp_horus",
+  "6df242254c2a8912": "cst_body_streetwear_a_fp_rift",
+  "6e6ad876babc92dd": "cst_bracer_samurai_a_rift_oni",
+  "6f05a315249c4ecc": "cst_pack_ninja_a_rift",
+  "6f5bb2852db6e5b0": "cst_bracer_retro_a_rift",
+  "6fd01c28b491c77f": "cst_bracer_junkyard_a_rift_right_rig",
+  "702583d2632c8df5": "cst_pack_samurai_a_rift_oni",
+  "702583d263318afb": "cst_pack_samurai_a_rift_rig",
+  "71cbfaae988041f9": "cst_bracer_flamingo_a_rift_left_rig",
+  "726f83e2ca301444": "cst_body_overgrown_a_quest_fp",
+  "72d09fb639c7c844": "cst_body_scuba_a_quest_fp",
+  "72eda997ce07f405": "cst_bracer_nuclear_a_rift_left_hydro_rig",
+  "7358842d5984f6fb": "cst_bracer_anubis_a_rift_horus",
+  "735884375f91ebfc": "cst_bracer_anubis_a_rift_right",
+  "73f4e84e13160c88": "cst_body_trex_a_fp",
+  "7492aa47b81fcb72": "cst_body_plagueknight_a_rift",
+  "753bf0265a103668": "cst_bracer_ladybug_a_rift",
+  "772e755fbb5f6efd": "cst_bracer_nuclear_a_rift_right_hydro_rig",
+  "7923f37d1e162426": "cst_pack_exo_a_rift",
+  "79f6069ed9dfd4de": "cst_body_frost_a_rift",
+  "7a72b040adfc309e": "cst_body_junkyard_a_quest_fp",
+  "7a750e6aa957dad2": "cst_pack_s11_retro_a_rift",
+  "7b06988cf15a7270": "cst_body_scuba_a_rift",
+  "7b1507dbaad7a16d": "cst_pack_fume_a_rift_rig",
+  "7b78d34e02b857f6": "cst_bracer_lava_a_rift",
+  "7bd561bedcfb9e1e": "cst_body_trex_a_rift",
+  "7bdbd440fc1ccceb": "cst_bracer_shark_a_rift_left_rig",
+  "7c15486971116c3b": "cst_bracer_noble_a_rift_right_rig",
+  "7c26ec719a14a2a8": "cst_pack_automaton_a_rift",
+  "7cc6e11e7e0271b0": "cst_bracer_fume_a_rift",
+  "802a7c45dcaa4013": "cst_bracer_covenant_a_rift_left_rig",
+  "81b12773b3300f03": "cst_pack_shark_a_rift_rig",
+  "81fe382f575b6b17": "cst_bracer_ranger_a_rift_right_rig",
+  "82820f5d394a5b92": "cst_body_shark_a_rift_tropical",
+  "832422bdb2e105a5": "cst_bracer_streetwear_a_rift_right_rig",
+  "832a40248e96fdeb": "cst_bracer_retro_a_rift_left_rig",
+  "841c3027c5ec6874": "cst_bracer_ladybug_a_rift_left",
+  "84decc74fed3f222": "cst_body_streetwear_a_quest_fp",
+  "86d270516ac41e15": "cst_bracer_reptile_a_rift_right_rig",
+  "86fb842f6c0544d8": "cst_body_spartan_a_quest",
+  "87b7a2a17bad53db": "cst_pack_speedform_a_rift_rig",
+  "88d14b9607e5a8d6": "cst_body_plagueknight_a_rift_fp",
+  "88f68058e1d4f325": "cst_bracer_halloween_a_rift_left_rig",
+  "89160bacaba2a838": "cst_pack_wasteland_a_rift",
+  "8be305f09c35d178": "cst_body_wolf_a_rift",
+  "8c4931e4fdcff00b": "cst_pack_wolf_a_rift_rig",
+  "8cbc9a72337b62a4": "cst_body_wasteland_a_quest",
+  "8dee49b579bb3416": "cst_body_trex_a_rift_fp_skelerex",
+  "8e2a298024d0b65e": "cst_body_samurai_a_rift",
+  "8f69b19be193502e": "cst_body_frost_a_quest",
+  "8f7078d5375886f9": "cst_pack_shark_a_rift_tropical_rig",
+  "90214d8f057461bd": "cst_pack_junkyard_a_rift_rig",
+  "91674ad6775a3c69": "cst_bracer_wasteland_a_rift_right_rig",
+  "924fdcf8f48a5024": "cst_body_trex_a_rift_skelerex",
+  "931544fecf268c8d": "cst_bracer_spartan_a_rift_right_hero_rig",
+  "961076419d05e89f": "cst_pack_wasteland_a_rift_rig",
+  "965fbea7b120225d": "cst_pack_anubis_a_rift_horus_rig",
+  "96e834cc0f1998de": "cst_bracer_wolf_a_rift",
+  "979ad2f64503ab40": "cst_body_ninja_a_quest_fp",
+  "97d1370403fc1293": "cst_bracer_scuba_a_rift_left_rig",
+  "98eb091933b178c8": "cst_bracer_trex_a_right",
+  "996ea5d9c5066bb6": "cst_bracer_junkyard_a_rift",
+  "998e88c740ab42ac": "cst_bracer_trex_a_fp_right",
+  "9b6fb465d690fdc4": "cst_pack_samurai_a_rift",
+  "9b8a9e4f691eb6b8": "cst_bracer_vintage_a_rift_right",
+  "9c01ccfa032066a5": "cst_bracer_mech_a_rift_left_rig",
+  "9ddd548f3bba9546": "cst_pack_plagueknight_a_rift",
+  "9e63f21f52266eeb": "cst_bracer_covenant_a_rift_right_rig",
+  "9e6e11ef3188f110": "cst_pack_mech_a_rift",
+  "9e8f5e089266e453": "cst_pack_fume_a_rift_daydream_rig",
+  "a002e3e62ca6ac26": "cst_body_sporty_a_fp_rift",
+  "a03f3137e8ad86fd": "cst_bracer_fume_a_rift_left_daydream_rig",
+  "a1c4e03dc5669a15": "cst_bracer_rover_a_rift_left_deco_rig",
+  "a1f39f9a92a3775e": "cst_pack_heartbreak_a_rift",
+  "a2e6592d26ef2af1": "cst_bracer_junkyard_a_rift_left_rig",
+  "a32402670c69e8bb": "cst_bracer_reptile_a_rift_left_rig",
+  "a39beb1c6edcabd7": "cst_bracer_rover_a_rift_left_rig",
+  "a472f05c73c68bc3": "cst_bracer_trex_a_rift_right_skelerex_rig",
+  "a4f88eb206443212": "cst_body_mako_a_fp",
+  "a52b0ceda908a357": "cst_bracer_samurai_a_rift_left_oni_rig",
+  "a53a41fca05b5a3c": "cst_pack_avian_a_rift",
+  "a66f4e5f89dd3911": "cst_bracer_organic_a_rift_right_rig",
+  "a68b70cda33db802": "cst_pack_covenant_a_rift",
+  "a70703f75afa27ff": "cst_pack_heartbreak_a_rift_rig",
+  "a7498554839c3562": "cst_bracer_avian_a_rift",
+  "a76af6cdd3ec7c0a": "cst_body_herosuit_a_quest_fp",
+  "a800a552ceae3696": "cst_bracer_automaton_a_rift",
+  "a85780c4b959cc95": "cst_bracer_spartan_a_rift_hero",
+  "a906483bc20bc5be": "cst_body_herosuit_a_fp_rift",
+  "a98f91b10e7efd3f": "cst_pack_nuclear_a_rift_hydro_rig",
+  "aae0dd204781af60": "cst_bracer_flamingo_a_rift",
+  "abf55e7d4dadc432": "cst_body_ninja_a_quest",
+  "ac5aceb2af1d9e08": "cst_bracer_arcade_a_rift_left",
+  "af0f3ec588613f7b": "cst_bracer_fume_a_rift_right_daydream_rig",
+  "af81e14b586a12a7": "cst_bracer_wolf_a_rift_left_rig",
+  "afbb72329a0ae095": "cst_bracer_plagueknight_a_rift_left_rig",
+  "afda14fe49e7c7b1": "cst_bracer_spartan_a_rift_right_rig",
+  "b0231c8b3bc21595": "cst_bracer_exo_a_rift_right_rig",
+  "b0c09dd2156e7516": "cst_body_anubis_a_rift",
+  "b0daab2184864f4f": "cst_pack_scuba_a_rift_rig",
+  "b1eed6a0edd02863": "cst_pack_funk_a_rift_rig",
+  "b2035eda4fbf8b8f": "cst_pack_trex_a_rift_skelerex_rig",
+  "b21cde9f9dad0030": "cst_pack_s10_a_rift",
+  "b22a47ad08e6986e": "cst_body_exo_a_rift_fp",
+  "b2555b56e5739316": "cst_body_scuba_a_rift_fp",
+  "b255e44ab18064ca": "cst_body_overgrown_a_rift_fp",
+  "b2f4a586a903fd13": "cst_bracer_fragment_a_rift_left_rig",
+  "b31cde9f9dad0030": "cst_pack_s11_a_rift",
+  "b526a77d0e1cf564": "cst_body_s11_flamey_a_fp",
+  "b5ae86ffcd9ae3a2": "cst_bracer_rover_a_rift",
+  "b6c46402b1c64f57": "cst_bracer_shark_a_rift_right_tropical_rig",
+  "b7a69018c993cf8a": "cst_pack_snacktime_a_rift",
+  "b7dd4257ee5d8cfc": "cst_pack_rover_a_rift",
+  "b8d8175c015bd67a": "cst_body_streetwear_a_rift",
+  "ba77c3cd7ce674b7": "cst_bracer_overgrown_a_rift_right_rig",
+  "ba9cde1df382d972": "cst_body_wasteland_a_quest_fp",
+  "bb097eb564f71c18": "cst_bracer_streetwear_a_rift",
+  "bba02c6a3dbe7b91": "cst_pack_fragment_a_rift_rig",
+  "bc2036c338a0f93a": "cst_pack_funk_a_rift",
+  "bc7d00540c375f92": "cst_pack_mako_a_rift",
+  "bd05c588b3c534ad": "cst_body_s11_retro_a",
+  "bd30dbe10c782ab4": "cst_body_automaton_a_rift",
+  "bddf77a3b1206ede": "cst_pack_trex_a_rift_skelerex",
+  "be48b0ffd2a290b4": "cst_bracer_vintage_a_rift_left",
+  "bec79c9ccec88f15": "cst_bracer_nuclear_a_rift_right_rig",
+  "bee2df464c16224b": "cst_bracer_ninja_a_rift_left_rig",
+  "bf1d96dae1253813": "cst_body_s11_flamey_a",
+  "c00f62d79738f7c9": "cst_bracer_snacktime_a_rift_left_rig",
+  "c0254fece05ca1e9": "cst_bracer_vroom_a_rift_left_rig",
+  "c1c15c78d48a4643": "cst_body_anubis_a_rift_horus",
+  "c1f458e1d4fe4d7a": "cst_body_samurai_a_quest_fp",
+  "c2d4f1226cd0c519": "cst_body_automaton_a",
+  "c2d75eb78fc51cfa": "cst_bracer_organic_a_rift",
+  "c2e85be6ffce4563": "cst_body_samurai_a_rift_oni",
+  "c37e265edec2fb3b": "cst_bracer_paladin_a_rift_left_rig",
+  "c4c0ea7e35065516": "cst_body_funk_a_quest_fp",
+  "c59afe94b2d8bf00": "cst_body_funk_a_quest",
+  "c5a45faa7a08c77a": "cst_bracer_speedform_a_rift",
+  "c60b721235117bca": "cst_bracer_plagueknight_a_rift",
+  "c6187eced159a8a7": "cst_bracer_ranger_a_rift_left_rig",
+  "c61b6ceda29fc6a2": "cst_bracer_paladin_a_rift",
+  "c625886c721916bf": "cst_pack_spartan_a_rift_hero_rig",
+  "c869060098fc9e90": "cst_body_overgrown_a_quest",
+  "c8756e66ada26ac2": "cst_pack_lava_a_rift",
+  "c8bed292d13f13df": "cst_bracer_fragment_a_rift_right_rig",
+  "ca124c9a2f084c7b": "cst_bracer_spartan_a_rift_left_hero_rig",
+  "cc53aa2640dad6ab": "cst_pack_halloween_a_rift_rig",
+  "cc85a86c6f915473": "cst_pack_plagueknight_a_rift_rig",
+  "cd61784b1db7aeb7": "cst_bracer_heartbreak_a_rift_right_rig",
+  "cdccd1ac50536bdd": "cst_bracer_baroque_a_rift_right_rig",
+  "ce5d3ede2709e6dc": "cst_body_spartan_a_rift",
+  "cfcb5c36d1184c84": "cst_pack_fume_a_rift",
+  "cfe1e0cee486f326": "cst_pack_halloween_a_rift",
+  "d1b2fc66c509fd8d": "cst_pack_avian_a_rift_rig",
+  "d2513feae2aeec30": "cst_body_sporty_a_quest_fp",
+  "d2bd7420cdd645c3": "cst_bracer_samurai_a_rift_left_rig",
+  "d2e82b8adc169a69": "cst_bracer_fume_a_rift_right_rig",
+  "d49cf7d2cfdcd4ed": "cst_bracer_wolf_a_rift_right_rig",
+  "d5d3edaae0cdea8c": "cst_pack_trex_a_rift",
+  "d794a79af3b64fc9": "cst_pack_retro_a_rift_rig",
+  "d9420d3bc13930d8": "cst_pack_lazurlite_a_rift",
+  "d9eb714897aa0c88": "cst_body_shark_a_quest",
+  "da6bb47feeaca001": "cst_bracer_frost_a_rift_right_rig",
+  "dac6537a23226325": "cst_body_s10_a",
+  "dac6537a23236325": "cst_body_s11_a",
+  "dac6537a2a706325": "cst_body_s8b_a",
+  "db18a33bd549ad46": "cst_pack_spartan_a_rift",
+  "ded3274452b55e64": "cst_bracer_baroque_a_rift",
+  "e090bca1e437517b": "cst_bracer_trex_a_rift_left_skelerex_rig",
+  "e3b4f9b887232355": "cst_bracer_retro_a_rift_right_rig",
+  "e596fdccad3d5dd6": "cst_bracer_heartbreak_a_rift",
+  "e61bf4bc8510d57d": "cst_bracer_shark_a_rift_left_tropical_rig",
+  "e6f6e83722dd5d55": "cst_bracer_samurai_a_rift_right_oni_rig",
+  "e7d6655e15f34ee6": "cst_bracer_trex_a_rift_left",
+  "e9de8db3e8da86fb": "cst_bracer_organic_a_rift_left_rig",
+  "ea6f5165328e951f": "cst_pack_lava_a_rift_rig",
+  "eacf165401b05b7b": "cst_bracer_lava_a_rift_right_rig",
+  "ec85bd743c088c65": "cst_bracer_shark_a_rift_right_rig",
+  "ec8b9250f33fd90c": "cst_body_sporty_a_quest",
+  "ed87dafb229dd008": "cst_body_ranger_a_rift",
+  "ee0f8e10af2ee6ed": "cst_bracer_plagueknight_a_rift_right_rig",
+  "eeb32c744c777679": "cst_pack_noble_a_rift_rig",
+  "eec60025325351ea": "cst_pack_ladybug_a_rift",
+  "eee095f1dc8cb0e7": "cst_pack_snacktime_a_rift_rig",
+  "ef5000d9d9d2d632": "cst_bracer_overgrown_a_rift",
+  "f0d02d2cd51623e1": "cst_bracer_flamingo_a_rift_right_rig",
+  "f0fbe86a532b08c4": "cst_body_streetwear_a_quest",
+  "f159c4569764f6f8": "cst_body_samurai_a_fp_rift",
+  "f1de66b702c214cc": "cst_body_spartan_a_fp_rift",
+  "f2a555c92277052f": "cst_pack_covenant_a_rift_flame_rig",
+  "f34b5f51cedcaf94": "cst_pack_shark_a_rift_tropical",
+  "f381a659b7f22219": "cst_pack_spartan_a_rift_hero",
+  "f3c460bae3324928": "cst_bracer_fragment_a_rift",
+  "f49ade481455dcbc": "cst_body_exo_a_quest",
+  "f4fd9255229faea2": "cst_body_exo_a_rift",
+  "f5ac9880d09db907": "cst_pack_vroom_a_rift_rig",
+  "f60346a17c7708a0": "cst_bracer_mako_a_rift_left",
+  "f60b9f7f22680933": "cst_pack_streetwear_a_rift_rig",
+  "f6d5b8be348f2b6b": "cst_pack_covenant_a_rift_rig",
+  "f767e0715c807843": "cst_pack_flamingo_a_rift_rig",
+  "f7876247c5d3befb": "cst_pack_spartan_a_rift_rig",
+  "f7ec8322f79b38b3": "cst_bracer_mech_a_rift_right_rig",
+  "f845fe6d199760c0": "cst_body_frost_a_quest_fp",
+  "f86a23f14f5f2012": "cst_body_ninja_a_rift_fp",
+  "f86b33eb0297e223": "cst_pack_reptile_a_rift_rig",
+  "f8a1b57ec25249bc": "cst_pack_vintage_a_rift",
+  "f931ce6dd192391a": "cst_bracer_nuclear_a_rift",
+  "f962aa8c7c93c533": "cst_bracer_spartan_a_rift_left_rig",
+  "f9670d3a25198d7e": "cst_body_wolf_a_quest_fp",
+  "f9fda899b44a5867": "cst_pack_baroque_a_rift_rig",
+  "fa607e6a1b04ca10": "cst_body_overgrown_a_rift",
+  "fafbbd816239d932": "cst_bracer_mako_a_right",
+  "fb94f46e068419c7": "cst_bracer_funk_a_rift_right_rig",
+  "fc92767ec054e40e": "cst_bracer_reptile_a_rift",
+  "feeafd7e0461c645": "cst_pack_paladin_a_rift_rig",
+  "ff6c1ce35b693690": "cst_pack_streetwear_a_rift"
+ },
+ "sources": {
+  "0009a3a858ad643c": "customization_models.json:bracers.left",
+  "0035254d06eb205d": "customization_models.json:bracers.right",
+  "00924466bed39a46": "generated",
+  "0560c200eb94ffc5": "customization_models.json:bodies.thirdperson",
+  "0560db13e583ffc5": "customization_models.json:bodies.thirdperson",
+  "05c0d7fa225d5c0d": "customization_models.json:bracers.right",
+  "09a3a846a1652074": "customization_models.json:bracers.right",
+  "0b5e4ceb28abc108": "customization_models.json:bodies.firstperson",
+  "0bc70c64a78bcdcc": "customization_models.json:bodies.firstperson",
+  "0bc70d64a78bcdcc": "customization_models.json:bodies.firstperson",
+  "0bce5e64a78bcdcc": "customization_models.json:bodies.firstperson",
+  "0c97ea9ecfb747e4": "generated",
+  "0ccbad92d682d602": "generated",
+  "0d6444189583a4e6": "generated",
+  "0dcc645bacccb044": "customization_models.json:bodies.firstperson",
+  "0e42078d70a2e621": "customization_models.json:bracers.left",
+  "0ee42e36ec7028ba": "generated",
+  "0f21b39f5c1ef4a0": "customization_models.json:bodies.thirdperson",
+  "0f2d8beb97bac40e": "generated",
+  "0f70bd7ca32d62a6": "generated",
+  "0f70bd7cbd2162a6": "customization_models.json:bracers.left",
+  "118216892eb25344": "generated",
+  "1226bad704968da8": "customization_models.json:bodies.thirdperson",
+  "127b8c4030012b00": "generated",
+  "1304ff25862526cc": "customization_models.json:bodies.thirdperson",
+  "13e795acc48bb8d7": "customization_models.json:backpacks",
+  "1487bf82303e9e0d": "customization_models.json:bracers.right",
+  "159dc10971980901": "customization_models.json:bodies.firstperson",
+  "1714daa2087600a2": "customization_models.json:bracers.right",
+  "1856ddb8e829c3bb": "customization_models.json:bracers.right",
+  "19514caeaa1fa742": "generated",
+  "19984959afa7f4dd": "customization_models.json:bodies.thirdperson",
+  "19d21614a15d6eb2": "generated",
+  "1ace589134577c2d": "customization_models.json:bodies.thirdperson",
+  "1b079fc134f18416": "customization_models.json:bodies.firstperson",
+  "1b09188188a533d5": "customization_models.json:bracers.left",
+  "1b22880689d8c81c": "generated",
+  "1b721cf3f65419a6": "customization_models.json:bodies.firstperson",
+  "1b95fab975a1f4c9": "customization_models.json:backpacks",
+  "1ba1d2bc829a01ec": "generated",
+  "1bc7a9edb03c6718": "generated",
+  "1c52ab7e3d0f828e": "generated",
+  "1ceef0acf0a47c30": "customization_models.json:bodies.firstperson",
+  "1dc7973ac9fe90dc": "customization_models.json:bracers.right",
+  "1f2298ed8257d1c1": "customization_models.json:bracers.left",
+  "1f33df85fa45b203": "customization_models.json:bracers.left",
+  "1f76c81eae23b1b8": "generated",
+  "20f7257314decb2b": "generated",
+  "20f73c601ac9cb2b": "generated",
+  "23b084a26d862d9f": "customization_models.json:bracers.left",
+  "240d8e3641e4ee20": "customization_models.json:bodies.firstperson",
+  "244a5f111d00ad5b": "customization_models.json:bracers.right",
+  "24a3a0122d38e988": "generated",
+  "25277dc0904782e1": "customization_models.json:bracers.left",
+  "2564f2a1ccecce47": "customization_models.json:bracers.left",
+  "25c2e920a773020e": "customization_models.json:bodies.thirdperson",
+  "25e589e4a003a5ea": "generated",
+  "26d064ba0eff86d6": "generated",
+  "27a54efa90b11c58": "customization_models.json:bodies.thirdperson",
+  "288ea2b0572f1877": "generated",
+  "2945ef15d51ad8fa": "customization_models.json:bodies.thirdperson",
+  "2969b9a062029d27": "customization_models.json:bracers.right",
+  "29bd4917a0c2aed6": "customization_models.json:backpacks",
+  "2b844ff739d5a711": "customization_models.json:bracers.left",
+  "2c8f8d9e9a2e369a": "customization_models.json:bodies.thirdperson",
+  "2cb918e3f136f172": "customization_models.json:bodies.firstperson",
+  "2d63acc79e92cc24": "generated",
+  "2d7923bb70b531cd": "customization_models.json:backpacks",
+  "2f0043219b572010": "generated",
+  "2fd3eccaa93ffda3": "customization_models.json:backpacks",
+  "2ff055d1473abaf6": "customization_models.json:bodies.thirdperson",
+  "301777244fe16666": "generated",
+  "35af5238178ec27a": "generated",
+  "35cf738e7728352b": "customization_models.json:backpacks",
+  "3606c4fa8305bb95": "customization_models.json:bodies.firstperson",
+  "3731e57edff9b9bc": "customization_models.json:bodies.thirdperson",
+  "37dc96903449ad24": "generated",
+  "386b3f59a85b99b2": "customization_models.json:bodies.firstperson",
+  "393b0b33df877215": "customization_models.json:bracers.right",
+  "3a4fcafaa4d6e7cb": "customization_models.json:backpacks",
+  "3b03eff90cb8afee": "customization_models.json:bodies.firstperson",
+  "3b1c6c126a0dc0a3": "customization_models.json:backpacks",
+  "3b7649fa8d68420c": "generated",
+  "3c022a4b3391741f": "customization_models.json:bracers.right",
+  "3d954ee5e69eac1b": "customization_models.json:bracers.right",
+  "3ec2bfb7a1248ab4": "generated",
+  "3f268b164df9dff4": "customization_models.json:bodies.firstperson",
+  "3fc2bfb7a1248ab4": "generated",
+  "40e55338bd0acac4": "generated",
+  "413ff79895207021": "customization_models.json:bracers.left",
+  "42d65b4003b2c33b": "customization_models.json:bracers.right",
+  "4398b428fa1c272e": "generated",
+  "43bb13e40e718808": "customization_models.json:bodies.firstperson",
+  "4491dc406ba9fd0f": "customization_models.json:backpacks",
+  "452ed7473af639e6": "generated",
+  "4656b974721c797a": "generated",
+  "46f47430767d3cba": "customization_models.json:bodies.thirdperson",
+  "4719cff581234e6b": "customization_models.json:bracers.right",
+  "48003c3c3dce2024": "customization_models.json:bodies.thirdperson",
+  "48e819704a23e6e5": "customization_models.json:bracers.left",
+  "4b18fa23ce939a66": "generated",
+  "4bd21814f06f5b42": "customization_models.json:bodies.thirdperson",
+  "4c61432fe2a64e92": "customization_models.json:bodies.firstperson",
+  "4ccd6fad526c3ad2": "customization_models.json:bodies.thirdperson",
+  "4ce6c8ac1018b6d7": "customization_models.json:backpacks",
+  "4d390b027b642d29": "customization_models.json:backpacks",
+  "527b61222dcf8e1f": "customization_models.json:bracers.left",
+  "53f0d6f95488706c": "generated",
+  "54bde7ec879d5356": "customization_models.json:bracers.left",
+  "5590e661f8422c4b": "customization_models.json:backpacks",
+  "563af679aab0a53b": "customization_models.json:bracers.left",
+  "564de0c22cd1f4e1": "customization_models.json:bracers.left",
+  "5684010761931d1f": "customization_models.json:bracers.right",
+  "56c1296e9511bf99": "customization_models.json:backpacks",
+  "573ba845d21a2f0b": "customization_models.json:bracers.left",
+  "5766144d98c487b7": "customization_models.json:bracers.left",
+  "57f8861a4ccb1748": "customization_models.json:bodies.thirdperson",
+  "592aaeb4e7867b78": "generated",
+  "592c5292329d616c": "generated",
+  "5abdb24769d544f8": "generated",
+  "5c0df8d2ed46d564": "generated",
+  "5cfc66ad5ddee368": "customization_models.json:bracers.right",
+  "5d30428fff183c06": "generated",
+  "5de69ceecadca120": "generated",
+  "5ee32bbea4b725a9": "customization_models.json:backpacks",
+  "5f3a58e0becbf8c8": "customization_models.json:bodies.firstperson",
+  "610a7da06604db6a": "generated",
+  "619b173ef6c129d5": "customization_models.json:bracers.right",
+  "62cc3e6eb9d15e98": "generated",
+  "635c457daa112e3e": "generated",
+  "636829b6ac56c3df": "customization_models.json:bracers.left",
+  "6380d93b9d295bb4": "generated",
+  "63ccdd44ca0dc4e0": "generated",
+  "6514f5fa47d7d08e": "customization_models.json:bodies.firstperson",
+  "655867530fee974c": "generated",
+  "6596c905bfe364a2": "customization_models.json:bodies.firstperson",
+  "66de50824fd7d7b8": "generated",
+  "66de508251dbd7b8": "customization_models.json:bracers.left",
+  "66ee50ad8c5c5ffa": "customization_models.json:backpacks",
+  "676f867da817838c": "generated",
+  "6815e7e41c41b5bf": "customization_models.json:bracers.left",
+  "68b4815c4f1fe49a": "customization_models.json:bodies.thirdperson",
+  "6933cabeeb52802e": "generated",
+  "6ad4faa1ee461acc": "customization_models.json:bracers.right",
+  "6d28762d0e718aee": "generated",
+  "6d34f482e5756e6b": "customization_models.json:bracers.right",
+  "6d7667bd075b2192": "generated",
+  "6da260b2ae47d18f": "customization_models.json:bodies.firstperson",
+  "6df242254c2a8912": "customization_models.json:bodies.firstperson",
+  "6e6ad876babc92dd": "generated",
+  "6f05a315249c4ecc": "generated",
+  "6f5bb2852db6e5b0": "generated",
+  "6fd01c28b491c77f": "customization_models.json:bracers.right",
+  "702583d2632c8df5": "generated",
+  "702583d263318afb": "customization_models.json:backpacks",
+  "71cbfaae988041f9": "customization_models.json:bracers.left",
+  "726f83e2ca301444": "customization_models.json:bodies.firstperson",
+  "72d09fb639c7c844": "customization_models.json:bodies.firstperson",
+  "72eda997ce07f405": "customization_models.json:bracers.left",
+  "7358842d5984f6fb": "generated",
+  "735884375f91ebfc": "customization_models.json:bracers.right",
+  "73f4e84e13160c88": "customization_models.json:bodies.firstperson",
+  "7492aa47b81fcb72": "customization_models.json:bodies.thirdperson",
+  "753bf0265a103668": "generated",
+  "772e755fbb5f6efd": "customization_models.json:bracers.right",
+  "7923f37d1e162426": "generated",
+  "79f6069ed9dfd4de": "customization_models.json:bodies.thirdperson",
+  "7a72b040adfc309e": "customization_models.json:bodies.firstperson",
+  "7a750e6aa957dad2": "generated",
+  "7b06988cf15a7270": "customization_models.json:bodies.thirdperson",
+  "7b1507dbaad7a16d": "customization_models.json:backpacks",
+  "7b78d34e02b857f6": "generated",
+  "7bd561bedcfb9e1e": "generated",
+  "7bdbd440fc1ccceb": "customization_models.json:bracers.left",
+  "7c15486971116c3b": "customization_models.json:bracers.right",
+  "7c26ec719a14a2a8": "customization_models.json:backpacks",
+  "7cc6e11e7e0271b0": "generated",
+  "802a7c45dcaa4013": "customization_models.json:bracers.left",
+  "81b12773b3300f03": "customization_models.json:backpacks",
+  "81fe382f575b6b17": "customization_models.json:bracers.right",
+  "82820f5d394a5b92": "customization_models.json:bodies.thirdperson",
+  "832422bdb2e105a5": "customization_models.json:bracers.right",
+  "832a40248e96fdeb": "customization_models.json:bracers.left",
+  "841c3027c5ec6874": "customization_models.json:bracers.left",
+  "84decc74fed3f222": "generated",
+  "86d270516ac41e15": "customization_models.json:bracers.right",
+  "86fb842f6c0544d8": "customization_models.json:bodies.thirdperson",
+  "87b7a2a17bad53db": "customization_models.json:backpacks",
+  "88d14b9607e5a8d6": "customization_models.json:bodies.firstperson",
+  "88f68058e1d4f325": "customization_models.json:bracers.left",
+  "89160bacaba2a838": "generated",
+  "8be305f09c35d178": "customization_models.json:bodies.thirdperson",
+  "8c4931e4fdcff00b": "customization_models.json:backpacks",
+  "8cbc9a72337b62a4": "customization_models.json:bodies.thirdperson",
+  "8dee49b579bb3416": "customization_models.json:bodies.firstperson",
+  "8e2a298024d0b65e": "customization_models.json:bodies.thirdperson",
+  "8f69b19be193502e": "customization_models.json:bodies.thirdperson",
+  "8f7078d5375886f9": "customization_models.json:backpacks",
+  "90214d8f057461bd": "customization_models.json:backpacks",
+  "91674ad6775a3c69": "customization_models.json:bracers.right",
+  "924fdcf8f48a5024": "customization_models.json:bodies.thirdperson",
+  "931544fecf268c8d": "customization_models.json:bracers.right",
+  "961076419d05e89f": "customization_models.json:backpacks",
+  "965fbea7b120225d": "customization_models.json:backpacks",
+  "96e834cc0f1998de": "generated",
+  "979ad2f64503ab40": "customization_models.json:bodies.firstperson",
+  "97d1370403fc1293": "customization_models.json:bracers.left",
+  "98eb091933b178c8": "customization_models.json:bracers.right",
+  "996ea5d9c5066bb6": "generated",
+  "998e88c740ab42ac": "generated",
+  "9b6fb465d690fdc4": "generated",
+  "9b8a9e4f691eb6b8": "customization_models.json:bracers.right",
+  "9c01ccfa032066a5": "customization_models.json:bracers.left",
+  "9ddd548f3bba9546": "generated",
+  "9e63f21f52266eeb": "customization_models.json:bracers.right",
+  "9e6e11ef3188f110": "generated",
+  "9e8f5e089266e453": "customization_models.json:backpacks",
+  "a002e3e62ca6ac26": "customization_models.json:bodies.firstperson",
+  "a03f3137e8ad86fd": "customization_models.json:bracers.left",
+  "a1c4e03dc5669a15": "customization_models.json:bracers.left",
+  "a1f39f9a92a3775e": "generated",
+  "a2e6592d26ef2af1": "customization_models.json:bracers.left",
+  "a32402670c69e8bb": "customization_models.json:bracers.left",
+  "a39beb1c6edcabd7": "customization_models.json:bracers.left",
+  "a472f05c73c68bc3": "customization_models.json:bracers.right",
+  "a4f88eb206443212": "customization_models.json:bodies.firstperson",
+  "a52b0ceda908a357": "customization_models.json:bracers.left",
+  "a53a41fca05b5a3c": "generated",
+  "a66f4e5f89dd3911": "customization_models.json:bracers.right",
+  "a68b70cda33db802": "generated",
+  "a70703f75afa27ff": "customization_models.json:backpacks",
+  "a7498554839c3562": "generated",
+  "a76af6cdd3ec7c0a": "generated",
+  "a800a552ceae3696": "generated",
+  "a85780c4b959cc95": "generated",
+  "a906483bc20bc5be": "customization_models.json:bodies.firstperson",
+  "a98f91b10e7efd3f": "customization_models.json:backpacks",
+  "aae0dd204781af60": "generated",
+  "abf55e7d4dadc432": "customization_models.json:bodies.thirdperson",
+  "ac5aceb2af1d9e08": "customization_models.json:bracers.left",
+  "af0f3ec588613f7b": "customization_models.json:bracers.right",
+  "af81e14b586a12a7": "customization_models.json:bracers.left",
+  "afbb72329a0ae095": "customization_models.json:bracers.left",
+  "afda14fe49e7c7b1": "customization_models.json:bracers.right",
+  "b0231c8b3bc21595": "customization_models.json:bracers.right",
+  "b0c09dd2156e7516": "generated",
+  "b0daab2184864f4f": "customization_models.json:backpacks",
+  "b1eed6a0edd02863": "customization_models.json:backpacks",
+  "b2035eda4fbf8b8f": "customization_models.json:backpacks",
+  "b21cde9f9dad0030": "customization_models.json:backpacks",
+  "b22a47ad08e6986e": "customization_models.json:bodies.firstperson",
+  "b2555b56e5739316": "customization_models.json:bodies.firstperson",
+  "b255e44ab18064ca": "customization_models.json:bodies.firstperson",
+  "b2f4a586a903fd13": "customization_models.json:bracers.left",
+  "b31cde9f9dad0030": "customization_models.json:backpacks",
+  "b526a77d0e1cf564": "generated",
+  "b5ae86ffcd9ae3a2": "generated",
+  "b6c46402b1c64f57": "customization_models.json:bracers.right",
+  "b7a69018c993cf8a": "generated",
+  "b7dd4257ee5d8cfc": "generated",
+  "b8d8175c015bd67a": "customization_models.json:bodies.thirdperson",
+  "ba77c3cd7ce674b7": "customization_models.json:bracers.right",
+  "ba9cde1df382d972": "generated",
+  "bb097eb564f71c18": "generated",
+  "bba02c6a3dbe7b91": "customization_models.json:backpacks",
+  "bc2036c338a0f93a": "generated",
+  "bc7d00540c375f92": "customization_models.json:backpacks",
+  "bd05c588b3c534ad": "generated",
+  "bd30dbe10c782ab4": "generated",
+  "bddf77a3b1206ede": "generated",
+  "be48b0ffd2a290b4": "customization_models.json:bracers.left",
+  "bec79c9ccec88f15": "customization_models.json:bracers.right",
+  "bee2df464c16224b": "customization_models.json:bracers.left",
+  "bf1d96dae1253813": "generated",
+  "c00f62d79738f7c9": "customization_models.json:bracers.left",
+  "c0254fece05ca1e9": "customization_models.json:bracers.left",
+  "c1c15c78d48a4643": "customization_models.json:bodies.thirdperson",
+  "c1f458e1d4fe4d7a": "generated",
+  "c2d4f1226cd0c519": "customization_models.json:bodies.thirdperson",
+  "c2d75eb78fc51cfa": "generated",
+  "c2e85be6ffce4563": "customization_models.json:bodies.thirdperson",
+  "c37e265edec2fb3b": "customization_models.json:bracers.left",
+  "c4c0ea7e35065516": "generated",
+  "c59afe94b2d8bf00": "customization_models.json:bodies.thirdperson",
+  "c5a45faa7a08c77a": "generated",
+  "c60b721235117bca": "generated",
+  "c6187eced159a8a7": "customization_models.json:bracers.left",
+  "c61b6ceda29fc6a2": "generated",
+  "c625886c721916bf": "customization_models.json:backpacks",
+  "c869060098fc9e90": "customization_models.json:bodies.thirdperson",
+  "c8756e66ada26ac2": "generated",
+  "c8bed292d13f13df": "customization_models.json:bracers.right",
+  "ca124c9a2f084c7b": "customization_models.json:bracers.left",
+  "cc53aa2640dad6ab": "customization_models.json:backpacks",
+  "cc85a86c6f915473": "customization_models.json:backpacks",
+  "cd61784b1db7aeb7": "customization_models.json:bracers.right",
+  "cdccd1ac50536bdd": "customization_models.json:bracers.right",
+  "ce5d3ede2709e6dc": "customization_models.json:bodies.thirdperson",
+  "cfcb5c36d1184c84": "generated",
+  "cfe1e0cee486f326": "generated",
+  "d1b2fc66c509fd8d": "customization_models.json:backpacks",
+  "d2513feae2aeec30": "generated",
+  "d2bd7420cdd645c3": "customization_models.json:bracers.left",
+  "d2e82b8adc169a69": "customization_models.json:bracers.right",
+  "d49cf7d2cfdcd4ed": "customization_models.json:bracers.right",
+  "d5d3edaae0cdea8c": "customization_models.json:backpacks",
+  "d794a79af3b64fc9": "customization_models.json:backpacks",
+  "d9420d3bc13930d8": "generated",
+  "d9eb714897aa0c88": "customization_models.json:bodies.thirdperson",
+  "da6bb47feeaca001": "customization_models.json:bracers.right",
+  "dac6537a23226325": "customization_models.json:bodies.thirdperson",
+  "dac6537a23236325": "customization_models.json:bodies.thirdperson",
+  "dac6537a2a706325": "customization_models.json:bodies.thirdperson",
+  "db18a33bd549ad46": "generated",
+  "ded3274452b55e64": "generated",
+  "e090bca1e437517b": "customization_models.json:bracers.left",
+  "e3b4f9b887232355": "customization_models.json:bracers.right",
+  "e596fdccad3d5dd6": "generated",
+  "e61bf4bc8510d57d": "customization_models.json:bracers.left",
+  "e6f6e83722dd5d55": "customization_models.json:bracers.right",
+  "e7d6655e15f34ee6": "customization_models.json:bracers.left",
+  "e9de8db3e8da86fb": "customization_models.json:bracers.left",
+  "ea6f5165328e951f": "customization_models.json:backpacks",
+  "eacf165401b05b7b": "customization_models.json:bracers.right",
+  "ec85bd743c088c65": "customization_models.json:bracers.right",
+  "ec8b9250f33fd90c": "customization_models.json:bodies.thirdperson",
+  "ed87dafb229dd008": "customization_models.json:bodies.thirdperson",
+  "ee0f8e10af2ee6ed": "customization_models.json:bracers.right",
+  "eeb32c744c777679": "customization_models.json:backpacks",
+  "eec60025325351ea": "customization_models.json:backpacks",
+  "eee095f1dc8cb0e7": "customization_models.json:backpacks",
+  "ef5000d9d9d2d632": "generated",
+  "f0d02d2cd51623e1": "customization_models.json:bracers.right",
+  "f0fbe86a532b08c4": "customization_models.json:bodies.thirdperson",
+  "f159c4569764f6f8": "customization_models.json:bodies.firstperson",
+  "f1de66b702c214cc": "customization_models.json:bodies.firstperson",
+  "f2a555c92277052f": "customization_models.json:backpacks",
+  "f34b5f51cedcaf94": "generated",
+  "f381a659b7f22219": "generated",
+  "f3c460bae3324928": "generated",
+  "f49ade481455dcbc": "customization_models.json:bodies.thirdperson",
+  "f4fd9255229faea2": "customization_models.json:bodies.thirdperson",
+  "f5ac9880d09db907": "customization_models.json:backpacks",
+  "f60346a17c7708a0": "customization_models.json:bracers.left",
+  "f60b9f7f22680933": "customization_models.json:backpacks",
+  "f6d5b8be348f2b6b": "customization_models.json:backpacks",
+  "f767e0715c807843": "customization_models.json:backpacks",
+  "f7876247c5d3befb": "customization_models.json:backpacks",
+  "f7ec8322f79b38b3": "customization_models.json:bracers.right",
+  "f845fe6d199760c0": "generated",
+  "f86a23f14f5f2012": "customization_models.json:bodies.firstperson",
+  "f86b33eb0297e223": "customization_models.json:backpacks",
+  "f8a1b57ec25249bc": "customization_models.json:backpacks",
+  "f931ce6dd192391a": "generated",
+  "f962aa8c7c93c533": "customization_models.json:bracers.left",
+  "f9670d3a25198d7e": "customization_models.json:bodies.firstperson",
+  "f9fda899b44a5867": "customization_models.json:backpacks",
+  "fa607e6a1b04ca10": "customization_models.json:bodies.thirdperson",
+  "fafbbd816239d932": "customization_models.json:bracers.right",
+  "fb94f46e068419c7": "customization_models.json:bracers.right",
+  "fc92767ec054e40e": "generated",
+  "feeafd7e0461c645": "customization_models.json:backpacks",
+  "ff6c1ce35b693690": "generated"
+ },
+ "items": [
+  {
+   "id": "rwd_booster_default",
+   "label": "S11",
+   "description": "This is a short spiel about the item",
+   "icon": "a5f89db6f8a175fa",
+   "models": [
+    [
+     592,
+     "b31cde9f9dad0030"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_s10",
+   "label": "S10",
+   "description": "This is a short spiel about the item",
+   "icon": "6615bd63f50ad8c6",
+   "models": [
+    [
+     592,
+     "b21cde9f9dad0030"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_s11_s1_a_fire",
+   "label": "S11 Flamey",
+   "description": "This is a short spiel about the item",
+   "icon": "5cbc99afccecaac2",
+   "models": [
+    [
+     592,
+     "610a7da06604db6a"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_s11_s1_a_retro",
+   "label": "S11 Retro",
+   "description": "This is a short spiel about the item",
+   "icon": "15928b55528b4c32",
+   "models": [
+    [
+     592,
+     "7a750e6aa957dad2"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_trex_s1_a",
+   "label": "Meteor Rex",
+   "description": "This is a short spiel about the item",
+   "icon": "13d6593823326240",
+   "models": [
+    [
+     592,
+     "d5d3edaae0cdea8c"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_mako_s1_a",
+   "label": "Mako",
+   "description": "This is a short spiel about the item",
+   "icon": "02037ac74ab62406",
+   "models": [
+    [
+     592,
+     "bc7d00540c375f92"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_arcade_s1_a",
+   "label": "Arcade",
+   "description": "This is a short spiel about the item",
+   "icon": "9233e05314f639b8",
+   "models": [
+    [
+     592,
+     "66ee50ad8c5c5ffa"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_arcade_var_s1_a",
+   "label": "Golden Age",
+   "description": "This is a short spiel about the item",
+   "icon": "9590fc89cdd9e32e",
+   "models": [
+    [
+     592,
+     "b08b65b3e2005b44"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_vintage_a",
+   "label": "Vintage",
+   "description": "This is a short spiel about the item",
+   "icon": "c5b8e327be72c6a0",
+   "models": [
+    [
+     592,
+     "f8a1b57ec25249bc"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_anubis_s2_a",
+   "label": "Anubis",
+   "description": "This is a short spiel about the item",
+   "icon": "6ad4c90d3c76f4e6",
+   "models": [
+    [
+     592,
+     "29bd4917a0c2aed6"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_automaton_s2_a",
+   "label": "Automaton",
+   "description": "This is a short spiel about the item",
+   "icon": "b0a854f83e07b7d0",
+   "models": [
+    [
+     592,
+     "7c26ec719a14a2a8"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_ladybug_s2_a",
+   "label": "Ladybug",
+   "description": "This is a short spiel about the item",
+   "icon": "ffec63ffa93c3e60",
+   "models": [
+    [
+     592,
+     "eec60025325351ea"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_bee_s2_a",
+   "label": "Bumblebee",
+   "description": "This is a short spiel about the item",
+   "icon": "2f8fea2c931c6798",
+   "models": [
+    [
+     592,
+     "0ec744bfd350f052"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_currency_s01_01",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s01_02",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s01_03",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s01_04",
+   "label": "+200 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s02_01",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s02_02",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s02_03",
+   "label": "+325 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s02_04",
+   "label": "+200 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_bracer_default",
+   "label": "None",
+   "description": "This is a short spiel about the item",
+   "icon": "6c120c3af1b9f224",
+   "models": []
+  },
+  {
+   "id": "rwd_bracer_trex_s1_a",
+   "label": "Meteor Rex",
+   "description": "This is a short spiel about the item",
+   "icon": "c7f0101b7788f67e",
+   "models": [
+    [
+     536,
+     "998e88c740ab42ac"
+    ],
+    [
+     544,
+     "1714daa2087600a2"
+    ],
+    [
+     560,
+     "5c0df8d2ed46d564"
+    ],
+    [
+     568,
+     "e7d6655e15f34ee6"
+    ],
+    [
+     584,
+     "98eb091933b178c8"
+    ],
+    [
+     592,
+     "1714daa2087600a2"
+    ],
+    [
+     608,
+     "66de508251dbd7b8"
+    ],
+    [
+     616,
+     "e7d6655e15f34ee6"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_mako_s1_a",
+   "label": "Mako",
+   "description": "This is a short spiel about the item",
+   "icon": "d62533e41e0cb038",
+   "models": [
+    [
+     544,
+     "5cfc66ad5ddee368"
+    ],
+    [
+     568,
+     "f60346a17c7708a0"
+    ],
+    [
+     584,
+     "fafbbd816239d932"
+    ],
+    [
+     592,
+     "5cfc66ad5ddee368"
+    ],
+    [
+     608,
+     "0f70bd7cbd2162a6"
+    ],
+    [
+     616,
+     "f60346a17c7708a0"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_arcade_s1_a",
+   "label": "Arcade",
+   "description": "This is a short spiel about the item",
+   "icon": "8c7cbbf7cd662690",
+   "models": [
+    [
+     544,
+     "6ad4faa1ee461acc"
+    ],
+    [
+     568,
+     "ac5aceb2af1d9e08"
+    ],
+    [
+     592,
+     "6ad4faa1ee461acc"
+    ],
+    [
+     616,
+     "ac5aceb2af1d9e08"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_arcade_var_s1_a",
+   "label": "Golden Age",
+   "description": "This is a short spiel about the item",
+   "icon": "aed7ca72c35330a2",
+   "models": [
+    [
+     544,
+     "9094f711862278a8"
+    ],
+    [
+     568,
+     "9672436e7d9be28c"
+    ],
+    [
+     592,
+     "9094f711862278a8"
+    ],
+    [
+     616,
+     "9672436e7d9be28c"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_vintage_a",
+   "label": "Vintage",
+   "description": "This is a short spiel about the item",
+   "icon": "9e6ec5bab0d9282c",
+   "models": [
+    [
+     544,
+     "9b8a9e4f691eb6b8"
+    ],
+    [
+     568,
+     "be48b0ffd2a290b4"
+    ],
+    [
+     592,
+     "9b8a9e4f691eb6b8"
+    ],
+    [
+     616,
+     "be48b0ffd2a290b4"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_anubis_s2_a",
+   "label": "Anubis",
+   "description": "This is a short spiel about the item",
+   "icon": "749b92a9e5e6ebce",
+   "models": [
+    [
+     544,
+     "735884375f91ebfc"
+    ],
+    [
+     568,
+     "54bde7ec879d5356"
+    ],
+    [
+     592,
+     "735884375f91ebfc"
+    ],
+    [
+     616,
+     "54bde7ec879d5356"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_automaton_s2_a",
+   "label": "Automaton",
+   "description": "This is a short spiel about the item",
+   "icon": "202fd6ed3ad6dca4",
+   "models": [
+    [
+     544,
+     "09a3a846a1652074"
+    ],
+    [
+     568,
+     "0009a3a858ad643c"
+    ],
+    [
+     592,
+     "09a3a846a1652074"
+    ],
+    [
+     616,
+     "0009a3a858ad643c"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_ladybug_s2_a",
+   "label": "Ladybug",
+   "description": "This is a short spiel about the item",
+   "icon": "a43a4562a797d0ec",
+   "models": [
+    [
+     544,
+     "1dc7973ac9fe90dc"
+    ],
+    [
+     568,
+     "841c3027c5ec6874"
+    ],
+    [
+     592,
+     "1dc7973ac9fe90dc"
+    ],
+    [
+     616,
+     "841c3027c5ec6874"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_bee_s2_a",
+   "label": "Bumblebee",
+   "description": "This is a short spiel about the item",
+   "icon": "14c8dcd79d96b414",
+   "models": [
+    [
+     544,
+     "99def57bd4841ffe"
+    ],
+    [
+     568,
+     "b1c0a255c450507e"
+    ],
+    [
+     592,
+     "99def57bd4841ffe"
+    ],
+    [
+     616,
+     "b1c0a255c450507e"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_body_s11_a",
+   "label": "Series-11",
+   "description": "This is a short spiel about the item",
+   "icon": "d3caa26f0b5a0798",
+   "models": [
+    [
+     544,
+     "0bc70d64a78bcdcc"
+    ],
+    [
+     592,
+     "dac6537a23236325"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_body_s10_a",
+   "label": "Series-10",
+   "description": "This is a short spiel about the item",
+   "icon": "102782ba06f1aaa4",
+   "models": [
+    [
+     544,
+     "0bc70c64a78bcdcc"
+    ],
+    [
+     592,
+     "dac6537a23226325"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_trex_s1_a",
+   "label": "Meteor Rex",
+   "description": "This is a short spiel about the item",
+   "icon": "d2c06ea8b55eea5c",
+   "models": [
+    [
+     544,
+     "73f4e84e13160c88"
+    ],
+    [
+     592,
+     "0560db13e583ffc5"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_mako_s1_a",
+   "label": "Mako",
+   "description": "This is a short spiel about the item",
+   "icon": "c3154d57dcdaac1a",
+   "models": [
+    [
+     544,
+     "a4f88eb206443212"
+    ],
+    [
+     592,
+     "0560c200eb94ffc5"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_s8b_a",
+   "label": "Series-8B",
+   "description": "This is a short spiel about the item",
+   "icon": "9a15522bddb57154",
+   "models": [
+    [
+     544,
+     "0bce5e64a78bcdcc"
+    ],
+    [
+     592,
+     "dac6537a2a706325"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_s11_flame_a",
+   "label": "S11 Flamey",
+   "description": "This is a short spiel about the item",
+   "icon": "732c32f489469438",
+   "models": [
+    [
+     544,
+     "b526a77d0e1cf564"
+    ],
+    [
+     592,
+     "bf1d96dae1253813"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_s11_retro_a",
+   "label": "S11 Retro",
+   "description": "This is a short spiel about the item",
+   "icon": "645bdb59a51db834",
+   "models": [
+    [
+     544,
+     "1f76c81eae23b1b8"
+    ],
+    [
+     592,
+     "bd05c588b3c534ad"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_anubis_s2_a",
+   "label": "Anubis",
+   "description": "This is a short spiel about the item",
+   "icon": "d8191139a0943c70",
+   "models": [
+    [
+     544,
+     "1b079fc134f18416"
+    ],
+    [
+     592,
+     "19984959afa7f4dd"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_automaton_s2_a",
+   "label": "Automaton",
+   "description": "This is a short spiel about the item",
+   "icon": "c16104f4c99143d6",
+   "models": [
+    [
+     544,
+     "1b721cf3f65419a6"
+    ],
+    [
+     592,
+     "c2d4f1226cd0c519"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_xp_boost_individual_s01_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s01_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s01_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s01_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s01_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s02_01",
+   "label": "+10% Solo XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s02_02",
+   "label": "+10% Solo XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s02_03",
+   "label": "+10% Solo XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s02_04",
+   "label": "+10% Solo XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s02_05",
+   "label": "+10% Solo XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s01_01",
+   "label": "+5% Team TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s01_02",
+   "label": "+5% Team TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s01_03",
+   "label": "+5% Team TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s01_04",
+   "label": "+5% Team TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s01_05",
+   "label": "+5% Team TXP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s02_01",
+   "label": "+5% Team XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s02_02",
+   "label": "+5% Team XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s02_03",
+   "label": "+5% Team XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s02_04",
+   "label": "+5% Team XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s02_05",
+   "label": "+5% Team XP Boost",
+   "description": "This is a short spiel about the item",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_default",
+   "label": "None",
+   "description": "Progression Reward Item",
+   "icon": "6c120c3af1b9f224",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_arena_bronze",
+   "label": "Intro Arena",
+   "description": "Progression Reward Item",
+   "icon": "9d4ed03cc993f4bc",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_arena_silver",
+   "label": "Mid Tier Arena",
+   "description": "Progression Reward Item",
+   "icon": "42d922bec6582e72",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_arena_gold",
+   "label": "Top Tier Arena",
+   "description": "Progression Reward Item",
+   "icon": "2c6bda48dfd0a02c",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_combat_bronze",
+   "label": "Intro Combat",
+   "description": "Progression Reward Item",
+   "icon": "82e5bc67b8b1f5ea",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_combat_silver",
+   "label": "Mid Tier Combat",
+   "description": "Progression Reward Item",
+   "icon": "5d724ee5b77a2f24",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_combat_gold",
+   "label": "Top Tier Combat",
+   "description": "Progression Reward Item",
+   "icon": "8edd7be7ebb05ce4",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_echo_pass_bronze",
+   "label": "Intro Echo Pass S1",
+   "description": "Progression Reward Item",
+   "icon": "4e7027b7e72ddb8e",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_echo_pass_silver",
+   "label": "Mid Tier Echo Pass S1",
+   "description": "Progression Reward Item",
+   "icon": "91e7d535e8e60140",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_echo_pass_gold",
+   "label": "Top Tier Echo Pass S1",
+   "description": "Progression Reward Item",
+   "icon": "fa42fe1d64dedcac",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_quest_launch",
+   "label": "Quest Launch",
+   "description": "Progression Reward Item",
+   "icon": "f1f9868eb8d2b112",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_preseason",
+   "label": "VRML Preseason",
+   "description": "Progression Reward Item",
+   "icon": "00a061910d5b618c",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s1_user",
+   "label": "VRML S1",
+   "description": "Progression Reward Item",
+   "icon": "56dc71edba333012",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s1_finalist",
+   "label": "VRML S1 Finals",
+   "description": "Progression Reward Item",
+   "icon": "c8fdf0206b378524",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s1_champion",
+   "label": "VRML S1 Champ",
+   "description": "Progression Reward Item",
+   "icon": "79c6a7b3a09541f6",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s2",
+   "label": "VRML S2",
+   "description": "Progression Reward Item",
+   "icon": "6094659963cb3e3c",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s2_finalist",
+   "label": "VRML S2 Finals",
+   "description": "Progression Reward Item",
+   "icon": "e807f2e0c146ab76",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s2_champion",
+   "label": "VRML S2 Champ",
+   "description": "Progression Reward Item",
+   "icon": "593ca5730ae46fa4",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s3",
+   "label": "VRML S3",
+   "description": "Progression Reward Item",
+   "icon": "a379454c6e609300",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s3_finalist",
+   "label": "VRML S3 Finals",
+   "description": "Progression Reward Item",
+   "icon": "1a8fccbdcf11ee54",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s1_vrml_s3_champion",
+   "label": "VRML S3 Champ",
+   "description": "Progression Reward Item",
+   "icon": "abb49b2e04b32a86",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s2_echo_pass_bronze",
+   "label": "Intro Echo Pass S2",
+   "description": "Progression Reward Item",
+   "icon": "a29cd2b8c8a99fd6",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s2_echo_pass_silver",
+   "label": "Mid Tier Echo Pass S2",
+   "description": "Progression Reward Item",
+   "icon": "7d0b203ac7624518",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s2_echo_pass_gold",
+   "label": "Top Tier Echo Pass S2",
+   "description": "Progression Reward Item",
+   "icon": "a031f04180ead2e2",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_default",
+   "label": "Classic",
+   "description": "Progression Reward Item",
+   "icon": "2bb403484cde8aec",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_basic",
+   "label": "Basic",
+   "description": "Progression Reward Item",
+   "icon": "ac271fd1267de2b4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_bold_stripe",
+   "label": "Slice",
+   "description": "Progression Reward Item",
+   "icon": "4aad1a8867d2d23a",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_chevrons",
+   "label": "Chevron",
+   "description": "Progression Reward Item",
+   "icon": "126ef2313523c81e",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_digi",
+   "label": "Digital",
+   "description": "Progression Reward Item",
+   "icon": "19ba3faeb575443e",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_flames",
+   "label": "Flame On",
+   "description": "Progression Reward Item",
+   "icon": "2a786038806ea890",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_hourglass",
+   "label": "Hourglass",
+   "description": "Progression Reward Item",
+   "icon": "c152578b279b6d9e",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_squish",
+   "label": "Regal",
+   "description": "Progression Reward Item",
+   "icon": "7416ca22a79f4cd4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_tattered",
+   "label": "Wartorn",
+   "description": "Progression Reward Item",
+   "icon": "5cc001af71965a04",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_trex",
+   "label": "Rex",
+   "description": "Progression Reward Item",
+   "icon": "d87be1a9c9ea64d6",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_tritip",
+   "label": "Tri-tip",
+   "description": "Progression Reward Item",
+   "icon": "0e988943a3486f44",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s1_wings",
+   "label": "Hero",
+   "description": "Progression Reward Item",
+   "icon": "f07dcb5447657f0e",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_deco",
+   "label": "Deco",
+   "description": "Progression Reward Item",
+   "icon": "c08850c4f3c8239c",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_gears",
+   "label": "Gears",
+   "description": "Progression Reward Item",
+   "icon": "5a356a09f65b5434",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_ladybug",
+   "label": "Ladybug",
+   "description": "Progression Reward Item",
+   "icon": "36da51a83f8403d4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_lines",
+   "label": "Lines",
+   "description": "Progression Reward Item",
+   "icon": "1fdd49f22dd77e00",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_squares",
+   "label": "Squares",
+   "description": "Progression Reward Item",
+   "icon": "623a222d47ce0afe",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_s2_pyramids",
+   "label": "Pyramids",
+   "description": "Progression Reward Item",
+   "icon": "f8e4ef34ad663044",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_bonsai",
+   "label": "Bonsai",
+   "description": "Progression Reward Item",
+   "icon": "8f32bc3f39b26c34",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0017",
+   "label": "Web",
+   "description": "Progression Reward Item",
+   "icon": "2a6097167ca5b99c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0027",
+   "label": "Mosaic",
+   "description": "",
+   "icon": "e28c012c852dcd02",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_ramen_a",
+   "label": "Ramen",
+   "description": "Progression Reward Item",
+   "icon": "748fd4202c9dd574",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_cherry_blossom_a",
+   "label": "Sakura",
+   "description": "Progression Reward Item",
+   "icon": "ac0fb4eb09716c48",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_gg_a",
+   "label": "Good Game",
+   "description": "Progression Reward Item",
+   "icon": "5f9d4f84a84d6580",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_pepper_a",
+   "label": "Spicy",
+   "description": "Progression Reward Item",
+   "icon": "6423ff55ee1c7610",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_axolotl_s2_a",
+   "label": "Axolotl",
+   "description": "Progression Reward Item",
+   "icon": "f177c16f3cb79958",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_gears_s2_a",
+   "label": "Gears",
+   "description": "Progression Reward Item",
+   "icon": "fb650a2ceb89fef0",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_scarab_s2_a",
+   "label": "Scarab",
+   "description": "Progression Reward Item",
+   "icon": "edab3b3bb10ddc8a",
+   "models": []
+  },
+  {
+   "id": "rwd_decalback_default",
+   "label": "Default",
+   "description": "Progression Reward Item",
+   "icon": "50a02591def35638",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0001",
+   "label": "Hexa",
+   "description": "Progression Reward Item",
+   "icon": "934d0544d358fb04",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0002",
+   "label": "Atomic",
+   "description": "Progression Reward Item",
+   "icon": "a50511300aa0f52a",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0003",
+   "label": "Botanical",
+   "description": "Progression Reward Item",
+   "icon": "66e831e5070b5816",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0004",
+   "label": "Pumpkin Patch",
+   "description": "Progression Reward Item",
+   "icon": "236c27cb7f214bc6",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0005",
+   "label": "Beveled",
+   "description": "Progression Reward Item",
+   "icon": "e081071e728ae6fa",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0006",
+   "label": "Hotshot",
+   "description": "Progression Reward Item",
+   "icon": "d6c9136aab72e8d4",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0007",
+   "label": "Intersection",
+   "description": "Progression Reward Item",
+   "icon": "152433bfa6d945e8",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0008",
+   "label": "Apiary",
+   "description": "Progression Reward Item",
+   "icon": "36cda50707b12a4c",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0009",
+   "label": "Pennant",
+   "description": "Progression Reward Item",
+   "icon": "f52085d20a1a8770",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0010",
+   "label": "Fast Track",
+   "description": "Progression Reward Item",
+   "icon": "bab12713f2cbb006",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0011",
+   "label": "Ripped",
+   "description": "Progression Reward Item",
+   "icon": "795c07c6ff601d3a",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0012",
+   "label": "Tyrana",
+   "description": "Progression Reward Item",
+   "icon": "4f1413b226981314",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0013",
+   "label": "Cumulus",
+   "description": "Progression Reward Item",
+   "icon": "8cf933672b33be28",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0014",
+   "label": "Stairstep",
+   "description": "Progression Reward Item",
+   "icon": "c97d25495319adf8",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0015",
+   "label": "Doppler",
+   "description": "Progression Reward Item",
+   "icon": "0a90059c5eb200c4",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0016",
+   "label": "Celestial",
+   "description": "Progression Reward Item",
+   "icon": "3cd811e8874a0eea",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0017",
+   "label": "Foamite",
+   "description": "Progression Reward Item",
+   "icon": "ff35313d8ae1a3d6",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0018",
+   "label": "Firework",
+   "description": "Progression Reward Item",
+   "icon": "dcdca7852b89cc72",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0019",
+   "label": "Gargoyle",
+   "description": "Progression Reward Item",
+   "icon": "1f3187502622614e",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0020",
+   "label": "Sweep",
+   "description": "Progression Reward Item",
+   "icon": "d7c5297f423fae9a",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0021",
+   "label": "Target",
+   "description": "Progression Reward Item",
+   "icon": "142809aa4f9403a6",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0022",
+   "label": "Zircon",
+   "description": "Progression Reward Item",
+   "icon": "22601dde966c0d88",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0023",
+   "label": "Flamboyant",
+   "description": "Progression Reward Item",
+   "icon": "e18d3d0b9bc7a0b4",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0024",
+   "label": "Rocketship",
+   "description": "Progression Reward Item",
+   "icon": "a4092b25e3edb364",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0025",
+   "label": "Combo",
+   "description": "Progression Reward Item",
+   "icon": "67e40bf0ee461e58",
+   "models": []
+  },
+  {
+   "id": "rwd_pip_0026",
+   "label": "ui_pip_0026",
+   "description": "Progression Reward Item",
+   "icon": "51ac1f8437be1076",
+   "models": []
+  },
+  {
+   "id": "rwd_decalborder_default",
+   "label": "rwd_decalborder_default",
+   "description": "Progression Reward Item",
+   "icon": "5250591976940972",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_default",
+   "label": "The O.G.",
+   "description": "This is a short spiel about the item",
+   "icon": "6443b2864197331e",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0002",
+   "label": "Summer Splash",
+   "description": "This is a short spiel about the item",
+   "icon": "91e6862795c4900c",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0004",
+   "label": "The Phantom",
+   "description": "This is a short spiel about the item",
+   "icon": "178fb0dce0452ee0",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0005",
+   "label": "Crossed Wires",
+   "description": "This is a short spiel about the item",
+   "icon": "d4629009edee83dc",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0003",
+   "label": "Teatime",
+   "description": "This is a short spiel about the item",
+   "icon": "520ba6f2986f3d30",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0001",
+   "label": "Lost Civilization",
+   "description": "This is a short spiel about the item",
+   "icon": "a7ae92534c3c9e22",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0006",
+   "label": "Bushido",
+   "description": "This is a short spiel about the item",
+   "icon": "e22a847d34168df2",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0007",
+   "label": "Slow Jam",
+   "description": "This is a short spiel about the item",
+   "icon": "21c7a4a839bd20ce",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0008",
+   "label": "Knockout",
+   "description": "This is a short spiel about the item",
+   "icon": "022e321098d54f6a",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0009",
+   "label": "Awoo!",
+   "description": "This is a short spiel about the item",
+   "icon": "c1c312c5957ee256",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0015",
+   "label": "Swing",
+   "description": "This is a short spiel about the item",
+   "icon": "3e73928bc1d665e2",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0010",
+   "label": "8bit",
+   "description": "This is a short spiel about the item",
+   "icon": "8e52b0046dafd520",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0011",
+   "label": "Flamenco",
+   "description": "This is a short spiel about the item",
+   "icon": "4dbf90d16004781c",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0012",
+   "label": "Charge!",
+   "description": "This is a short spiel about the item",
+   "icon": "7bf784a5b9fc7632",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0013",
+   "label": "Hardcore",
+   "description": "This is a short spiel about the item",
+   "icon": "b81aa470b457db0e",
+   "models": []
+  },
+  {
+   "id": "rwd_goal_fx_0014",
+   "label": "Calypso",
+   "description": "This is a short spiel about the item",
+   "icon": "fd9eb25ecc7dc8de",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0014",
+   "label": "RGB",
+   "description": "This is a short spiel about the item",
+   "icon": "1b9092998b5c5424",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0021",
+   "label": "Store 5? Borealis",
+   "description": "This is a short spiel about the item",
+   "icon": "c6c5be7a97d1fa7a",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0011",
+   "label": "Coral",
+   "description": "This is a short spiel about the item",
+   "icon": "abb1b0162725e4e6",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0013",
+   "label": "Hot and Cold",
+   "description": "This is a short spiel about the item",
+   "icon": "5e1484b7f37647f4",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0020",
+   "label": "S7? Ectoplasm",
+   "description": "This is a short spiel about the item",
+   "icon": "05289eaf9a7a5746",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0017",
+   "label": "S7? Lancer",
+   "description": "This is a short spiel about the item",
+   "icon": "2dd886ed52a45a0a",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0019",
+   "label": "?? Shore",
+   "description": "This is a short spiel about the item",
+   "icon": "cddc3080fe679892",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0015",
+   "label": "?? Dawn",
+   "description": "This is a short spiel about the item",
+   "icon": "d87db24c86f7f918",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0022",
+   "label": "Sunset",
+   "description": "This is a short spiel about the item",
+   "icon": "f08daa0e4e29f454",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0018",
+   "label": "?? Kelp Forest",
+   "description": "This is a short spiel about the item",
+   "icon": "0e311055f3cc35ae",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0016",
+   "label": "Brimstone",
+   "description": "This is a short spiel about the item",
+   "icon": "ee35a6385f0ff736",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0009",
+   "label": "Lemon",
+   "description": "This is a short spiel about the item",
+   "icon": "27cd3202d25f7eac",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0004",
+   "label": "Lime",
+   "description": "This is a short spiel about the item",
+   "icon": "f181901ba764b21a",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0006",
+   "label": "Mesa",
+   "description": "This is a short spiel about the item",
+   "icon": "0424a4ba73371108",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0003",
+   "label": "Garnet",
+   "description": "This is a short spiel about the item",
+   "icon": "b4058635df4ea1ca",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0008",
+   "label": "Forest",
+   "description": "This is a short spiel about the item",
+   "icon": "e42012d7dff4d390",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0001",
+   "label": "Amber",
+   "description": "This is a short spiel about the item",
+   "icon": "41a0b2940b1d02d8",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0010",
+   "label": "Seaglass",
+   "description": "This is a short spiel about the item",
+   "icon": "685c90c32a8e49da",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0002",
+   "label": "Morpho",
+   "description": "This is a short spiel about the item",
+   "icon": "77e8a6e0d2e50cf6",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0005",
+   "label": "Ultramarine",
+   "description": "This is a short spiel about the item",
+   "icon": "326cb0ceaacf1f26",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0007",
+   "label": "Violet",
+   "description": "This is a short spiel about the item",
+   "icon": "c7c9846f7e9cbc34",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0012",
+   "label": "Wisteria",
+   "description": "This is a short spiel about the item",
+   "icon": "9df9a462feddeac8",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0025",
+   "label": "Black and White",
+   "description": "This is a short spiel about the item",
+   "icon": "b509bc203603e784",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0029",
+   "label": "Nobility",
+   "description": "This is a short spiel about the item",
+   "icon": "a0a83eec4e93860e",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0024",
+   "label": "Ghast",
+   "description": "This is a short spiel about the item",
+   "icon": "76e49cf53ba84ab8",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0026",
+   "label": "Sanguine",
+   "description": "This is a short spiel about the item",
+   "icon": "8341a854effbe9aa",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0027",
+   "label": "S7? Moonlight",
+   "description": "This is a short spiel about the item",
+   "icon": "40ac8881e2504496",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0028",
+   "label": "Peach",
+   "description": "This is a short spiel about the item",
+   "icon": "63451e3943382b32",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0030",
+   "label": "Verdant",
+   "description": "This is a short spiel about the item",
+   "icon": "ef399c2db642b178",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0023",
+   "label": "Cotton Candy",
+   "description": "This is a short spiel about the item",
+   "icon": "33608adb43825968",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0031",
+   "label": "Store 4? Halloween",
+   "description": "This is a short spiel about the item",
+   "icon": "2cd4bcf8bbe91c44",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0032",
+   "label": "Hyperlight",
+   "description": "This is a short spiel about the item",
+   "icon": "1a9ca88c6211126a",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0033",
+   "label": "Store 5? Vroom",
+   "description": "This is a short spiel about the item",
+   "icon": "d97188596fbabf56",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0034",
+   "label": "S7? Daydream",
+   "description": "This is a short spiel about the item",
+   "icon": "9cf59e771790ac86",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0035",
+   "label": "Store 4? Paladin",
+   "description": "This is a short spiel about the item",
+   "icon": "5f18bea21a3b01ba",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0036",
+   "label": "S7? Fume",
+   "description": "This is a short spiel about the item",
+   "icon": "6950aad6c3c30f94",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0037",
+   "label": "S7? Circadian",
+   "description": "This is a short spiel about the item",
+   "icon": "aabd8a03ce68a2a8",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0038",
+   "label": "?? Springtime",
+   "description": "This is a short spiel about the item",
+   "icon": "89541cbb6f00cd0c",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0039",
+   "label": "Blush",
+   "description": "This is a short spiel about the item",
+   "icon": "4ab93c6e62ab6030",
+   "models": []
+  },
+  {
+   "id": "rwd_emissive_0040",
+   "label": "?? Valor",
+   "description": "This is a short spiel about the item",
+   "icon": "3b5b999d837c653a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_battery_s1_a",
+   "label": "Battery",
+   "description": "Progression Reward Item",
+   "icon": "6a3887a0364b2146",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_coffee_s1_a",
+   "label": "Coffee",
+   "description": "Progression Reward Item",
+   "icon": "eb6684ebc7bbcfd4",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_meteor_s1_a",
+   "label": "Meteor",
+   "description": "Progression Reward Item",
+   "icon": "de3e311df9efdf82",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_default",
+   "label": "None",
+   "description": "Progression Reward Item",
+   "icon": "6c120c3af1b9f224",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_a_secondary",
+   "label": "Point",
+   "description": "Progression Reward Item",
+   "icon": "8b424ef110444656",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_b_secondary",
+   "label": "Blocked",
+   "description": "Progression Reward Item",
+   "icon": "bd0a5a85c9bc4878",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_c_secondary",
+   "label": "Slice",
+   "description": "Progression Reward Item",
+   "icon": "7ee77a50c417e544",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_d_secondary",
+   "label": "Sharp",
+   "description": "Progression Reward Item",
+   "icon": "3b636c7ebc3df694",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_e_secondary",
+   "label": "Triangle",
+   "description": "Progression Reward Item",
+   "icon": "f88e4cabb1965ba8",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_f_secondary",
+   "label": "Skewed",
+   "description": "Progression Reward Item",
+   "icon": "cec658df686e5586",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_g_secondary",
+   "label": "Flame On",
+   "description": "Progression Reward Item",
+   "icon": "0d2b780a65c5f8ba",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_h_secondary",
+   "label": "Disc",
+   "description": "Progression Reward Item",
+   "icon": "2ec2eeb2c4ad971e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_i_secondary",
+   "label": "Edge",
+   "description": "Progression Reward Item",
+   "icon": "ed2fce67c9063a22",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_j_secondary",
+   "label": "Stairway",
+   "description": "Progression Reward Item",
+   "icon": "db67da1310fe340c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_k_secondary",
+   "label": "Classic",
+   "description": "Progression Reward Item",
+   "icon": "188afac61d559930",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_m_secondary",
+   "label": "Arrow",
+   "description": "Progression Reward Item",
+   "icon": "9ee3cc3d68d427dc",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_o_secondary",
+   "label": "Striped",
+   "description": "Progression Reward Item",
+   "icon": "6b46f89cbc8784ce",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_q_secondary",
+   "label": "Hero",
+   "description": "Progression Reward Item",
+   "icon": "8626551753a462fa",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_r_secondary",
+   "label": "Digital",
+   "description": "Progression Reward Item",
+   "icon": "b06e41638a5c6cd4",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_t_secondary",
+   "label": "Notched",
+   "description": "Progression Reward Item",
+   "icon": "36077798ffddd238",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_v_secondary",
+   "label": "Peaks",
+   "description": "Progression Reward Item",
+   "icon": "c3a243392b8e712a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s1",
+   "label": "VRML S1",
+   "description": "Progression Reward Item",
+   "icon": "db91c8a59273a61a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s1_finalist",
+   "label": "VRML S1 Finals",
+   "description": "Progression Reward Item",
+   "icon": "748cffe885af34a6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s1_champion",
+   "label": "VRML S1 Champ",
+   "description": "Progression Reward Item",
+   "icon": "c5b7a87b4e0df074",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_preseason",
+   "label": "VRML Preseason",
+   "description": "This is a short spiel about the item",
+   "icon": "65be6018d4eb7846",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s2",
+   "label": "VRML S2",
+   "description": "Progression Reward Item",
+   "icon": "edd9dcd14b8ba834",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s2_finalist",
+   "label": "VRML S2 Finals",
+   "description": "Progression Reward Item",
+   "icon": "5476fd282fde1af4",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s2_champion",
+   "label": "VRML S2 Champ",
+   "description": "Progression Reward Item",
+   "icon": "e54daabbe47cde26",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s3",
+   "label": "VRML S3",
+   "description": "Progression Reward Item",
+   "icon": "2e34fc0446200508",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s3_finalist",
+   "label": "VRML S3 Finals",
+   "description": "Progression Reward Item",
+   "icon": "a6fec37521895fd6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_vrml_s3_champion",
+   "label": "VRML S3 Champ",
+   "description": "Progression Reward Item",
+   "icon": "17c594e6ea2b9b04",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s1_developer",
+   "label": "RAD Developer",
+   "description": "Progression Reward Item",
+   "icon": "5250591976940972",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s2_b_secondary",
+   "label": "Rectilinear",
+   "description": "Progression Reward Item",
+   "icon": "a89de50cf4c1262a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s2_c",
+   "label": "Nimbus",
+   "description": "Progression Reward Item",
+   "icon": "6b70c5d9f96a8b16",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s2_g_secondary",
+   "label": "Clockwork",
+   "description": "Progression Reward Item",
+   "icon": "18bcc78358b896e8",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_s2_h_secondary",
+   "label": "Serpent",
+   "description": "Progression Reward Item",
+   "icon": "3b55513bf9d0f94c",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s1_a",
+   "label": "Crown",
+   "description": "This is a short spiel about the item",
+   "icon": "68de58821b4daede",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s1_b",
+   "label": "Good Game",
+   "description": "This is a short spiel about the item",
+   "icon": "5fc2bb7a8ab1b218",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s1_c",
+   "label": "Interlocked",
+   "description": "This is a short spiel about the item",
+   "icon": "baa336da352ad68e",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s1_d",
+   "label": "Dice",
+   "description": "This is a short spiel about the item",
+   "icon": "a2a78a7fcfd17440",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s2_a",
+   "label": "Barbed Wire",
+   "description": "This is a short spiel about the item",
+   "icon": "cbbcb6b2552fea26",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s2_b",
+   "label": "Hieroglyphs",
+   "description": "This is a short spiel about the item",
+   "icon": "26579d6a8b02978c",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_s2_c",
+   "label": "Honey Bees",
+   "description": "This is a short spiel about the item",
+   "icon": "6103ccb2dc934ee2",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_alien_a",
+   "label": "Alien",
+   "description": "Progression Reward Item",
+   "icon": "19287a61fc0c2b3a",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_pizza_a",
+   "label": "Pizza",
+   "description": "Progression Reward Item",
+   "icon": "c2d542bf2d1e6e22",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_skull_a",
+   "label": "Skulls",
+   "description": "Progression Reward Item",
+   "icon": "41367498cb79b8fa",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_trex_skull_a",
+   "label": "Rexes",
+   "description": "Progression Reward Item",
+   "icon": "0316dbc85cd5100e",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_cupcake_a",
+   "label": "Cupcakes",
+   "description": "Progression Reward Item",
+   "icon": "aa90b994bda0ffc0",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_hamburger_a",
+   "label": "Hamburgers",
+   "description": "Progression Reward Item",
+   "icon": "9715201e946b344e",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_quest_a",
+   "label": "Quest",
+   "description": "Progression Reward Item",
+   "icon": "cbe2f9cfb4b4fab6",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_rage_wolf_a",
+   "label": "Rage Wolves",
+   "description": "Progression Reward Item",
+   "icon": "ed79bb95f2c71de8",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_rocket_a",
+   "label": "Rockets",
+   "description": "Progression Reward Item",
+   "icon": "6d3ee4ad91afad20",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_salt_a",
+   "label": "Salty",
+   "description": "Progression Reward Item",
+   "icon": "c0aed901ebffa8e8",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s1_a_default",
+   "label": "Morning Glory",
+   "description": "Progression Reward Item",
+   "icon": "73ed5d01d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s1_b_default",
+   "label": "Seafoam",
+   "description": "Progression Reward Item",
+   "icon": "73ed5d02d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s1_c_default",
+   "label": "Burnt Embers",
+   "description": "Progression Reward Item",
+   "icon": "73ed5d03d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s1_d_default",
+   "label": "Luminescence",
+   "description": "Progression Reward Item",
+   "icon": "73ed5d04d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s2_a_default",
+   "label": "Stereoscopic",
+   "description": "Progression Reward Item",
+   "icon": "73ee5d01d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s2_b_default",
+   "label": "Patina",
+   "description": "Progression Reward Item",
+   "icon": "73ee5d02d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s2_c_default",
+   "label": "Desert Jewel",
+   "description": "Progression Reward Item",
+   "icon": "73ee5d03d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_default",
+   "label": "None",
+   "description": "Progression Reward Item",
+   "icon": "6c120c3af1b9f224",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s1_a",
+   "label": "Mechasaur",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s1_b",
+   "label": "Oops! I Dinged It Again",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s1_c",
+   "label": "Super Nova",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s2_a",
+   "label": "The Wall",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s2_b",
+   "label": "Tipper of Scales",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_s2_c",
+   "label": "Recycled Goods",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_a",
+   "label": "Dunk Master",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_b",
+   "label": "Flamingo Tamer",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_c",
+   "label": "11.5",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_d",
+   "label": "Ace",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_title_e",
+   "label": "Fists of Fury",
+   "description": "Progression Reward Item",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s03_01",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s03_02",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s03_03",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s03_04",
+   "label": "+200 Echo Points",
+   "description": "",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_starter_pack_01",
+   "label": "+500 Echo Points",
+   "description": "This is a short spiel about the item",
+   "icon": "df79c806b1c04706",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s03_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s03_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s03_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s03_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s03_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s03_01",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s03_02",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s03_03",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s03_04",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s03_05",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_herosuit_a",
+   "label": "Vega X-3",
+   "description": "",
+   "icon": "d3cde4924422081e",
+   "models": [
+    [
+     592,
+     "4d390b027b642d29"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_herosuit_a",
+   "label": "Vega X-3",
+   "description": "",
+   "icon": "393bf5be342e1c14",
+   "models": [
+    [
+     544,
+     "a906483bc20bc5be"
+    ],
+    [
+     592,
+     "25c2e920a773020e"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_samurai_a",
+   "label": "Samurai",
+   "description": "",
+   "icon": "b313ff673b99d914",
+   "models": [
+    [
+     544,
+     "f159c4569764f6f8"
+    ],
+    [
+     592,
+     "8e2a298024d0b65e"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_samurai_a",
+   "label": "Samurai",
+   "description": "",
+   "icon": "525d2d7ec8de4666",
+   "models": [
+    [
+     544,
+     "3c022a4b3391741f"
+    ],
+    [
+     568,
+     "d2bd7420cdd645c3"
+    ],
+    [
+     592,
+     "3c022a4b3391741f"
+    ],
+    [
+     616,
+     "d2bd7420cdd645c3"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_samurai_a",
+   "label": "Samurai",
+   "description": "",
+   "icon": "c2daaf6bcc0f2d12",
+   "models": [
+    [
+     592,
+     "702583d263318afb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_spartan_a",
+   "label": "Spartan",
+   "description": "",
+   "icon": "bebd95ec33b8170c",
+   "models": [
+    [
+     592,
+     "f7876247c5d3befb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_spartan_a",
+   "label": "Spartan",
+   "description": "",
+   "icon": "2e3a17f937697c78",
+   "models": [
+    [
+     544,
+     "afda14fe49e7c7b1"
+    ],
+    [
+     568,
+     "f962aa8c7c93c533"
+    ],
+    [
+     592,
+     "afda14fe49e7c7b1"
+    ],
+    [
+     616,
+     "f962aa8c7c93c533"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_spartan_a",
+   "label": "Spartan",
+   "description": "",
+   "icon": "cf74c5e0c42ee30a",
+   "models": [
+    [
+     544,
+     "f1de66b702c214cc"
+    ],
+    [
+     592,
+     "ce5d3ede2709e6dc"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_lazurlite_a",
+   "label": "Lazurite",
+   "description": "",
+   "icon": "aea68049a16de46c",
+   "models": [
+    [
+     592,
+     "2d7923bb70b531cd"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_lazurlite_a",
+   "label": "Lazurite",
+   "description": "",
+   "icon": "95e1b6b2afe737e0",
+   "models": [
+    [
+     544,
+     "5684010761931d1f"
+    ],
+    [
+     568,
+     "527b61222dcf8e1f"
+    ],
+    [
+     592,
+     "5684010761931d1f"
+    ],
+    [
+     616,
+     "527b61222dcf8e1f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_emote_battle_cry_a",
+   "label": "Battle Cry",
+   "description": "",
+   "icon": "6134a61ab3426afe",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_samurai_mask_a",
+   "label": "Samurai Mask",
+   "description": "",
+   "icon": "d372712fa28409a8",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_lightning_a",
+   "label": "Lightning",
+   "description": "",
+   "icon": "2305f18b33c6b4d2",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_seigaiha_a",
+   "label": "Seigaiha",
+   "description": "",
+   "icon": "ab6f5a923e181c4a",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_spear_shield_a",
+   "label": "Phalanx",
+   "description": "",
+   "icon": "ef81f3e66ae0d754",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_circuit_board_a",
+   "label": "Circuit Board",
+   "description": "",
+   "icon": "4c9e0efd9ae0d4c8",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_oni_a",
+   "label": "Oni",
+   "description": "",
+   "icon": "c32651c9de5df68c",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_spartan_a",
+   "label": "Spartan",
+   "description": "",
+   "icon": "84259afc5221af6e",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_narwhal_a",
+   "label": "Narwhal",
+   "description": "",
+   "icon": "a525de2724e7349c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_tori_a",
+   "label": "Tori",
+   "description": "",
+   "icon": "33fdca547b7284f6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_spear_a",
+   "label": "Spear",
+   "description": "",
+   "icon": "e4c1167ea77fcc14",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_diamonds_a",
+   "label": "Diamonds",
+   "description": "",
+   "icon": "3e8c9660634e8c88",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_sashimono_a",
+   "label": "Sashimono",
+   "description": "",
+   "icon": "343a06e53a07adc6",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_spartan_shield_a",
+   "label": "Spartan Shield",
+   "description": "",
+   "icon": "216646ab23b8289c",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_triangles_a",
+   "label": "Triangles",
+   "description": "",
+   "icon": "98bc0e3264f88224",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_lone_echo_2_a",
+   "label": "Lone Echo 2",
+   "description": "",
+   "icon": "835c99c080c3afd8",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_lone_echo_2_a",
+   "label": "Lone Echo 2",
+   "description": "",
+   "icon": "ecf97d0efb1fd6c4",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_lone_echo_2_a",
+   "label": "Lone Echo 2",
+   "description": "",
+   "icon": "4340b72d634dab96",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_lone_echo_2_a",
+   "label": "Lone Echo 2",
+   "description": "",
+   "icon": "7a3e21d9bc252b1c",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s3_echo_pass_bronze_a",
+   "label": "Intro Tier Echo Pass S3",
+   "description": "",
+   "icon": "82ef0cfc23afdb6e",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s3_echo_pass_silver_a",
+   "label": "Mid Tier Echo Pass S3",
+   "description": "",
+   "icon": "e78efa76a120c29a",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_s3_echo_pass_gold_a",
+   "label": "Top Tier Echo Pass S3",
+   "description": "",
+   "icon": "8e33437e7e742612",
+   "models": []
+  },
+  {
+   "id": "rwd_title_guardian_a",
+   "label": "The Guardian",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_shield_bearer_a",
+   "label": "Shield Bearer",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_ronin_a",
+   "label": "Ronin",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s3_tint_a",
+   "label": "Frostflame",
+   "description": "",
+   "icon": "73ef5d01d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s3_tint_b",
+   "label": "Bloodstained",
+   "description": "",
+   "icon": "73ef5d02d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s3_tint_c",
+   "label": "Biohazard",
+   "description": "",
+   "icon": "73ef5d03d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s3_tint_d",
+   "label": "Mixed Berry",
+   "description": "",
+   "icon": "73ef5d04d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_s3_tint_e",
+   "label": "Tranquility",
+   "description": "",
+   "icon": "73ef5d05d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_aurum_a",
+   "label": "Aurum",
+   "description": "",
+   "icon": "f27baba556c6701a",
+   "models": [
+    [
+     592,
+     "9710b19e91ba400b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_aurum_a",
+   "label": "Aurum",
+   "description": "",
+   "icon": "f3fe146b3178f23a",
+   "models": [
+    [
+     544,
+     "37684a020a1250e5"
+    ],
+    [
+     568,
+     "3bd670235c0f32ed"
+    ],
+    [
+     592,
+     "37684a020a1250e5"
+    ],
+    [
+     616,
+     "3bd670235c0f32ed"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_banner_0000",
+   "label": "Hemisphere",
+   "description": "",
+   "icon": "809b56553d51eaca",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0000",
+   "label": "Pancakes",
+   "description": "",
+   "icon": "85f583ba28b74c72",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0000",
+   "label": "Upside Down",
+   "description": "",
+   "icon": "9171e934102448b4",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0000",
+   "label": "Intro Tier Echo Pass S4",
+   "description": "",
+   "icon": "7809b5e6ad5bb216",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0000",
+   "label": "Ripple",
+   "description": "",
+   "icon": "5f0c9bf2baf22c5a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0000",
+   "label": "Ollie",
+   "description": "",
+   "icon": "206d1bec61cb2670",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0000",
+   "label": "Bubblemint",
+   "description": "",
+   "icon": "30ec3250d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0000",
+   "label": "Rider of Rhythm",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0001",
+   "label": "Mural",
+   "description": "",
+   "icon": "4376768030fa47f6",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0002",
+   "label": "Swoop",
+   "description": "",
+   "icon": "753e62f4e90249d8",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0003",
+   "label": "Amplifier",
+   "description": "",
+   "icon": "b6d34221e4a9e4e4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0004",
+   "label": "Serrated",
+   "description": "",
+   "icon": "f357540f9c83f734",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0005",
+   "label": "Cosmonaut",
+   "description": "",
+   "icon": "30ba74da91285a08",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0006",
+   "label": "Zephyr",
+   "description": "",
+   "icon": "06f260ae48d05426",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0007",
+   "label": "Rime",
+   "description": "",
+   "icon": "c51f407b457bf91a",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0008",
+   "label": "Rawhide",
+   "description": "",
+   "icon": "e6f6d6c3e41396be",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0009",
+   "label": "Buzzsaw",
+   "description": "",
+   "icon": "251bf616e9b83b82",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0010",
+   "label": "Maw",
+   "description": "",
+   "icon": "6a8a54d711690cf4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0011",
+   "label": "Ragged",
+   "description": "",
+   "icon": "a96774021cc2a1c8",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0012",
+   "label": "Capacitor",
+   "description": "",
+   "icon": "9f2f6076c53aafe6",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0013",
+   "label": "Drosera",
+   "description": "",
+   "icon": "5cc240a3c89102da",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0014",
+   "label": "Crest",
+   "description": "",
+   "icon": "1946568db0bb110a",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0001",
+   "label": "Graffiti",
+   "description": "",
+   "icon": "4618a36f251ce14e",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0002",
+   "label": "Mixtape",
+   "description": "",
+   "icon": "7050b71bfce4ef60",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0003",
+   "label": "Salamander",
+   "description": "",
+   "icon": "b3bd97cef14f425c",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0004",
+   "label": "Pegasus",
+   "description": "",
+   "icon": "f63981e08965518c",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0005",
+   "label": "Interceptor",
+   "description": "",
+   "icon": "35d4a13584cefcb0",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0006",
+   "label": "Gas Mask",
+   "description": "",
+   "icon": "039cb5415d36f29e",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0007",
+   "label": "Donut",
+   "description": "",
+   "icon": "c0719594509d5fa2",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0008",
+   "label": "Blink",
+   "description": "",
+   "icon": "e398032cf1f53006",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0009",
+   "label": "Incursion",
+   "description": "",
+   "icon": "207523f9fc5e9d3a",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0010",
+   "label": "Hammerhead",
+   "description": "",
+   "icon": "6fe48138048faa4c",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0011",
+   "label": "Manta",
+   "description": "",
+   "icon": "ac09a1ed09240770",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0012",
+   "label": "Taiyaki",
+   "description": "",
+   "icon": "9a41b599d0dc095e",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0013",
+   "label": "Rhinestone",
+   "description": "",
+   "icon": "59ac954cdd77a462",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0014",
+   "label": "Eruption",
+   "description": "",
+   "icon": "1c288362a55db7b2",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0015",
+   "label": "Treant",
+   "description": "",
+   "icon": "dfc5a3b7a8f61a8e",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0016",
+   "label": "Spook",
+   "description": "",
+   "icon": "e98db7c3710e14a0",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0018",
+   "label": "Physician",
+   "description": "",
+   "icon": "098901aeddcdd638",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0019",
+   "label": "Hoot",
+   "description": "",
+   "icon": "ca64217bd0667b04",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0020",
+   "label": "Grim",
+   "description": "",
+   "icon": "02908f54b47bb4d0",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0001",
+   "label": "Equalizer",
+   "description": "",
+   "icon": "529cc9e11d8fe588",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0002",
+   "label": "High Note",
+   "description": "",
+   "icon": "64d4dd95c477eba6",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0003",
+   "label": "Get Stomped",
+   "description": "",
+   "icon": "a739fd40c9dc469a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0004",
+   "label": "Blast Off",
+   "description": "",
+   "icon": "e2bdeb6eb1f6554a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0005",
+   "label": "Burning",
+   "description": "",
+   "icon": "2150cbbbbc5df876",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0006",
+   "label": "Grimace",
+   "description": "",
+   "icon": "1718dfcf65a5f658",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0007",
+   "label": "Splat",
+   "description": "",
+   "icon": "d4f5ff1a680e5b64",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0008",
+   "label": "Speedometer",
+   "description": "",
+   "icon": "f71c69a2c96634c0",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0009",
+   "label": "Lock On",
+   "description": "",
+   "icon": "34f14977c4cd99fc",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0010",
+   "label": "Jelly",
+   "description": "",
+   "icon": "7b60ebb63c1cae8a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0011",
+   "label": "Chomp",
+   "description": "",
+   "icon": "b88dcb6331b703b6",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0012",
+   "label": "Scuttle",
+   "description": "",
+   "icon": "8ec5df17e84f0d98",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0013",
+   "label": "Shimmer",
+   "description": "",
+   "icon": "4d28ffc2e5e4a0a4",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0014",
+   "label": "Boba",
+   "description": "",
+   "icon": "08ace9ec9dceb374",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0015",
+   "label": "rwd_emote_0015",
+   "description": "",
+   "icon": "cb41c93990651e48",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0001",
+   "label": "Mid Tier Echo Pass S4",
+   "description": "",
+   "icon": "bbe49533a0f01f2a",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0002",
+   "label": "Top Tier Echo Pass S4",
+   "description": "",
+   "icon": "8dac814779081104",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0003",
+   "label": "Intro Tier Echo Pass S5",
+   "description": "",
+   "icon": "4e41a19274a3bc38",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0004",
+   "label": "Mid Tier Echo Pass S5",
+   "description": "",
+   "icon": "0bc5b7bc0c89afe8",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0005",
+   "label": "Top Tier Echo Pass S5",
+   "description": "",
+   "icon": "c8289769012202d4",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0006",
+   "label": "VRML S4",
+   "description": "Progression Reward Item",
+   "icon": "fe60831dd8da0cfa",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0007",
+   "label": "VRML S4 Finals",
+   "description": "Progression Reward Item",
+   "icon": "3d8da3c8d571a1c6",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0008",
+   "label": "VRML S4 Champ",
+   "description": "Progression Reward Item",
+   "icon": "1e6435707419ce62",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0009",
+   "label": "Intro Tier Echo Pass S6",
+   "description": "",
+   "icon": "dd8915a579b2635e",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0010",
+   "label": "Mid Tier Echo Pass S6",
+   "description": "",
+   "icon": "9218b76481635428",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0011",
+   "label": "Top Tier Echo Pass S6",
+   "description": "",
+   "icon": "51f597b18cc8f914",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0012",
+   "label": "Bronze S7",
+   "description": "",
+   "icon": "67bd83c55530f73a",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0013",
+   "label": "Silver S7",
+   "description": "",
+   "icon": "a450a310589b5a06",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0014",
+   "label": "Gold S7",
+   "description": "",
+   "icon": "e1d4b53e20b149d6",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0015",
+   "label": "Platinum S7",
+   "description": "",
+   "icon": "223995eb2d1ae4ea",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0001",
+   "label": "Vector",
+   "description": "",
+   "icon": "9ce1bb27b7598166",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0002",
+   "label": "Bass",
+   "description": "",
+   "icon": "aaa9af536ea18f48",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0003",
+   "label": "Hailstone",
+   "description": "",
+   "icon": "69448f86630a2274",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0004",
+   "label": "Metallurgy",
+   "description": "",
+   "icon": "2cc099a81b2031a4",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0005",
+   "label": "Skid Marks",
+   "description": "",
+   "icon": "ef2db97d168b9c98",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0006",
+   "label": "Inferno",
+   "description": "",
+   "icon": "d965ad09cf7392b6",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0007",
+   "label": "Quicksilver",
+   "description": "",
+   "icon": "1a888ddcc2d83f8a",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0008",
+   "label": "Aquatic",
+   "description": "",
+   "icon": "39611b6463b0502e",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0009",
+   "label": "Wavy",
+   "description": "",
+   "icon": "fa8c3bb16e1bfd12",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0010",
+   "label": "Seashells",
+   "description": "",
+   "icon": "b51d997096caca64",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0011",
+   "label": "Vortex",
+   "description": "",
+   "icon": "76f0b9a59b616758",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0012",
+   "label": "Harlequin",
+   "description": "",
+   "icon": "40b8add142996976",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0013",
+   "label": "rwd_pattern_0013",
+   "description": "",
+   "icon": "83558d044f32c44a",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0014",
+   "label": "rwd_pattern_0014",
+   "description": "",
+   "icon": "c6d19b2a3718d79a",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0015",
+   "label": "rwd_pattern_0015",
+   "description": "",
+   "icon": "053cbbff3ab37aa6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0001",
+   "label": "Fracture",
+   "description": "",
+   "icon": "e3803b396c608b4c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0002",
+   "label": "rwd_tag_0002",
+   "description": "",
+   "icon": "d5c82f4db5988562",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0003",
+   "label": "Downbeat",
+   "description": "",
+   "icon": "16250f98b833285e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0004",
+   "label": "Discus",
+   "description": "",
+   "icon": "53a119b6c0193b8e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0005",
+   "label": "Scorpius",
+   "description": "",
+   "icon": "904c3963cdb296b2",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0006",
+   "label": "Soar",
+   "description": "",
+   "icon": "a6042d17144a989c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0007",
+   "label": "Permafrost",
+   "description": "",
+   "icon": "65e90dc219e135a0",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0008",
+   "label": "VRML S4",
+   "description": "Progression Reward Item",
+   "icon": "46009b7ab8895a04",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0009",
+   "label": "VRML S4 Finals",
+   "description": "",
+   "icon": "85edbbafb522f738",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0010",
+   "label": "VRML S4 Champ",
+   "description": "Progression Reward Item",
+   "icon": "ca7c196e4df3c04e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0011",
+   "label": "Echo VR Game Admin",
+   "description": "Progression Reward Item",
+   "icon": "099139bb40586d72",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0012",
+   "label": "Exhaust",
+   "description": "",
+   "icon": "3fd92dcf99a0635c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0013",
+   "label": "Shiv",
+   "description": "",
+   "icon": "fc340d1a940bce60",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0014",
+   "label": "Barbed",
+   "description": "",
+   "icon": "b9b01b34ec21ddb0",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0015",
+   "label": "Boost",
+   "description": "",
+   "icon": "7a5d3be1e18a708c",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0001",
+   "label": "Swiss",
+   "description": "",
+   "icon": "30ec3251d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0002",
+   "label": "Lilac",
+   "description": "",
+   "icon": "30ec3252d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0003",
+   "label": "Prime",
+   "description": "",
+   "icon": "30ec3253d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0004",
+   "label": "Moonwalker",
+   "description": "",
+   "icon": "30ec3254d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0005",
+   "label": "Flaxen",
+   "description": "",
+   "icon": "30ec3255d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0006",
+   "label": "Reptilian",
+   "description": "",
+   "icon": "30ec3256d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0007",
+   "label": "Marimo",
+   "description": "",
+   "icon": "30ec3257d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0008",
+   "label": "Oxidation",
+   "description": "",
+   "icon": "30ec3258d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0009",
+   "label": "Badlands",
+   "description": "",
+   "icon": "30ec3259d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0010",
+   "label": "Ignition",
+   "description": "",
+   "icon": "30ec3350d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0011",
+   "label": "Fuse",
+   "description": "",
+   "icon": "30ec3351d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0012",
+   "label": "Amalgam",
+   "description": "",
+   "icon": "30ec3352d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0013",
+   "label": "Algae",
+   "description": "",
+   "icon": "30ec3353d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0014",
+   "label": "Coastline",
+   "description": "",
+   "icon": "30ec3354d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0015",
+   "label": "Mesopelagic",
+   "description": "",
+   "icon": "30ec3355d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0001",
+   "label": "Street Artist",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0002",
+   "label": "DJ",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0003",
+   "label": "Shooting Star",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0004",
+   "label": "Scrapper",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0005",
+   "label": "Arena Outcast",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0006",
+   "label": "Atomic Powerhouse",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0007",
+   "label": "Changer of Tides",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0008",
+   "label": "Deep Dive Striker",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0009",
+   "label": "Free Floater",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0010",
+   "label": "Ghastly Esquire",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0011",
+   "label": "Eldritch Eye",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0012",
+   "label": "Knightmare",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0013",
+   "label": "Master Passer",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0014",
+   "label": "The Valiant",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0015",
+   "label": "The Invincible",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0016",
+   "label": "rwd_title_0016",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0017",
+   "label": "rwd_title_0017",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0018",
+   "label": "rwd_title_0018",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_title_0019",
+   "label": "rwd_title_0019",
+   "description": "",
+   "icon": "c3f03e33af1c8a3a",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0015",
+   "label": "Abyss",
+   "description": "",
+   "icon": "daab7658bd10bc36",
+   "models": []
+  },
+  {
+   "id": "rwd_chassis_sporty_a",
+   "label": "Comet",
+   "description": "",
+   "icon": "ac8f0c6460406932",
+   "models": [
+    [
+     544,
+     "a002e3e62ca6ac26"
+    ],
+    [
+     592,
+     "4ccd6fad526c3ad2"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_funk_a",
+   "label": "V-IP",
+   "description": "",
+   "icon": "e4b3d27f90ac1bba",
+   "models": [
+    [
+     544,
+     "5f3a58e0becbf8c8"
+    ],
+    [
+     592,
+     "1226bad704968da8"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_funk_a",
+   "label": "V-IP",
+   "description": "",
+   "icon": "483151efd5decc04",
+   "models": [
+    [
+     544,
+     "fb94f46e068419c7"
+    ],
+    [
+     568,
+     "0e42078d70a2e621"
+    ],
+    [
+     592,
+     "fb94f46e068419c7"
+    ],
+    [
+     616,
+     "0e42078d70a2e621"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_funk_a",
+   "label": "V-IP",
+   "description": "",
+   "icon": "567e0a4b0c4ed32c",
+   "models": [
+    [
+     592,
+     "b1eed6a0edd02863"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_streetwear_a",
+   "label": "Tempo",
+   "description": "",
+   "icon": "97d7e5198c081a52",
+   "models": [
+    [
+     592,
+     "f60b9f7f22680933"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_streetwear_a",
+   "label": "Tempo",
+   "description": "",
+   "icon": "2975e926b054e35c",
+   "models": [
+    [
+     544,
+     "832422bdb2e105a5"
+    ],
+    [
+     568,
+     "1b09188188a533d5"
+    ],
+    [
+     592,
+     "832422bdb2e105a5"
+    ],
+    [
+     616,
+     "1b09188188a533d5"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_streetwear_a",
+   "label": "Tempo",
+   "description": "",
+   "icon": "352e97628566727c",
+   "models": [
+    [
+     544,
+     "6df242254c2a8912"
+    ],
+    [
+     592,
+     "b8d8175c015bd67a"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_frost_a",
+   "label": "J4CK FR0-ST",
+   "description": "",
+   "icon": "bdae00a0c66b9b1c",
+   "models": [
+    [
+     544,
+     "386b3f59a85b99b2"
+    ],
+    [
+     592,
+     "79f6069ed9dfd4de"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_frost_a",
+   "label": "J4CK FR0-ST",
+   "description": "",
+   "icon": "0f37d8f54b652ba4",
+   "models": [
+    [
+     544,
+     "da6bb47feeaca001"
+    ],
+    [
+     568,
+     "413ff79895207021"
+    ],
+    [
+     592,
+     "da6bb47feeaca001"
+    ],
+    [
+     616,
+     "413ff79895207021"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_frost_a",
+   "label": "J4CK FR0-ST",
+   "description": "",
+   "icon": "54e1fe6845cec528",
+   "models": [
+    [
+     592,
+     "3a4fcafaa4d6e7cb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_avian_a",
+   "label": "Avian",
+   "description": "",
+   "icon": "bdb110a05d05bdde",
+   "models": [
+    [
+     592,
+     "d1b2fc66c509fd8d"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_avian_a",
+   "label": "Avian",
+   "description": "",
+   "icon": "e667363d53ae5352",
+   "models": [
+    [
+     544,
+     "05c0d7fa225d5c0d"
+    ],
+    [
+     568,
+     "1f2298ed8257d1c1"
+    ],
+    [
+     592,
+     "05c0d7fa225d5c0d"
+    ],
+    [
+     616,
+     "1f2298ed8257d1c1"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_reptile_a",
+   "label": "Kaiju",
+   "description": "",
+   "icon": "b0d69dab1ff9bf32",
+   "models": [
+    [
+     544,
+     "86d270516ac41e15"
+    ],
+    [
+     568,
+     "a32402670c69e8bb"
+    ],
+    [
+     592,
+     "86d270516ac41e15"
+    ],
+    [
+     616,
+     "a32402670c69e8bb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_reptile_a",
+   "label": "Kaiju",
+   "description": "",
+   "icon": "20511fbe1b28d446",
+   "models": [
+    [
+     592,
+     "f86b33eb0297e223"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_retro_a",
+   "label": "Rocketeer",
+   "description": "",
+   "icon": "90271c9286187c52",
+   "models": [
+    [
+     592,
+     "d794a79af3b64fc9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_retro_a",
+   "label": "Rocketeer",
+   "description": "",
+   "icon": "cbf13a0f88b392de",
+   "models": [
+    [
+     544,
+     "e3b4f9b887232355"
+    ],
+    [
+     568,
+     "832a40248e96fdeb"
+    ],
+    [
+     592,
+     "e3b4f9b887232355"
+    ],
+    [
+     616,
+     "832a40248e96fdeb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_wasteland_a",
+   "label": "Wastelander",
+   "description": "",
+   "icon": "be0f270cc98553e2",
+   "models": [
+    [
+     592,
+     "961076419d05e89f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_wasteland_a",
+   "label": "Wastelander",
+   "description": "",
+   "icon": "854811f7c70f806e",
+   "models": [
+    [
+     544,
+     "91674ad6775a3c69"
+    ],
+    [
+     568,
+     "2564f2a1ccecce47"
+    ],
+    [
+     592,
+     "91674ad6775a3c69"
+    ],
+    [
+     616,
+     "2564f2a1ccecce47"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_wasteland_a",
+   "label": "Wastelander",
+   "description": "",
+   "icon": "559b0251ccdde6a6",
+   "models": [
+    [
+     544,
+     "6596c905bfe364a2"
+    ],
+    [
+     592,
+     "48003c3c3dce2024"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_currency_s04_01",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s04_02",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s04_03",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s04_04",
+   "label": "+200 Echo Points",
+   "description": "",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s04_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s04_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s04_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s04_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s04_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s04_01",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s04_02",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s04_03",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s04_04",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s04_05",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_rover_a",
+   "label": "Rover",
+   "description": "",
+   "icon": "985b65e3a864e100",
+   "models": [
+    [
+     592,
+     "2fd3eccaa93ffda3"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_rover_a",
+   "label": "Rover",
+   "description": "",
+   "icon": "c38d437ea6cf0f8c",
+   "models": [
+    [
+     544,
+     "393b0b33df877215"
+    ],
+    [
+     568,
+     "a39beb1c6edcabd7"
+    ],
+    [
+     592,
+     "393b0b33df877215"
+    ],
+    [
+     616,
+     "a39beb1c6edcabd7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_rover_a_deco",
+   "label": "Spire",
+   "description": "",
+   "icon": "1003ccf73e7ab912",
+   "models": [
+    [
+     544,
+     "244a5f111d00ad5b"
+    ],
+    [
+     568,
+     "a1c4e03dc5669a15"
+    ],
+    [
+     592,
+     "244a5f111d00ad5b"
+    ],
+    [
+     616,
+     "a1c4e03dc5669a15"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_rover_a_deco",
+   "label": "Spire",
+   "description": "",
+   "icon": "aea1c0c80226401c",
+   "models": [
+    [
+     592,
+     "3b1c6c126a0dc0a3"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_shark_a",
+   "label": "Mechalodon",
+   "description": "",
+   "icon": "9aab338e07a5d6ac",
+   "models": [
+    [
+     592,
+     "81b12773b3300f03"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_shark_a",
+   "label": "Mechalodon",
+   "description": "",
+   "icon": "c17d1513090e3820",
+   "models": [
+    [
+     544,
+     "ec85bd743c088c65"
+    ],
+    [
+     568,
+     "7bdbd440fc1ccceb"
+    ],
+    [
+     592,
+     "ec85bd743c088c65"
+    ],
+    [
+     616,
+     "7bdbd440fc1ccceb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_shark_a",
+   "label": "Mechalodon",
+   "description": "",
+   "icon": "73e4cd4684008898",
+   "models": [
+    [
+     544,
+     "4c61432fe2a64e92"
+    ],
+    [
+     592,
+     "46f47430767d3cba"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_junkyard_a",
+   "label": "Scrapheap",
+   "description": "",
+   "icon": "3a9cd719d19ffaac",
+   "models": [
+    [
+     592,
+     "90214d8f057461bd"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_junkyard_a",
+   "label": "Scrapheap",
+   "description": "",
+   "icon": "a41f8e84c2440d0c",
+   "models": [
+    [
+     544,
+     "6fd01c28b491c77f"
+    ],
+    [
+     568,
+     "a2e6592d26ef2af1"
+    ],
+    [
+     592,
+     "6fd01c28b491c77f"
+    ],
+    [
+     616,
+     "a2e6592d26ef2af1"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_junkyard_a",
+   "label": "Scrapheap",
+   "description": "",
+   "icon": "d06ac635a193eea6",
+   "models": [
+    [
+     544,
+     "0b5e4ceb28abc108"
+    ],
+    [
+     592,
+     "2c8f8d9e9a2e369a"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_nuclear_a",
+   "label": "Nuclear",
+   "description": "",
+   "icon": "2bf287c274da969a",
+   "models": [
+    [
+     544,
+     "bec79c9ccec88f15"
+    ],
+    [
+     568,
+     "23b084a26d862d9f"
+    ],
+    [
+     592,
+     "bec79c9ccec88f15"
+    ],
+    [
+     616,
+     "23b084a26d862d9f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_nuclear_a",
+   "label": "Nuclear",
+   "description": "",
+   "icon": "bb7505d7700bfdee",
+   "models": [
+    [
+     592,
+     "13e795acc48bb8d7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_nuclear_a_hydro",
+   "label": "Hydro",
+   "description": "",
+   "icon": "a0e857f2929ae13c",
+   "models": [
+    [
+     544,
+     "772e755fbb5f6efd"
+    ],
+    [
+     568,
+     "72eda997ce07f405"
+    ],
+    [
+     592,
+     "772e755fbb5f6efd"
+    ],
+    [
+     616,
+     "72eda997ce07f405"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_nuclear_a_hydro",
+   "label": "Hydro",
+   "description": "",
+   "icon": "6be5cd49c9f4035e",
+   "models": [
+    [
+     592,
+     "a98f91b10e7efd3f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_currency_s05_01",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s05_02",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s05_03",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s05_04",
+   "label": "+200 Echo Points",
+   "description": "",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s05_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s05_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s05_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s05_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s05_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s05_01",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s05_02",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s05_03",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s05_04",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s05_05",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_exo_a",
+   "label": "Sentinel",
+   "description": "",
+   "icon": "b828a5d0f2fb9658",
+   "models": [
+    [
+     592,
+     "1b95fab975a1f4c9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_exo_a",
+   "label": "Sentinel",
+   "description": "",
+   "icon": "fc4dc786cd65bcd0",
+   "models": [
+    [
+     544,
+     "b0231c8b3bc21595"
+    ],
+    [
+     568,
+     "636829b6ac56c3df"
+    ],
+    [
+     592,
+     "b0231c8b3bc21595"
+    ],
+    [
+     616,
+     "636829b6ac56c3df"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_exo_a",
+   "label": "Sentinel",
+   "description": "",
+   "icon": "ff9cae6fa8c976b2",
+   "models": [
+    [
+     544,
+     "b22a47ad08e6986e"
+    ],
+    [
+     592,
+     "f4fd9255229faea2"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_mech_a",
+   "label": "Vanguard",
+   "description": "",
+   "icon": "829614a1922c94e0",
+   "models": [
+    [
+     592,
+     "56c1296e9511bf99"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_mech_a",
+   "label": "Vanguard",
+   "description": "",
+   "icon": "9cd94f054bbc8bc8",
+   "models": [
+    [
+     544,
+     "f7ec8322f79b38b3"
+    ],
+    [
+     568,
+     "9c01ccfa032066a5"
+    ],
+    [
+     592,
+     "f7ec8322f79b38b3"
+    ],
+    [
+     616,
+     "9c01ccfa032066a5"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_organic_a",
+   "label": "Scourge",
+   "description": "",
+   "icon": "37948f65fa39f600",
+   "models": [
+    [
+     592,
+     "4ce6c8ac1018b6d7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_organic_a",
+   "label": "Scourge",
+   "description": "",
+   "icon": "a7130d70fee89d74",
+   "models": [
+    [
+     544,
+     "a66f4e5f89dd3911"
+    ],
+    [
+     568,
+     "e9de8db3e8da86fb"
+    ],
+    [
+     592,
+     "a66f4e5f89dd3911"
+    ],
+    [
+     616,
+     "e9de8db3e8da86fb"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_speedform_a",
+   "label": "Blitz",
+   "description": "",
+   "icon": "49114fac585e6702",
+   "models": [
+    [
+     592,
+     "87b7a2a17bad53db"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_speedform_a",
+   "label": "Blitz",
+   "description": "",
+   "icon": "7256795756d4b48e",
+   "models": [
+    [
+     544,
+     "1487bf82303e9e0d"
+    ],
+    [
+     568,
+     "1f33df85fa45b203"
+    ],
+    [
+     592,
+     "1487bf82303e9e0d"
+    ],
+    [
+     616,
+     "1f33df85fa45b203"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_tag_0016",
+   "label": "Accelerator",
+   "description": "",
+   "icon": "4c152f9538727ea2",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0017",
+   "label": "Membrane",
+   "description": "",
+   "icon": "8ff80f4035d9d39e",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s06_01",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s06_02",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s06_03",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s06_04",
+   "label": "+200 Echo Points",
+   "description": "",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s06_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s06_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s06_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s06_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s06_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s06_01",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s06_02",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s06_03",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s06_04",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s06_05",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0018",
+   "label": "Leviathan",
+   "description": "",
+   "icon": "ac1199f894b1bc3a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0019",
+   "label": "Hunter",
+   "description": "",
+   "icon": "6ffcb92d991a1106",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0020",
+   "label": "Ambush",
+   "description": "",
+   "icon": "a7081702fd07ded2",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0021",
+   "label": "Swell",
+   "description": "",
+   "icon": "64e537d7f0ac73ee",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0016",
+   "label": "Sunset",
+   "description": "",
+   "icon": "ece3622c64e8b218",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0017",
+   "label": "Ribbon",
+   "description": "",
+   "icon": "2f0e42f969431f24",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0018",
+   "label": "Lycan",
+   "description": "",
+   "icon": "0ce7d441c82b7080",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_covenant_a",
+   "label": "Covenant",
+   "description": "",
+   "icon": "a627bcd4f46ec4e8",
+   "models": [
+    [
+     592,
+     "f6d5b8be348f2b6b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_covenant_a",
+   "label": "Covenant",
+   "description": "",
+   "icon": "38a4e549e7b53348",
+   "models": [
+    [
+     544,
+     "9e63f21f52266eeb"
+    ],
+    [
+     568,
+     "802a7c45dcaa4013"
+    ],
+    [
+     592,
+     "9e63f21f52266eeb"
+    ],
+    [
+     616,
+     "802a7c45dcaa4013"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_scuba_a",
+   "label": "Aquanaut",
+   "description": "",
+   "icon": "b7502e27340c2d62",
+   "models": [
+    [
+     592,
+     "b0daab2184864f4f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_scuba_a",
+   "label": "Aquanaut",
+   "description": "",
+   "icon": "ec8608ba3aa7c3ee",
+   "models": [
+    [
+     544,
+     "0035254d06eb205d"
+    ],
+    [
+     568,
+     "97d1370403fc1293"
+    ],
+    [
+     592,
+     "0035254d06eb205d"
+    ],
+    [
+     616,
+     "97d1370403fc1293"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_scuba_a",
+   "label": "Aquanaut",
+   "description": "",
+   "icon": "5e1fd0efb7a97356",
+   "models": [
+    [
+     544,
+     "b2555b56e5739316"
+    ],
+    [
+     592,
+     "7b06988cf15a7270"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_covenant_a_flame",
+   "label": "Hotrod",
+   "description": "",
+   "icon": "e974dae0d389938a",
+   "models": [
+    [
+     592,
+     "f2a555c92277052f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_covenant_a_flame",
+   "label": "Hotrod",
+   "description": "",
+   "icon": "b91684aefe42b0e4",
+   "models": [
+    [
+     544,
+     "3d954ee5e69eac1b"
+    ],
+    [
+     568,
+     "573ba845d21a2f0b"
+    ],
+    [
+     592,
+     "3d954ee5e69eac1b"
+    ],
+    [
+     616,
+     "573ba845d21a2f0b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_wolf_a",
+   "label": "Fenrir",
+   "description": "",
+   "icon": "b4bf9f660a59d6d2",
+   "models": [
+    [
+     544,
+     "3b03eff90cb8afee"
+    ],
+    [
+     592,
+     "8be305f09c35d178"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_wolf_a",
+   "label": "Fenrir",
+   "description": "",
+   "icon": "0672475296bb1e44",
+   "models": [
+    [
+     592,
+     "8c4931e4fdcff00b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_wolf_a",
+   "label": "Fenrir",
+   "description": "",
+   "icon": "183d1cf64f2b016c",
+   "models": [
+    [
+     544,
+     "d49cf7d2cfdcd4ed"
+    ],
+    [
+     568,
+     "af81e14b586a12a7"
+    ],
+    [
+     592,
+     "d49cf7d2cfdcd4ed"
+    ],
+    [
+     616,
+     "af81e14b586a12a7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_fragment_a",
+   "label": "Fragment",
+   "description": "",
+   "icon": "3213474cd0a11446",
+   "models": [
+    [
+     592,
+     "bba02c6a3dbe7b91"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_fragment_a",
+   "label": "Fragment",
+   "description": "",
+   "icon": "ac901ed1c37ae3e6",
+   "models": [
+    [
+     544,
+     "c8bed292d13f13df"
+    ],
+    [
+     568,
+     "b2f4a586a903fd13"
+    ],
+    [
+     592,
+     "c8bed292d13f13df"
+    ],
+    [
+     616,
+     "b2f4a586a903fd13"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_lava_a",
+   "label": "Volcanic",
+   "description": "",
+   "icon": "270ed431acd702f8",
+   "models": [
+    [
+     592,
+     "ea6f5165328e951f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_lava_a",
+   "label": "Volcanic",
+   "description": "",
+   "icon": "39418f9575471dd0",
+   "models": [
+    [
+     544,
+     "eacf165401b05b7b"
+    ],
+    [
+     568,
+     "6815e7e41c41b5bf"
+    ],
+    [
+     592,
+     "eacf165401b05b7b"
+    ],
+    [
+     616,
+     "6815e7e41c41b5bf"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_baroque_a",
+   "label": "Lustrous",
+   "description": "",
+   "icon": "ef7f19d76a1dc77e",
+   "models": [
+    [
+     592,
+     "f9fda899b44a5867"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_baroque_a",
+   "label": "Lustrous",
+   "description": "",
+   "icon": "7ff89bc26eccac0a",
+   "models": [
+    [
+     544,
+     "cdccd1ac50536bdd"
+    ],
+    [
+     568,
+     "5766144d98c487b7"
+    ],
+    [
+     592,
+     "cdccd1ac50536bdd"
+    ],
+    [
+     616,
+     "5766144d98c487b7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_banner_0019",
+   "label": "Keystone",
+   "description": "",
+   "icon": "cf0af494c580ddbc",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0020",
+   "label": "Pyroclastic",
+   "description": "",
+   "icon": "07fe5abba19d1268",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0021",
+   "label": "Gallantry",
+   "description": "",
+   "icon": "c4137a6eac36bf54",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0022",
+   "label": "rwd_tag_0022",
+   "description": "",
+   "icon": "52ad23a329547dc0",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0023",
+   "label": "Ornate",
+   "description": "",
+   "icon": "9140037624ffd0fc",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0016",
+   "label": "Drizzle",
+   "description": "",
+   "icon": "30ec3356d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0017",
+   "label": "Molten",
+   "description": "",
+   "icon": "30ec3357d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0018",
+   "label": "Chic",
+   "description": "",
+   "icon": "30ec3358d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0024",
+   "label": "rwd_tag_0024",
+   "description": "",
+   "icon": "d4c415585cd5c32c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0025",
+   "label": "Gardenia",
+   "description": "",
+   "icon": "1729358d517e6e10",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0026",
+   "label": "Divergence",
+   "description": "",
+   "icon": "216121f98886603e",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0019",
+   "label": "Mesopelagic",
+   "description": "",
+   "icon": "30ec3359d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0022",
+   "label": "Duskblade",
+   "description": "Progression Reward Item",
+   "icon": "f25b6e1a75ceb17a",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_fume_a",
+   "label": "Overdrive",
+   "description": "",
+   "icon": "89db3ec96cba412c",
+   "models": [
+    [
+     592,
+     "7b1507dbaad7a16d"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_fume_a",
+   "label": "Overdrive",
+   "description": "",
+   "icon": "9794656db52a5e04",
+   "models": [
+    [
+     544,
+     "d2e82b8adc169a69"
+    ],
+    [
+     568,
+     "25277dc0904782e1"
+    ],
+    [
+     592,
+     "d2e82b8adc169a69"
+    ],
+    [
+     616,
+     "25277dc0904782e1"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_noble_a",
+   "label": "Revenant",
+   "description": "",
+   "icon": "dbed45089175ee9c",
+   "models": [
+    [
+     592,
+     "eeb32c744c777679"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_noble_a",
+   "label": "Revenant",
+   "description": "",
+   "icon": "803b63959fde0010",
+   "models": [
+    [
+     544,
+     "7c15486971116c3b"
+    ],
+    [
+     568,
+     "48e819704a23e6e5"
+    ],
+    [
+     592,
+     "7c15486971116c3b"
+    ],
+    [
+     616,
+     "48e819704a23e6e5"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_noble_a",
+   "label": "Revenant",
+   "description": "",
+   "icon": "32a2bbc012d0b0a8",
+   "models": [
+    [
+     544,
+     "6514f5fa47d7d08e"
+    ],
+    [
+     592,
+     "57f8861a4ccb1748"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_ranger_a",
+   "label": "ranger",
+   "description": "",
+   "icon": "43e90b44492bc0f6",
+   "models": [
+    [
+     592,
+     "35cf738e7728352b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_ranger_a",
+   "label": "ranger",
+   "description": "",
+   "icon": "d1363fc6635c8e38",
+   "models": [
+    [
+     544,
+     "81fe382f575b6b17"
+    ],
+    [
+     568,
+     "c6187eced159a8a7"
+    ],
+    [
+     592,
+     "81fe382f575b6b17"
+    ],
+    [
+     616,
+     "c6187eced159a8a7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_ranger_a",
+   "label": "ranger",
+   "description": "",
+   "icon": "6c79a01f0c81fe0c",
+   "models": [
+    [
+     544,
+     "3f268b164df9dff4"
+    ],
+    [
+     592,
+     "ed87dafb229dd008"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_currency_s07_01",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s07_02",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s07_03",
+   "label": "+325 Echo Points",
+   "description": "",
+   "icon": "99984fe71eef38d2",
+   "models": []
+  },
+  {
+   "id": "rwd_currency_s07_04",
+   "label": "+200 Echo Points",
+   "description": "",
+   "icon": "40d045b7df4fb9f6",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s07_01",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s07_02",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s07_03",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s07_04",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_individual_s07_05",
+   "label": "+10% Solo TXP Boost",
+   "description": "",
+   "icon": "f34af0e867ab131c",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s07_01",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s07_02",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s07_03",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s07_04",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_xp_boost_group_s07_05",
+   "label": "+5% Team TXP Boost",
+   "description": "",
+   "icon": "67c8237a10a91648",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0023",
+   "label": "Arisen",
+   "description": "",
+   "icon": "31b64ecf78651c46",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0024",
+   "label": "Oblivion",
+   "description": "",
+   "icon": "743258e1004f0f96",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0025",
+   "label": "Reaper",
+   "description": "",
+   "icon": "b7df78340de4a2aa",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0026",
+   "label": "Climber",
+   "description": "",
+   "icon": "81976c40d41cac84",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0027",
+   "label": "Estuary",
+   "description": "",
+   "icon": "427a4c95d9b701b8",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0016",
+   "label": "Joker",
+   "description": "",
+   "icon": "3374af8be34b7488",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0017",
+   "label": "Chronograph",
+   "description": "",
+   "icon": "f0998f5eeee0d9b4",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0018",
+   "label": "Haunted",
+   "description": "",
+   "icon": "d37019e64f88b610",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0019",
+   "label": "Epaulet",
+   "description": "",
+   "icon": "109d393342231b2c",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0020",
+   "label": "Benchmark",
+   "description": "",
+   "icon": "d869971c263ed4f8",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0016",
+   "label": "Wow",
+   "description": "",
+   "icon": "fd09dd4d499d1066",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0017",
+   "label": "Boom",
+   "description": "",
+   "icon": "3ee4fd984436bd5a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0018",
+   "label": "Flex",
+   "description": "",
+   "icon": "1d0d6b20e55ed2fe",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0019",
+   "label": "Pour",
+   "description": "",
+   "icon": "dee04bf5e8f57fc2",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0020",
+   "label": "Fang",
+   "description": "",
+   "icon": "1614e5da8ce8b016",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0016",
+   "label": "Diamond S7",
+   "description": "",
+   "icon": "1471819ff4e2eac4",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0017",
+   "label": "rwd_medal_0017",
+   "description": "",
+   "icon": "d79ca14af94947f8",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0018",
+   "label": "rwd_medal_0018",
+   "description": "",
+   "icon": "f47537f25821285c",
+   "models": []
+  },
+  {
+   "id": "rwd_medal_0019",
+   "label": "rwd_medal_0019",
+   "description": "",
+   "icon": "37981727558a8560",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0028",
+   "label": "Striation",
+   "description": "",
+   "icon": "c16597942445a2a6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0029",
+   "label": "Banderole",
+   "description": "",
+   "icon": "0288b74129ee0f9a",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0030",
+   "label": "Bolt",
+   "description": "",
+   "icon": "4d191580d13f38ec",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0031",
+   "label": "Tatter",
+   "description": "",
+   "icon": "8ef43555dc9495d0",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0032",
+   "label": "rwd_tag_0032",
+   "description": "",
+   "icon": "b8bc2121056c9bfe",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0033",
+   "label": "Liana",
+   "description": "",
+   "icon": "7b5101f408c736c2",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0034",
+   "label": "Shuriken",
+   "description": "",
+   "icon": "3ed517da70ed2512",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0020",
+   "label": "Eminence",
+   "description": "",
+   "icon": "30ec3050d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0021",
+   "label": "Ectoplasm",
+   "description": "",
+   "icon": "30ec3051d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0022",
+   "label": "Chlorophyll",
+   "description": "",
+   "icon": "30ec3052d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0023",
+   "label": "Urban",
+   "description": "",
+   "icon": "30ec3053d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0024",
+   "label": "Bubble Pop",
+   "description": "",
+   "icon": "30ec3054d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0025",
+   "label": "Velvet",
+   "description": "",
+   "icon": "30ec3055d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0026",
+   "label": "rwd_tint_0026",
+   "description": "",
+   "icon": "30ec3056d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0027",
+   "label": "rwd_tint_0027",
+   "description": "",
+   "icon": "30ec3057d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0021",
+   "label": "Stilt",
+   "description": "",
+   "icon": "c17daf81b9d019ec",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0022",
+   "label": "Starpower",
+   "description": "",
+   "icon": "f735bbf5602817c2",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0028",
+   "label": "Charm",
+   "description": "",
+   "icon": "6193da2d78df6e1c",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0029",
+   "label": "Ultrafries",
+   "description": "",
+   "icon": "a27efaf87574c320",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0030",
+   "label": "rwd_banner_0030",
+   "description": "",
+   "icon": "edef58398da5f456",
+   "models": []
+  },
+  {
+   "id": "rwd_banner_0031",
+   "label": "rwd_banner_0031",
+   "description": "",
+   "icon": "2e0278ec800e596a",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0023",
+   "label": "rwd_decal_0023",
+   "description": "",
+   "icon": "34d89b206d83bafe",
+   "models": []
+  },
+  {
+   "id": "rwd_decal_0024",
+   "label": "rwd_decal_0024",
+   "description": "",
+   "icon": "715c8d0e15a9a92e",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0021",
+   "label": "Terror",
+   "description": "",
+   "icon": "d5f9c50f81431d2a",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0022",
+   "label": "Fry Dance",
+   "description": "",
+   "icon": "e3b1d17b58bb1304",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0023",
+   "label": "Confetti",
+   "description": "",
+   "icon": "205cf1ae5510be38",
+   "models": []
+  },
+  {
+   "id": "rwd_emote_0024",
+   "label": "Quasar",
+   "description": "",
+   "icon": "65d8e7802d3aade8",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0021",
+   "label": "Conduit",
+   "description": "",
+   "icon": "1b84b7c92b9579c4",
+   "models": []
+  },
+  {
+   "id": "rwd_pattern_0022",
+   "label": "rwd_pattern_0022",
+   "description": "",
+   "icon": "2dcca3bdf26d77ea",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0035",
+   "label": "VRML S5",
+   "description": "",
+   "icon": "fd38370f7d46882e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0036",
+   "label": "VRML S5 Finals",
+   "description": "",
+   "icon": "cb70237ba4be8600",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0037",
+   "label": "VRML S5 Champ",
+   "description": "",
+   "icon": "089d03aea9152b3c",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0028",
+   "label": "Weathered",
+   "description": "",
+   "icon": "30ec3058d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_tint_0029",
+   "label": "Jasper",
+   "description": "",
+   "icon": "30ec3059d3fa4ff4",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_fume_a_daydream",
+   "label": "Daydream",
+   "description": "",
+   "icon": "fa6ba5e79a47fd06",
+   "models": [
+    [
+     592,
+     "9e8f5e089266e453"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_fume_a_daydream",
+   "label": "Daydream",
+   "description": "",
+   "icon": "31663f5cc1291f64",
+   "models": [
+    [
+     544,
+     "af0f3ec588613f7b"
+    ],
+    [
+     568,
+     "a03f3137e8ad86fd"
+    ],
+    [
+     592,
+     "af0f3ec588613f7b"
+    ],
+    [
+     616,
+     "a03f3137e8ad86fd"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_flamingo_a",
+   "label": "Flamingo",
+   "description": "",
+   "icon": "12b9f13a7fb2e112",
+   "models": [
+    [
+     592,
+     "f767e0715c807843"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_flamingo_a",
+   "label": "Flamingo",
+   "description": "",
+   "icon": "8c3aa8a76c6916b2",
+   "models": [
+    [
+     544,
+     "f0d02d2cd51623e1"
+    ],
+    [
+     568,
+     "71cbfaae988041f9"
+    ],
+    [
+     592,
+     "f0d02d2cd51623e1"
+    ],
+    [
+     616,
+     "71cbfaae988041f9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_halloween_a",
+   "label": "Backbone",
+   "description": "",
+   "icon": "ce92ea99c045e922",
+   "models": [
+    [
+     592,
+     "cc53aa2640dad6ab"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_halloween_a",
+   "label": "Backbone",
+   "description": "",
+   "icon": "f5d5dc62cecf3aae",
+   "models": [
+    [
+     544,
+     "1856ddb8e829c3bb"
+    ],
+    [
+     568,
+     "88f68058e1d4f325"
+    ],
+    [
+     592,
+     "1856ddb8e829c3bb"
+    ],
+    [
+     616,
+     "88f68058e1d4f325"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_paladin_a",
+   "label": "Paladin",
+   "description": "",
+   "icon": "a6c640c2c5f3d01e",
+   "models": [
+    [
+     592,
+     "feeafd7e0461c645"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_paladin_a",
+   "label": "Paladin",
+   "description": "",
+   "icon": "3641c2d7c122bb6a",
+   "models": [
+    [
+     544,
+     "619b173ef6c129d5"
+    ],
+    [
+     568,
+     "c37e265edec2fb3b"
+    ],
+    [
+     592,
+     "619b173ef6c129d5"
+    ],
+    [
+     616,
+     "c37e265edec2fb3b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_overgrown_a",
+   "label": "Overgrown",
+   "description": "",
+   "icon": "d53119f0b1a59a3e",
+   "models": [
+    [
+     544,
+     "b255e44ab18064ca"
+    ],
+    [
+     592,
+     "fa607e6a1b04ca10"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_overgrown_a",
+   "label": "Overgrown",
+   "description": "",
+   "icon": "3ea53cadb4fd2f7a",
+   "models": [
+    [
+     592,
+     "5ee32bbea4b725a9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_overgrown_a",
+   "label": "Overgrown",
+   "description": "",
+   "icon": "05e20a56ba77fcf6",
+   "models": [
+    [
+     544,
+     "ba77c3cd7ce674b7"
+    ],
+    [
+     568,
+     "563af679aab0a53b"
+    ],
+    [
+     592,
+     "ba77c3cd7ce674b7"
+    ],
+    [
+     616,
+     "563af679aab0a53b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_snacktime_a",
+   "label": "Snacktime",
+   "description": "",
+   "icon": "79deb8f4f8f150ca",
+   "models": [
+    [
+     592,
+     "eee095f1dc8cb0e7"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_snacktime_a",
+   "label": "Snacktime",
+   "description": "",
+   "icon": "42998e0ff67b8346",
+   "models": [
+    [
+     544,
+     "6d34f482e5756e6b"
+    ],
+    [
+     568,
+     "c00f62d79738f7c9"
+    ],
+    [
+     592,
+     "6d34f482e5756e6b"
+    ],
+    [
+     616,
+     "c00f62d79738f7c9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_vroom_a",
+   "label": "Astrodynamic",
+   "description": "",
+   "icon": "d01481ca97fab054",
+   "models": [
+    [
+     592,
+     "f5ac9880d09db907"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_vroom_a",
+   "label": "Astrodynamic",
+   "description": "",
+   "icon": "8bc2a75799515ed8",
+   "models": [
+    [
+     544,
+     "4719cff581234e6b"
+    ],
+    [
+     568,
+     "c0254fece05ca1e9"
+    ],
+    [
+     592,
+     "4719cff581234e6b"
+    ],
+    [
+     616,
+     "c0254fece05ca1e9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_heartbreak_a",
+   "label": "Heartbreak",
+   "description": "",
+   "icon": "de42f9d9880a5b50",
+   "models": [
+    [
+     592,
+     "a70703f75afa27ff"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_heartbreak_a",
+   "label": "Heartbreak",
+   "description": "",
+   "icon": "60e0f5e6b456a25e",
+   "models": [
+    [
+     544,
+     "cd61784b1db7aeb7"
+    ],
+    [
+     568,
+     "564de0c22cd1f4e1"
+    ],
+    [
+     592,
+     "cd61784b1db7aeb7"
+    ],
+    [
+     616,
+     "564de0c22cd1f4e1"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_ninja_a",
+   "label": "SHIN-0B1",
+   "description": "",
+   "icon": "afcc589e72720764",
+   "models": [
+    [
+     544,
+     "f86a23f14f5f2012"
+    ],
+    [
+     592,
+     "0f21b39f5c1ef4a0"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_ninja_a",
+   "label": "SHIN-0B1",
+   "description": "",
+   "icon": "4683a656f1d75950",
+   "models": [
+    [
+     592,
+     "5590e661f8422c4b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_ninja_a",
+   "label": "SHIN-0B1",
+   "description": "",
+   "icon": "1d5580cbff7cb7dc",
+   "models": [
+    [
+     544,
+     "2969b9a062029d27"
+    ],
+    [
+     568,
+     "bee2df464c16224b"
+    ],
+    [
+     592,
+     "2969b9a062029d27"
+    ],
+    [
+     616,
+     "bee2df464c16224b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_samurai_a_oni",
+   "label": "Oni",
+   "description": "",
+   "icon": "41a6d94ef696e45a",
+   "models": [
+    [
+     592,
+     "4491dc406ba9fd0f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_samurai_a_oni",
+   "label": "Oni",
+   "description": "",
+   "icon": "309087f16de0f496",
+   "models": [
+    [
+     544,
+     "e6f6e83722dd5d55"
+    ],
+    [
+     568,
+     "a52b0ceda908a357"
+    ],
+    [
+     592,
+     "e6f6e83722dd5d55"
+    ],
+    [
+     616,
+     "a52b0ceda908a357"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_samurai_a_oni",
+   "label": "Oni",
+   "description": "",
+   "icon": "29d10d2670ea34ce",
+   "models": [
+    [
+     544,
+     "159dc10971980901"
+    ],
+    [
+     592,
+     "c2e85be6ffce4563"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_trex_a_skelerex",
+   "label": "Skelerex",
+   "description": "",
+   "icon": "29b635c514e13c34",
+   "models": [
+    [
+     544,
+     "a472f05c73c68bc3"
+    ],
+    [
+     568,
+     "e090bca1e437517b"
+    ],
+    [
+     592,
+     "a472f05c73c68bc3"
+    ],
+    [
+     616,
+     "e090bca1e437517b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_trex_a_skelerex",
+   "label": "Skelerex",
+   "description": "",
+   "icon": "e2bbaf7e4f8fde56",
+   "models": [
+    [
+     592,
+     "b2035eda4fbf8b8f"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_trex_a_skelerex",
+   "label": "Skelerex",
+   "description": "",
+   "icon": "8bbe4268f787cdf6",
+   "models": [
+    [
+     544,
+     "8dee49b579bb3416"
+    ],
+    [
+     592,
+     "924fdcf8f48a5024"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_plagueknight_a",
+   "label": "Plague Knight",
+   "description": "",
+   "icon": "afa07b3bfaf73d2e",
+   "models": [
+    [
+     544,
+     "88d14b9607e5a8d6"
+    ],
+    [
+     592,
+     "7492aa47b81fcb72"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_plagueknight_a",
+   "label": "Plague Knight",
+   "description": "",
+   "icon": "3fd07f9a758d85be",
+   "models": [
+    [
+     592,
+     "cc85a86c6f915473"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_plagueknight_a",
+   "label": "Plague Knight",
+   "description": "",
+   "icon": "2a28dddae5655bb4",
+   "models": [
+    [
+     544,
+     "ee0f8e10af2ee6ed"
+    ],
+    [
+     568,
+     "afbb72329a0ae095"
+    ],
+    [
+     592,
+     "ee0f8e10af2ee6ed"
+    ],
+    [
+     616,
+     "afbb72329a0ae095"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_spartan_a_hero",
+   "label": "Hero",
+   "description": "",
+   "icon": "ac3687cf7af1e41e",
+   "models": [
+    [
+     592,
+     "c625886c721916bf"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_spartan_a_hero",
+   "label": "Hero",
+   "description": "",
+   "icon": "b9ce258fea193a14",
+   "models": [
+    [
+     544,
+     "931544fecf268c8d"
+    ],
+    [
+     568,
+     "ca124c9a2f084c7b"
+    ],
+    [
+     592,
+     "931544fecf268c8d"
+    ],
+    [
+     616,
+     "ca124c9a2f084c7b"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_spartan_a_hero",
+   "label": "Hero",
+   "description": "",
+   "icon": "3c46836ef58b5c8e",
+   "models": [
+    [
+     544,
+     "3606c4fa8305bb95"
+    ],
+    [
+     592,
+     "1ace589134577c2d"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_tag_0038",
+   "label": "Stand",
+   "description": "",
+   "icon": "2b749516087d4498",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0039",
+   "label": "Liminal",
+   "description": "",
+   "icon": "e899b5c305d6e9a4",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0040",
+   "label": "VRML S6",
+   "description": "",
+   "icon": "997b1030e401ecae",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0041",
+   "label": "VRML S6 Finals",
+   "description": "",
+   "icon": "5a9630e5e9aa4192",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0042",
+   "label": "VRML S6 Champ",
+   "description": "",
+   "icon": "6cde249130524fbc",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0043",
+   "label": "VRML S7",
+   "description": "",
+   "icon": "af3304443df9e280",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0044",
+   "label": "VRML S7 Finals",
+   "description": "",
+   "icon": "eab7126a45d3f150",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0045",
+   "label": "VRML S7 Champ",
+   "description": "",
+   "icon": "295a32bf48785c6c",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0046",
+   "label": "rwd_tag_0046",
+   "description": "",
+   "icon": "1f1226cb91805242",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0047",
+   "label": "rwd_tag_0047",
+   "description": "",
+   "icon": "dcff061e9c2bff7e",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0048",
+   "label": "rwd_tag_0048",
+   "description": "",
+   "icon": "ff1690a63d4390da",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0049",
+   "label": "rwd_tag_0049",
+   "description": "",
+   "icon": "3cfbb07330e83de6",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0050",
+   "label": "rwd_tag_0050",
+   "description": "",
+   "icon": "736a12b2c8390a90",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0051",
+   "label": "rwd_tag_0051",
+   "description": "",
+   "icon": "b0873267c592a7ac",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0052",
+   "label": "rwd_tag_0052",
+   "description": "",
+   "icon": "86cf26131c6aa982",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0053",
+   "label": "rwd_tag_0053",
+   "description": "",
+   "icon": "452206c611c104be",
+   "models": []
+  },
+  {
+   "id": "rwd_tag_0054",
+   "label": "rwd_tag_0054",
+   "description": "",
+   "icon": "00a610e869eb176e",
+   "models": []
+  },
+  {
+   "id": "rwd_booster_anubis_a_horus",
+   "label": "Horus",
+   "description": "",
+   "icon": "4327cf84a250d2c0",
+   "models": [
+    [
+     592,
+     "965fbea7b120225d"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_anubis_a_horus",
+   "label": "Horus",
+   "description": "",
+   "icon": "56df6dc432b80cca",
+   "models": [
+    [
+     544,
+     "42d65b4003b2c33b"
+    ],
+    [
+     568,
+     "2b844ff739d5a711"
+    ],
+    [
+     592,
+     "42d65b4003b2c33b"
+    ],
+    [
+     616,
+     "2b844ff739d5a711"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_booster_shark_a_tropical",
+   "label": "Reefhunter",
+   "description": "",
+   "icon": "38970543a54a8ed8",
+   "models": [
+    [
+     592,
+     "8f7078d5375886f9"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_bracer_shark_a_tropical",
+   "label": "Reefhunter",
+   "description": "",
+   "icon": "68f55b0d8881adb6",
+   "models": [
+    [
+     544,
+     "b6c46402b1c64f57"
+    ],
+    [
+     568,
+     "e61bf4bc8510d57d"
+    ],
+    [
+     592,
+     "b6c46402b1c64f57"
+    ],
+    [
+     616,
+     "e61bf4bc8510d57d"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_anubis_a_horus",
+   "label": "Horus",
+   "description": "",
+   "icon": "d357cb252d2a6a50",
+   "models": [
+    [
+     544,
+     "6da260b2ae47d18f"
+    ],
+    [
+     592,
+     "c1c15c78d48a4643"
+    ]
+   ]
+  },
+  {
+   "id": "rwd_chassis_shark_a_tropical",
+   "label": "Reefhunter",
+   "description": "",
+   "icon": "f187598f06649122",
+   "models": [
+    [
+     544,
+     "1ceef0acf0a47c30"
+    ],
+    [
+     592,
+     "82820f5d394a5b92"
+    ]
+   ]
+  }
+ ]
+}

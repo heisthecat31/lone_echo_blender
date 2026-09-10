@@ -1720,6 +1720,25 @@ class EchoExtractor(tk.Tk):
                 text=f"{len(jobs)} package(s) selected.")
 
     # ------------------------------------------------------ page: models
+    def _model_names(self) -> dict:
+        """`{hash: authored name}` for the cosmetic models, or `{}`.
+
+        `data/model_names_echovr.json` holds 363 VERIFIED preimages -- every
+        chassis, bracer and booster the game ships, recovered from the install's
+        own `customization_models.json` plus the `cst_*` grammar it follows.
+        This page used to say mesh names were unrecoverable; that is still true
+        of the hashes nothing has cracked, and false of these.
+        """
+        if getattr(self, "_names_cache", None) is None:
+            try:
+                doc = json.loads((DATA / "model_names_echovr.json")
+                                 .read_text(encoding="utf-8"))
+                self._names_cache = {norm_hash(k): v for k, v
+                                     in (doc.get("names") or {}).items()}
+            except (OSError, ValueError):
+                self._names_cache = {}
+        return self._names_cache
+
     def _page_models(self):
         """Pick individual models by hash.
 
@@ -1737,18 +1756,26 @@ class EchoExtractor(tk.Tk):
                 import evr_model_extract as ME
                 root = Path(self.source.get())
                 rigged = set(ME.list_models(root, only_skeleton=True))
+                names = self._model_names()
+                # named first, then rigged, then by name -- so every
+                # cst_body_* lands beside every other.
                 self.models = sorted(
                     ((h, h in rigged) for h in ME.list_models(root)),
-                    key=lambda kv: (not kv[1], kv[0]))
+                    key=lambda kv: (not names.get(norm_hash(kv[0])),
+                                    not kv[1],
+                                    names.get(norm_hash(kv[0]), kv[0])))
             except Exception as exc:                        # noqa: BLE001
                 self._set_status(f"Could not list models: {exc}", BAD)
                 self.models = []
 
         rigged_n = sum(1 for _h, r in self.models if r)
+        names = self._model_names()
+        named_n = sum(1 for h, _r in self.models if norm_hash(h) in names)
         self.h_sub.configure(
-            text=f"{len(self.models)} models \u00b7 {rigged_n} with an armature. "
-                 f"Mesh names are not recoverable from the shipped data, so "
-                 f"these are hashes.")
+            text=f"{len(self.models)} models · {rigged_n} with an "
+                 f"armature · {named_n} named. The named ones are the "
+                 f"chassis, bracers and boosters; the rest ship only as a "
+                 f"hash.")
 
         bar = ttk.Frame(self.body)
         bar.pack(fill="x", pady=(0, 10))
@@ -1791,11 +1818,13 @@ class EchoExtractor(tk.Tk):
         for w in self.mframe.winfo_children():
             w.destroy()
         needle = self.model_search.get().strip().lower()
+        names = self._model_names()
         shown = 0
         for h, rigged in self.models:
             if self.rigged_only.get() and not rigged:
                 continue
-            if needle and needle not in h:
+            nm = names.get(norm_hash(h), "")
+            if needle and needle not in h and needle not in nm.lower():
                 continue
             if shown >= self.MODEL_ROW_LIMIT:
                 break
@@ -1806,8 +1835,16 @@ class EchoExtractor(tk.Tk):
             row.pack(fill="x", padx=14, pady=1)
             tk.Frame(row, bg=hue if picked else LINE, width=3).pack(
                 side="left", fill="y")
-            tk.Label(row, text=h, bg=bg, fg=FG if picked else FG_MID,
-                     font=("Consolas", 10)).pack(side="left", padx=(12, 0), pady=5)
+            if nm:
+                tk.Label(row, text=nm, bg=bg, fg=FG if picked else FG_MID,
+                         font=("Segoe UI Semibold", 10)).pack(
+                             side="left", padx=(12, 0), pady=5)
+                tk.Label(row, text=h, bg=bg, fg=FG_DIM,
+                         font=("Consolas", 9)).pack(side="left", padx=(10, 0))
+            else:
+                tk.Label(row, text=h, bg=bg, fg=FG if picked else FG_MID,
+                         font=("Consolas", 10)).pack(
+                             side="left", padx=(12, 0), pady=5)
             if rigged:
                 tk.Label(row, text="armature", bg=bg, fg=hue,
                          font=("Segoe UI", 9)).pack(side="left", padx=(12, 0))
@@ -2040,6 +2077,7 @@ class EchoExtractor(tk.Tk):
                 put(("log", f"  exited with code {proc.returncode}\n"))
             elif not raw_tool:
                 self._light(job, put)
+                self._probes(job, put)
                 self._ui(job, put)
                 self._le1_post(job, put)
             done += 1
@@ -2215,6 +2253,39 @@ class EchoExtractor(tk.Tk):
             put(("log", "  materials FAILED: %s\n"
                  % (tail[-1].strip() if tail else "exit %d" % proc.returncode)))
 
+        # ── placed (dynamic) lights ──────────────────────────────────────
+        # `le_scene_extract` emits geometry and the BAKED lightmap binding
+        # only. The realtime lights are a separate table (`CGSceneData.lights`)
+        # that `le_lights` decodes into a `lights.json` sidecar, and nothing
+        # ran it -- which is why Lone Echo packages arrived with no dynamic
+        # lights at all.
+        #
+        # PRODUCED here, not auto-imported. Lone Echo is a hybrid renderer
+        # whose diffuse term is baked and most of whose shipped lights are
+        # specular-only, so adding them on top of the lightmap double-lights
+        # the scene; the add-on's light importer is off by default for exactly
+        # that reason. Making the sidecar exist is this side's job.
+        put(("log", "  lights → %s\n" % pkg.name))
+        try:
+            lp = subprocess.run(
+                [sys.executable,
+                 str(REPO / "blender_tool" / "extractor" / "le_lights.py"),
+                 job.level, "--out", str(pkg / "lights.json")],
+                cwd=str(REPO), capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                env=getattr(self, "_tool_environ", None),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            put(("log", "  lights could not start: %s\n" % exc))
+            return
+        for ln in [x.strip() for x in (lp.stdout or "").splitlines()
+                   if x.strip().startswith("archive ")][:1]:
+            put(("log", "  %s\n" % ln))
+        if lp.returncode != 0:
+            tail = [x for x in (lp.stderr or "").splitlines() if x.strip()]
+            put(("log", "  lights FAILED: %s\n"
+                 % (tail[-1].strip() if tail else "exit %d" % lp.returncode)))
+
     def _light(self, job, put):
         """Baked lightmaps + placed lights, on EVERY level extraction.
 
@@ -2261,6 +2332,55 @@ class EchoExtractor(tk.Tk):
             put(("log", "  (no baked lightmaps for this level -- its "
                         "static-instance GPU resource is empty in the shipped "
                         "data; placed lights above are still applied)\n"))
+
+    def _probes(self, job, put):
+        """Reflection probes, on EVERY level extraction.
+
+        `evr_apply_probes` writes `<pkg>/probes/` AND the manifest's
+        `reflection_probes` section plus a `probe_index` on every mesh -- and
+        `evr_scene_extract` rewrites that manifest from scratch, so a
+        re-extraction drops the section even when the cubemaps are still on
+        disk from an earlier run.  `probe_builder` then reports "no
+        `reflection_probes` section in the manifest" on import, which is what
+        happened to `mpl_arena_a`: 198 probe files present, section gone.
+
+        Runs AFTER `_light` and before `_ui`: probes merge into the manifest,
+        lighting only writes `lightmaps.json`, so the two do not race -- but
+        the manifest has to exist, which it does not until the extractor is
+        done.
+        """
+        if self.game.install_only:
+            return                    # Echo VR resource types; Lone Echo 1 has none
+        if job.kind == "model":
+            return                    # probes are a level concept
+        cand = self._package_for(job)
+        if cand is None:
+            put(("log", "  probes SKIPPED: no package for %s under %s\n"
+                 % (job.label, self.outdir.get())))
+            return
+        put(("log", "  probes \u2192 %s/%s\n" % (cand.parent.name, cand.name)))
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPTS / "evr_apply_probes.py"),
+                 str(cand), job.level, "--dir", self.source.get()],
+                cwd=str(REPO), capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            put(("log", f"  probes could not start: {exc}\n"))
+            return
+        # Show the tail whatever it says: on a level with no probe resource --
+        # or the empty 344-byte stub several of them ship -- the script prints
+        # its reason and exits 0, and that reason is the useful line.
+        lines = [x.strip() for x in (proc.stdout or "").splitlines() if x.strip()]
+        for line in lines[-2:]:
+            put(("log", f"  {line}\n"))
+        if proc.returncode != 0:
+            tail = [x for x in (proc.stderr or "").splitlines() if x.strip()]
+            put(("log", "  probes FAILED: %s\n"
+                 % (tail[-1].strip() if tail else "exit %d" % proc.returncode)))
+        elif not lines:
+            put(("log", "  probes produced no output\n"))
 
     def _drain(self):
         try:

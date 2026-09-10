@@ -410,6 +410,8 @@ tracked-plus-untracked set explicitly, as above.
 | [docs/LIGHTING.md](docs/LIGHTING.md) | The light record, the unit conversion, why the importer is off by default, the baked SG5 lightmap, and the reflection probes. |
 | [docs/CHARACTERS.md](docs/CHARACTERS.md) | Component assembly, the three LOD systems, and the scene-set refusal heuristic. |
 | [docs/SCENES.md](docs/SCENES.md) | Scene placement, the parent-level edge, and vista fitting. |
+| [docs/COLLISION.md](docs/COLLISION.md) | Player collision on disk, the 32,767-edge ceiling that forces multiple bodies, and how to author a whole map's collision at full detail without decimating. |
+| [docs/reference/](docs/reference/) | 226 gathered documents on how Echo works and how a level is built — the map editor, the Quest combat port, and the archive viewer. Start at [OVERVIEW.md](docs/reference/OVERVIEW.md). |
 | [docs/TESTING.md](docs/TESTING.md) | What the suite does and does not cover, and the open defects it guards. |
 | [docs/ECHO_VR.md](docs/ECHO_VR.md) | **Echo VR support** — decoded formats, the resource graph, verified numbers, the dead ends already ruled out, and the open problems in priority order. Read this before touching `scripts/evr_*.py`. |
 

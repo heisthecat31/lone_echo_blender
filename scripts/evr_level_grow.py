@@ -44,6 +44,7 @@ WHAT EACH ONE HAD TO GET RIGHT
 """
 from __future__ import annotations
 
+import os
 import struct
 import sys
 from pathlib import Path
@@ -61,6 +62,13 @@ XF_POS = 0x30
 XF_SCALE = 0x3C
 CR_DATASIZE = 8
 CR_COUNT = 40
+#: ⛔ A SECOND count, and the one the loader trusts. `CBinaryStreamInspector`
+#: sizes the attach from THIS field, so bumping only `CR_COUNT` ships a level
+#: that loads the right number of rows and then dies with
+#: "Attach size (367368) doesn't match stream size (369656)" before the level
+#: ever appears. `CStaticInstanceModelCR`, `CActorDataResource` and
+#: `CGStaticInstanceResource` all write both; only the transform grower did not.
+CR_COUNT2 = 48
 CR_BODY = 56
 
 
@@ -107,6 +115,7 @@ def add_transform_row(blob: bytes, actor: int, donor_actor: int,
     out[CR_BODY + n * st: CR_BODY + n * st] = row
     struct.pack_into("<Q", out, CR_DATASIZE, (n + 1) * st)
     struct.pack_into("<Q", out, CR_COUNT, n + 1)
+    struct.pack_into("<Q", out, CR_COUNT2, n + 1)
     return bytes(out)
 
 
@@ -131,6 +140,13 @@ def add_instance(blob: bytes, entity: int, model: int, donor_entity: int) -> byt
 
     r = bytearray(o["recs"][di])
     struct.pack_into("<Q", r, CSIMCR.MODEL_OFF, model)
+    # ⛔ The 88-byte record carries the ENTITY at +8 as well, and it is unique
+    # across all 732 shipped records -- it is exactly the dir entry's entity,
+    # 732 of 732. Cloning the donor's record without rewriting it leaves the new
+    # instance answering to the DONOR's entity: the entity appears twice in the
+    # recs array and the new one not at all, and resolving it lands out of
+    # range -- "Offset is past the end of the stream" on this very resource.
+    struct.pack_into("<Q", r, CSIMCR_ENTITY_OFF, entity)
     o["recs"] = list(o["recs"]) + [bytes(r)]
 
     arr = list(o["arr"])
@@ -152,13 +168,45 @@ def add_instance(blob: bytes, entity: int, model: int, donor_entity: int) -> byt
     mid = dict(o["mid"])
     for name, w in CSIMCR.MID_FIELDS:
         buf = mid[name]
-        mid[name] = buf + buf[di * w:(di + 1) * w]
+        row = buf[di * w:(di + 1) * w]
+        if name == "loddistancescales":
+            # Every shipped instance carries 1.0f here, but every shipped
+            # instance is also INSIDE the level's boxtree and its authored
+            # visibility set. A grafted-on model is in neither, so it is only
+            # drawn while the camera is close and fades out as you pull away.
+            # Scaling its LOD distance keeps it at full detail from anywhere.
+            # ⚠ This is the one field written to a value no shipped level uses;
+            # `EVR_LOD_SCALE=1` restores the stock 1.0.
+            row = struct.pack("<f", float(os.environ.get("EVR_LOD_SCALE", "1000")))
+        mid[name] = buf + row
     o["mid"] = mid
     o["n"] = n + 1
+
+    # ⛔ `gap` and `pad` are DERIVED, not carried. Both rules hold on 25 of 25
+    # shipped CSIMCRs with no exceptions:
+    #
+    #   gap = ceil(n / 64) * 8   -- a per-instance BITMAP, one bit each, rounded
+    #                               up to whole 8-byte words (it is all-zero in
+    #                               every shipped level, which is why a reader
+    #                               that only checks "the gap is zeros" passes)
+    #   pad = (-idx_end) % 8     -- realigns [mid] and [recs] to 8 bytes, where
+    #                               idx_end = 680 + 24n + gap + 8*uniq + 2n
+    #
+    # `[u16]` is 2 bytes per instance, so the parity of `n` decides the
+    # alignment: the arena ships n = 732 with pad = 0, and one added instance
+    # makes n odd, `idx_end % 8` become 2 and pad have to become 6. Carrying the
+    # donor's 0 leaves [mid] and [recs] six bytes early -- the file still walks
+    # end-to-end (which is why a size check and a round-trip both pass) but the
+    # engine reads them at aligned offsets and runs off the tail:
+    # "Offset is past the end of the stream" on this very resource.
+    o["gap"] = -(-o["n"] // 64) * 8
+    idx_end = 680 + 24 * o["n"] + o["gap"] + 8 * o["uniq"] + 2 * o["n"]
+    o["pad"] = (-idx_end) % 8
 
     # the header is carried verbatim, so every self-describing field it holds
     # has to be brought forward by hand or `read()` rejects the result.
     h = bytearray(o["header"])
+    struct.pack_into("<Q", h, 0x40, o["gap"])
     struct.pack_into("<Q", h, 0x08, 24 * (n + 1))
     for off in (0x28, 0x30, 0x70):
         struct.pack_into("<Q", h, off, n + 1)
@@ -182,6 +230,39 @@ def add_instance(blob: bytes, entity: int, model: int, donor_entity: int) -> byt
 
 
 # ── CGStaticInstanceResource ────────────────────────────────────────────────
+#: The 88-byte CSIMCR record's entity column (verified: equals the dir
+#: entry's entity on 732 of 732 shipped records).
+CSIMCR_ENTITY_OFF = 8
+
+
+#: The "no limit / not in a group" spelling the shipped tables use.
+NO_LIMIT = 0xFFFFFFFF
+
+
+def _skey(value: int) -> int:
+    """The engine's sort key: these u64 columns are compared SIGNED."""
+    return value - (1 << 64) if value >= (1 << 63) else value
+
+
+def _insert_sorted(rows: list, row) -> int:
+    """Insert `row` at its signed-i64 sorted position on column 0.
+
+    ⛔ NOT an append. `assetdata`, `instancedata` and `meshdata` are each
+    signed-i64 sorted by their key column and the engine BINARY-SEARCHES them.
+    Appending a hash that sorts earlier leaves the array unsorted, the search
+    then misses, and the level dies -- either with
+    "Level static instance data has no info for instanced model asset <hash>"
+    (cbaseinstancemodelcs.cpp) or, once a grown CStaticInstanceModelCR turns the
+    failed lookup into an index, with "Offset is past the end of the stream".
+    This is the same trap `add_instance` already handles for the CSIMCR's
+    `[arr]`; nothing was doing it for the CGSI.
+    """
+    import bisect
+    pos = bisect.bisect_left([_skey(r[0]) for r in rows], _skey(row[0]))
+    rows.insert(pos, row)
+    return pos
+
+
 def add_instance_bindings(blob: bytes, entity: int, model: int,
                           donor_entity: int, donor_model: int,
                           uvcount: int | None = None):
@@ -201,12 +282,52 @@ def add_instance_bindings(blob: bytes, entity: int, model: int,
     if da is None:
         raise ValueError("donor model %016x has no assetdata row" % donor_model)
     if not any(r[0] == model for r in asset):
-        asset.append((model,) + tuple(da[1:]))
+        # ⛔ NOT a straight clone of the donor's tail, and NOT an empty run.
+        #
+        # `assetdata[1:3]` is a `(start, count)` run into `shadersetoverrides`,
+        # and across the 98 shipped rows those runs PARTITION that section
+        # exactly: all 260 slots covered once, sum(count) == count. Cloning the
+        # donor's run makes the new asset claim slots the donor already owns and
+        # the implied total runs off the end.
+        #
+        # An EMPTY run does not fix it either: no shipped asset has count 0 --
+        # the counts are 1,2,3,4,5,7,8,10 over all 98 -- so the engine reads
+        # `overrides[start]` unconditionally, and a run parked at `len(overrides)`
+        # dereferences exactly one past the end. Both spellings die the same way,
+        # on the CStaticInstanceModelCR with "Offset is past the end of the
+        # stream".
+        #
+        # So the new asset gets a REAL override of its own, appended to the
+        # section and stamped from the donor's first: `(shaderset, slot)` where
+        # the shaderset is one that exists on disk. The partition stays exact
+        # and every asset keeps count >= 1.
+        overrides = S["shadersetoverrides"]
+        start = len(overrides)
+        overrides.append(overrides[da[1]] if da[2] else overrides[0])
+        # `assetdata[3]` takes exactly two shipped values: 10 on 64 of the 98
+        # arena assets and 0xFFFFFFFF on the other 34. A new model is not part
+        # of the level's authored LOD/fade scheme, so it takes the SENTINEL --
+        # a spelling the game already ships rather than an invented number.
+        # With the donor's 10 the geometry fades out as the camera pulls away
+        # and pops back in on approach.
+        _insert_sorted(asset, (model, start, 1, NO_LIMIT, da[4]))
 
     di = next((r for r in inst if r[0] == donor_entity), None)
     if di is None:
         raise ValueError("donor entity %016x has no instancedata row" % donor_entity)
-    inst.append((entity,) + tuple(di[1:]))
+    # ⛔ NOT a straight clone. `instancedata[4]` is a SLOT INDEX and across the
+    # 732 shipped rows it is a PERMUTATION of 0..n-1 -- 732 distinct values, no
+    # gaps. Cloning the donor's leaves every new instance sitting on the donor's
+    # slot (13 copies of 0) while 732..744 are never claimed, and the level then
+    # dies on the CStaticInstanceModelCR with "Offset is past the end of the
+    # stream". Each new instance takes the next free slot instead.
+    row = list(di)
+    row[0], row[4] = entity, len(inst)
+    # `instancedata[1]` is 0xFFFFFFFF on 176 of the 732 shipped rows and a small
+    # 0..4 index on the rest -- a group the new instance does not belong to, so
+    # it takes the sentinel too.
+    row[1] = NO_LIMIT
+    _insert_sorted(inst, tuple(row))
 
     extra = 0
     if uvcount:
