@@ -111,6 +111,83 @@ def transparent_budget(package: Path):
     return ranked, stock, n, opaque
 
 
+def model_table(package: Path, csimcr: bytes):
+    """`{model: {"instances": [...], "materials": {hash}, "tris": n}}`.
+
+    ⛔ The instance indices MUST come from the CStaticInstanceModelCR, not from
+    the scene package. They are different index spaces: the package's
+    `instances.bin` is the extractor's emission list (4,290 rows for the arena,
+    after actor placement and de-duplication) while the CR has 745 static
+    instances, and writing a per-instance colour at an emission index sets the
+    wrong instance or none at all. `arr[idx[i]]` is instance i's model.
+
+    The package supplies what the CR does not: which materials a model uses, and
+    how much geometry it is. They share the model-hash namespace -- 81 of the
+    arena's 94 CR models appear among the package's 140 mesh `name_hash` values.
+
+    ⚠ A model that is NOT a static instance has no row here even though the
+    package knows it: `cst_body_s11_a` is a player chassis placed by an actor,
+    so there is nothing in this table to tint.
+    """
+    from resource_io import cstaticinstancemodelcr as CSIMCR
+    o = CSIMCR.read(csimcr)
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+    specs = {e["matidx"]: e["spec"] for e in
+             json.loads((package / "materials.json").read_text(encoding="utf-8"))["materials"]}
+    mats, tris = {}, {}
+    for mesh in manifest.get("meshes") or []:
+        model = str(mesh.get("name_hash", "")).lower()
+        if not model:
+            continue
+        sp = specs.get(mesh.get("matidx"))
+        if sp and sp.get("material_hash"):
+            mats.setdefault(model, set()).add(sp["material_hash"])
+        tris[model] = tris.get(model, 0) + (mesh.get("nindices") or 0) // 3
+
+    out = {}
+    for i in range(o["n"]):
+        model = "%016x" % o["arr"][o["idx"][i]]
+        row = out.setdefault(model, {"instances": [], "materials": set(), "tris": 0})
+        row["instances"].append(i)
+    for model, row in out.items():
+        row["materials"] = set(mats.get(model, ()))
+        row["tris"] = tris.get(model, 0)
+    return out
+
+
+def resolve_model(token: str, table: dict, names: dict) -> str | None:
+    """A model hash from a hash, a `cst_*` name, or a unique substring."""
+    t = token.strip().lower()
+    if t in table:
+        return t
+    for h, nm in names.items():
+        if nm.lower() == t and h in table:
+            return h
+    hits = [h for h in table
+            if t in h or t in (names.get(h, "") or "").lower()]
+    return hits[0] if len(hits) == 1 else None
+
+
+def set_model_opacity(blob: bytes, per_model: dict, table: dict,
+                      tint=(1.0, 1.0, 1.0)):
+    """Set each named model's instances to its own alpha. Others untouched."""
+    from resource_io import cstaticinstancemodelcr as CSIMCR
+    o = CSIMCR.read(blob)
+    buf = bytearray(o["mid"]["colors"])
+    touched = {}
+    for model, opacity in per_model.items():
+        rows = table.get(model, {}).get("instances", [])
+        hit = 0
+        for i in rows:
+            if i < o["n"]:
+                struct.pack_into("<4f", buf, i * 16,
+                                 tint[0], tint[1], tint[2], opacity)
+                hit += 1
+        touched[model] = hit
+    o["mid"] = dict(o["mid"], colors=bytes(buf))
+    return CSIMCR.write(o), touched
+
+
 def patch_materials(hashes, extract: Path, out: Path, backup_dir: Path) -> dict:
     """Move each material to the forward-transparent pass, in place.
 
@@ -183,6 +260,15 @@ def main(argv=None) -> int:
                     help="also move every material named in this scene "
                          "package's materials.json to the forward-transparent "
                          "pass (mattype 2 / blendmode 7)")
+    ap.add_argument("--model", action="append", default=[], metavar="NAME=A",
+                    help="make ONE model transparent: a hash, a cst_* name or "
+                         "a unique substring, then '=' and its alpha "
+                         "(0 = invisible, 1 = solid). Repeatable. Only the "
+                         "named models change; everything else is untouched, "
+                         "and only their materials move to the transparent "
+                         "pass, so the pass budget is spent on what you picked")
+    ap.add_argument("--list-models", action="store_true",
+                    help="print the level's models, biggest first, and exit")
     ap.add_argument("--budget", type=int, default=0,
                     help="how many scene emissions may be on the transparent "
                          "pass. 0 = the level's own stock load, which is the "
@@ -201,6 +287,54 @@ def main(argv=None) -> int:
     if not src.is_file():
         ap.error("no CStaticInstanceModelCR for %s at %s" % (level, src))
     tint = tuple(float(v) for v in args.tint.split(","))
+
+    # ---- per-model mode -------------------------------------------------
+    if args.model or args.list_models:
+        if not args.materials:
+            ap.error("--model and --list-models need --materials <scene package>")
+        pkg = Path(args.materials)
+        table = model_table(pkg, src.read_bytes())
+        names = {}
+        nt = evr_paths.DATA / "model_names_echovr.json"
+        if nt.is_file():
+            names = {k.lower().rjust(16, "0"): v for k, v in
+                     json.loads(nt.read_text(encoding="utf-8"))
+                     .get("names", {}).items()}
+        if args.list_models:
+            print("%-18s %-34s %8s %6s" % ("model", "name", "tris", "inst"))
+            for h, row in sorted(table.items(), key=lambda kv: -kv[1]["tris"]):
+                print("%-18s %-34s %8d %6d"
+                      % (h, names.get(h, ""), row["tris"], len(row["instances"])))
+            return 0
+        wanted, mats = {}, set()
+        for spec in args.model:
+            token, _, alpha = spec.rpartition("=")
+            if not token:
+                ap.error("--model wants NAME=ALPHA, got %r" % spec)
+            h = resolve_model(token, table, names)
+            if h is None:
+                ap.error("no single model matches %r -- try --list-models" % token)
+            wanted[h] = float(alpha)
+            mats |= table[h]["materials"]
+        blob = src.read_bytes()
+        backup = out.parent / ("%s_csimcr_before_opacity.bin" % level)
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        if not backup.is_file():
+            shutil.copy2(src, backup)
+        new, touched = set_model_opacity(blob, wanted, table, tint)
+        (out / T_CSIMCR).mkdir(parents=True, exist_ok=True)
+        (out / T_CSIMCR / level).write_bytes(new)
+        bdir = out.parent / ("%s_materials_before_opacity" % level)
+        r = patch_materials(sorted(mats), extract, out, bdir)
+        for h, alpha in wanted.items():
+            print("  %-18s %-30s alpha %.2f on %d instance(s), %d tris"
+                  % (h, names.get(h, ""), alpha, touched.get(h, 0),
+                     table[h]["tris"]))
+        print("  materials moved to the transparent pass: %d (%d already there)"
+              % (r["changed"], r["already"]))
+        print("  wrote %s" % (out / T_CSIMCR / level))
+        print("  originals kept at %s and %s" % (backup, bdir))
+        return 0
 
     blob = src.read_bytes()
     backup = out.parent / ("%s_csimcr_before_opacity.bin" % level)
