@@ -180,27 +180,13 @@ def export_selection(context, out_dir: Path, objects=None) -> dict:
 
 # ── properties ──────────────────────────────────────────────────────────────
 class EVRAddModelsProps(PropertyGroup):
-    extract_dir: StringProperty(
-        name="Extract", subtype="DIR_PATH",
-        description="The flat game extract (<type hash>/<resource hash>)")  # type: ignore
-    input_dir: StringProperty(
-        name="input-pcvr", subtype="DIR_PATH",
-        description="The tools' staging directory the repacker reads")  # type: ignore
-    level: StringProperty(
-        name="New Level", default="mpl_arena_custom",
-        description="The NEW level to build. Must not already exist -- this "
-                    "tool refuses to modify a shipped level, because its "
-                    "resources are keyed by name hash and are GLOBAL: editing "
-                    "one changes the base game for every map that loads it, "
-                    "and there is nothing to ship but a diff against someone "
-                    "else's install")  # type: ignore
-    clone_from: StringProperty(
-        name="Clone From", default="mpl_arena_a",
-        description="The shipped level to copy first. Its ~90 files are "
-                    "written out under the new name hash (only four carry a "
-                    "self-reference, and nothing outside the level indexes "
-                    "it), and the models land on the COPY. The original is "
-                    "never opened for writing")  # type: ignore
+    """Only what is NOT already on the EVR Level panel.
+
+    Paths and level names live on `scene.evr_level_edit` and are read from
+    there. Asking for the same extract, the same input-pcvr and the same
+    source/new level twice only invites them to disagree -- and the level
+    panel's "Export to" IS the input-pcvr the packer reads.
+    """
     prefix: StringProperty(
         name="Prefix", default="blend_",
         description="Name prefix for the new models, materials and textures. "
@@ -228,8 +214,40 @@ class EVRAddModelsProps(PropertyGroup):
                     "level's boxtree and fades out with distance; scaling this "
                     "holds it at full detail")  # type: ignore
     texconv: StringProperty(
-        name="texconv", subtype="FILE_PATH",
-        description="texconv.exe, to encode the materials' images to BC7")  # type: ignore
+        name="texconv override", subtype="FILE_PATH",
+        description="Only needed when texconv.exe is not found automatically")  # type: ignore
+
+
+def find_texconv(explicit: str = ""):
+    """`texconv.exe`, without making anyone hunt for it.
+
+    The repo vendors one and the game's own tools ship another, so the field is
+    an override rather than a requirement.
+    """
+    if explicit:
+        p = Path(bpy.path.abspath(explicit))
+        if p.is_file():
+            return p
+    here = Path(__file__).resolve()
+    for base in list(here.parents)[:8]:
+        for rel in ("app/extract/evrFileTools/cmd/texconv/texconv.exe",
+                    "app/extract/evr_mesh_importer/bin/texconv.exe"):
+            cand = base / rel
+            if cand.is_file():
+                return cand
+    tail = Path("Software/Software/ready-at-dawn-echo-arena/bin/win10"
+                "/Tools/Tools/Settings")
+    for drive in ("C:/", "D:/", "E:/", "F:/", "G:/", "H:/", "J:/"):
+        for name in ("texconv_ms.exe", "texconv.exe"):
+            cand = Path(drive) / "Oculus/Games" / tail / name
+            if cand.is_file():
+                return cand
+    return None
+
+
+def _level_props(context):
+    """The EVR Level panel's settings: it owns the paths and the level names."""
+    return getattr(context.scene, "evr_level_edit", None)
 
 
 # ── operators ───────────────────────────────────────────────────────────────
@@ -246,28 +264,32 @@ class EVR_OT_add_models(Operator):
 
     def execute(self, context):
         p = context.scene.evr_add_models
+        lv = _level_props(context)
+        if lv is None:
+            self.report({"ERROR"}, "the EVR Level panel is not registered")
+            return {"CANCELLED"}
         script = _repo_script()
         if script is None:
             self.report({"ERROR"}, "scripts/evr_add_blend_models.py not found "
                                    "next to the add-on")
             return {"CANCELLED"}
-        extract = bpy.path.abspath(p.extract_dir).rstrip("\\/")
-        out = bpy.path.abspath(p.input_dir).rstrip("\\/")
+        extract = bpy.path.abspath(lv.extract_dir).rstrip("\\/")
+        out = bpy.path.abspath(lv.export_dir).rstrip("\\/")
+        source, level = lv.source_level.strip(), lv.new_level.strip()
         if not (extract and Path(extract).is_dir()):
-            self.report({"ERROR"}, "set a valid Extract directory")
+            self.report({"ERROR"}, "EVR Level > pcvr-extracted is not a folder")
             return {"CANCELLED"}
         if not out:
-            self.report({"ERROR"}, "set the input-pcvr directory")
+            self.report({"ERROR"}, "set EVR Level > Export to")
             return {"CANCELLED"}
-        if not p.level.strip():
-            self.report({"ERROR"}, "name the new level")
+        if not level:
+            self.report({"ERROR"}, "set EVR Level > New level")
             return {"CANCELLED"}
-        if p.level.strip().lower() == p.clone_from.strip().lower():
-            self.report({"ERROR"}, "the new level must not be the one it is "
-                                   "cloned from")
+        if level.lower() == source.lower():
+            self.report({"ERROR"}, "New level must differ from Source level")
             return {"CANCELLED"}
 
-        geo = Path(bpy.app.tempdir) / ("evr_add_" + p.level)
+        geo = Path(bpy.app.tempdir) / ("evr_add_" + level)
         try:
             summary = export_selection(context, geo)
         except Exception as exc:                               # noqa: BLE001
@@ -278,16 +300,16 @@ class EVR_OT_add_models(Operator):
             return {"CANCELLED"}
 
         cmd = [sys.executable, str(script), "--geo", str(geo),
-               "--level", p.level.strip(), "--dir", extract, "--out", out,
+               "--level", level, "--dir", extract, "--out", out,
                "--prefix", p.prefix, "--visibility", p.visibility,
                "--lod-scale", str(p.lod_scale)]
-        if p.clone_from.strip():
-            cmd += ["--clone-from", p.clone_from.strip()]
+        if source:
+            cmd += ["--clone-from", source]
         if p.collision:
             cmd.append("--collision")
-        tex = bpy.path.abspath(p.texconv)
-        if tex and Path(tex).is_file():
-            cmd += ["--texconv", tex]
+        tex = find_texconv(p.texconv)
+        if tex is not None:
+            cmd += ["--texconv", str(tex)]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   encoding="utf-8", errors="replace")
@@ -345,22 +367,37 @@ class EVR_PT_add_models(Panel):
     def draw(self, context):
         L = self.layout
         p = context.scene.evr_add_models
+        lv = _level_props(context)
+
         box = L.box()
-        box.label(text="Paths", icon="FILE_FOLDER")
-        box.prop(p, "extract_dir")
-        box.prop(p, "input_dir")
-        box.prop(p, "texconv")
-        box = L.box()
-        box.label(text="New Level", icon="WORLD")
-        box.prop(p, "clone_from")
-        box.prop(p, "level")
-        box.prop(p, "prefix")
-        box.label(text="the original is never modified", icon="LOCKED")
+        box.label(text="From EVR Level above", icon="LINKED")
+        if lv is None:
+            box.label(text="EVR Level panel missing", icon="ERROR")
+        else:
+            col = box.column(align=True)
+            col.enabled = False                 # shown, not asked for again
+            col.prop(lv, "extract_dir", text="Extract")
+            col.prop(lv, "export_dir", text="Export to")
+            col.prop(lv, "source_level", text="Clone from")
+            col.prop(lv, "new_level", text="New level")
+            if lv.new_level.strip().lower() == lv.source_level.strip().lower():
+                box.label(text="New level must differ from Source", icon="ERROR")
+            else:
+                box.label(text="the source level is never modified", icon="LOCKED")
+
+        tex = find_texconv(p.texconv)
         box = L.box()
         box.label(text="Options", icon="MODIFIER")
+        box.prop(p, "prefix")
         box.prop(p, "collision")
         box.prop(p, "visibility")
         box.prop(p, "lod_scale")
+        if tex is None:
+            box.label(text="texconv not found - textures will be skipped",
+                      icon="ERROR")
+            box.prop(p, "texconv")
+        else:
+            box.label(text="texconv: %s" % tex.name, icon="CHECKMARK")
 
         sel = [o for o in context.selected_objects if o.type in {"MESH", "LIGHT"}]
         box = L.box()
