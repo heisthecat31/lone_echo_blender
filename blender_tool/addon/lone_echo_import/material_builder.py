@@ -114,6 +114,10 @@ DEFAULT_BLEND_MASK_COMPONENT = "R"            # `k_blend_mask[i].x`
 # layer with no mask texture bound samples 1.0 -- NOT 0.0.
 DEFAULT_BLEND_MASK_VALUE = 1.0
 
+#: Node name of the per-material opacity multiply. See the alpha chain: once
+#: Alpha is linked the BSDF's own slider is inert, so this is the knob.
+OPACITY_NODE = "le_opacity"
+
 # Blender 5.1.1 `ShaderNodeMix` socket indices (`engine-confirmed`: the named
 # sockets are ambiguous -- "A" exists four times, once per data type -- so the
 # index is the only safe accessor). FLOAT: Factor 0, A 2, B 3, Result outputs[0].
@@ -3592,8 +3596,17 @@ def build_material(spec: dict, pkg_dir: Path, opts: dict | None = None) -> "bpy.
                 "BLEND with no base colour and no emission: rim/mask-only "
                 "shell, contributes nothing rather than a flat guess")
         elif acc is not None:
-            if ka != 1.0:
-                acc = _math(nt, "MULTIPLY", -400, -700, acc, ka, label="k_alpha").outputs[0]
+            # ⭐ ALWAYS insert the k_alpha multiply, even at 1.0. Once anything
+            # drives Alpha the socket is LINKED, and a linked socket ignores its
+            # `default_value` -- so dragging the Principled BSDF's Alpha slider
+            # does nothing at all and looks like the change "did not stick".
+            # This node is the one knob that does work, and it is named
+            # `OPACITY_NODE` so `evr_opacity` (and anyone reading the tree) can
+            # find it without guessing. Creating it unconditionally costs one
+            # multiply by 1.0 and makes every imported material adjustable.
+            acc = _math(nt, "MULTIPLY", -400, -700, acc, ka,
+                        label="k_alpha (opacity)").outputs[0]
+            acc.node.name = OPACITY_NODE
             alpha_socket = acc
         elif ka != 1.0:
             alpha_in.default_value = ka          # B1: k_alpha with no map
